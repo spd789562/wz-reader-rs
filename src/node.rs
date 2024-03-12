@@ -54,4 +54,6 @@ pub trait NodeMethods {
     fn parse_wz_image(&self) -> Result<(), NodeParseError>;
     fn parse_wz_directory(&self) -> Result<(), NodeParseError>;
     fn parse_wz_file(&self, patch_version: Option<i32>) -> Result<(), NodeParseError>;
+
+    fn save_sound(&self, path: &str) -> Result<(), String>;
 }

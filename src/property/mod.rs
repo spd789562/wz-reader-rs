@@ -1,10 +1,12 @@
 pub mod vector;
 pub mod png;
 pub mod string;
+pub mod sound;
 
 pub use vector::*;
 pub use png::*;
 pub use string::*;
+pub use sound::*;
 
 #[derive(Debug, Clone)]
 pub enum WzPropertyType {
@@ -20,7 +22,7 @@ pub enum WzPropertyType {
   Canvas,
   Vector(Vector2D),
   Convex,
-  Sound,
+  Sound(WzSoundMeta),
   UOL(WzStringMeta),
   Lua,
 

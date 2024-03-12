@@ -356,4 +356,19 @@ impl NodeMethods for WzNodeArc {
 
         Ok(())
     }
+
+    fn save_sound(&self, path: &str) -> Result<(), String> {
+        let node = self.read().unwrap();
+        match &node.property_type {
+            Some(WzPropertyType::Sound(sound)) => {
+                if let Some(reader) = &node.reader {
+                    let path = Path::new(path).join(node.name.clone());
+                    sound.extract_sound(&reader.map, path)
+                } else {
+                    Err("WzReader not found in WzPropertyType::Sound".to_string())
+                }
+            },
+            _ => Err("Not a sound property".to_string())
+        }
+    }
 }

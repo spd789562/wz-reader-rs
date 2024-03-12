@@ -1,4 +1,4 @@
-use crate::{property::{ WzPropertyType, Vector2D, WzPng }, NodeMethods, Reader, WzObjectType, WzSliceReader};
+use crate::{property::{ WzPropertyType, Vector2D, WzPng, WzSoundMeta, get_sound_type_from_header }, NodeMethods, Reader, WzObjectType, WzSliceReader};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -185,11 +185,29 @@ pub fn parse_more<Node: NodeMethods<Node = Node> + Clone>(parent: &Node, reader:
         },
         "Sound_DX8" => {
             reader.skip(1);
-            let sound_size = reader.read_i32()?;
-            let _sound_duration = reader.read_i32()?;
-            let _header_size = end_of_block - (sound_size as usize) - reader.get_pos();
-            let _header_offset = reader.get_pos();
-            /* header buffer = &reader.buff[header_offset..header_offset+header_size] */
+            let sound_start_offset = reader.get_pos();
+            let sound_size = reader.read_wz_int()? as u32;
+            let sound_duration = reader.read_wz_int()? as u32;
+            let sound_offset = end_of_block - (sound_size as usize);
+            
+            let header_offset: usize = reader.get_pos();
+
+            
+            let header_size = sound_offset - header_offset;
+
+            let sound_type = get_sound_type_from_header(&reader.buf[header_offset..header_offset+header_size], sound_size, sound_duration);
+            let sound_meta = WzSoundMeta::new(sound_offset, sound_size, header_offset, header_size, sound_duration, sound_type);
+
+            let node = Node::new_with_parent(
+                parent,
+                WzObjectType::Property,
+                Some(WzPropertyType::Sound(sound_meta)),
+                property_name,
+                sound_start_offset,
+                end_of_block - sound_start_offset
+            );
+
+            parent.add_node_child(node);
         },
         "UOL" => {
             let str_meta = reader.read_wz_string_block_meta(origin_offset)?;
