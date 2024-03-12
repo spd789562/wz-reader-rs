@@ -3,22 +3,7 @@ use std::cell::Cell;
 use memmap2::Mmap;
 
 use crate::WzHeader;
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum WzStringType {
-    Ascii,
-    Unicode,
-    Empty,
-}
-
-#[derive(Debug, Clone)]
-pub struct WzStringMeta {
-    /// string start offset
-    pub offset: usize,
-    /// string length
-    pub length: u32,
-    pub string_type: WzStringType,
-}
+use crate::property::{WzStringMeta, WzStringType};
 
 #[derive(Debug)]
 pub struct WzReader {
@@ -138,32 +123,20 @@ pub trait Reader<'a> {
 
         let string_type = self.get_wz_string_type(small_len);
 
-        match self.get_wz_string_type(small_len) {
+        match string_type {
             WzStringType::Empty => {
-                Ok(WzStringMeta {
-                    offset: 0, // empty string's offset is doesn't matter
-                    length: 0,
-                    string_type
-                })
+                Ok(WzStringMeta::empty())
             },
             WzStringType::Unicode => {
                 if small_len == i8::MAX {
                     let length = self.read_i32()? as u32 * 2;
                     /* remember skip char reading */
-                    let meta = WzStringMeta {
-                        offset: self.get_pos(),
-                        length,
-                        string_type
-                    };
+                    let meta = WzStringMeta::new_unicode(self.get_pos(), length);
                     self.skip(length as usize);
                     Ok(meta)
                 } else {
                     let length = small_len as u32 * 2;
-                    let meta = WzStringMeta {
-                        offset: self.get_pos(),
-                        length,
-                        string_type
-                    };
+                    let meta = WzStringMeta::new_unicode(self.get_pos(), length);
                     self.skip(length as usize);
                     Ok(meta)
                 }
@@ -171,20 +144,12 @@ pub trait Reader<'a> {
             WzStringType::Ascii => {
                 if small_len == i8::MIN {
                     let length = self.read_i32()?;
-                    let meta = WzStringMeta {
-                        offset: self.get_pos(),
-                        length: length as u32,
-                        string_type
-                    };
+                    let meta = WzStringMeta::new_ascii(self.get_pos(), length as u32);
                     self.skip(length as usize);
                     Ok(meta)
                 } else {
                     let length = (-small_len) as u32;
-                    let meta = WzStringMeta {
-                        offset: self.get_pos(),
-                        length,
-                        string_type
-                    };
+                    let meta = WzStringMeta::new_ascii(self.get_pos(), length);
                     self.skip(length as usize);
                     Ok(meta)
                 }
@@ -245,11 +210,7 @@ pub trait Reader<'a> {
                 self.read_wz_string_meta_at(wz_img_offset + append_offset as usize)
             },
             _ => {
-                Ok(WzStringMeta {
-                    offset: self.get_pos(),
-                    length: 0,
-                    string_type: WzStringType::Empty
-                })
+                Ok(WzStringMeta::empty())
             }
         }
     }

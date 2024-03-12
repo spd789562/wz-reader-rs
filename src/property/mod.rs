@@ -1,10 +1,10 @@
 pub mod vector;
 pub mod png;
+pub mod string;
 
 pub use vector::*;
 pub use png::*;
-
-use crate::WzStringMeta;
+pub use string::*;
 
 #[derive(Debug, Clone)]
 pub enum WzPropertyType {
