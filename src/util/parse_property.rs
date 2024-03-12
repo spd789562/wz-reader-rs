@@ -29,22 +29,22 @@ pub fn parse_property_list<Node: NodeMethods<Node = Node> + Clone>(parent: &Node
 
         match property_type {
             0 => {
-                let node = Node::new_wz_primitive_property(&parent, Some(WzPropertyType::Null), name);
+                let node = Node::new_wz_primitive_property(&parent, WzPropertyType::Null, name);
                 parent.add_node_child(node);
             },
             2 | 11 => {
                 let num = reader.read_i16()?;
-                let node = Node::new_wz_primitive_property(&parent, Some(WzPropertyType::Short(num)), name);
+                let node = Node::new_wz_primitive_property(&parent, WzPropertyType::Short(num), name);
                 parent.add_node_child(node);
             },
             3 | 19 => {
                 let num = reader.read_wz_int()?;
-                let node = Node::new_wz_primitive_property(&parent, Some(WzPropertyType::Int(num)), name);
+                let node = Node::new_wz_primitive_property(&parent, WzPropertyType::Int(num), name);
                 parent.add_node_child(node);
             },
             20 => {
                 let num = reader.read_wz_int64()?;
-                let node = Node::new_wz_primitive_property(&parent, Some(WzPropertyType::Long(num)), name);
+                let node = Node::new_wz_primitive_property(&parent, WzPropertyType::Long(num), name);
                 parent.add_node_child(node);
             },
             4 => {
@@ -52,11 +52,11 @@ pub fn parse_property_list<Node: NodeMethods<Node = Node> + Clone>(parent: &Node
                 match float_type {
                     0x80 => {
                         let num = reader.read_float()?;
-                        let node = Node::new_wz_primitive_property(&parent, Some(WzPropertyType::Float(num)), name);
+                        let node = Node::new_wz_primitive_property(&parent, WzPropertyType::Float(num), name);
                         parent.add_node_child(node);
                     },
                     0 => {
-                        let node = Node::new_wz_primitive_property(&parent, Some(WzPropertyType::Float(0_f32)), name);
+                        let node = Node::new_wz_primitive_property(&parent, WzPropertyType::Float(0_f32), name);
                         parent.add_node_child(node);
                     },
                     _ => {
@@ -66,7 +66,7 @@ pub fn parse_property_list<Node: NodeMethods<Node = Node> + Clone>(parent: &Node
             },
             5 => {
                 let num = reader.read_double()?;
-                let node = Node::new_wz_primitive_property(&parent, Some(WzPropertyType::Double(num)), name);
+                let node = Node::new_wz_primitive_property(&parent, WzPropertyType::Double(num), name);
                 parent.add_node_child(node);
             },
             8 => {
@@ -180,7 +180,7 @@ pub fn parse_more<Node: NodeMethods<Node = Node> + Clone>(parent: &Node, reader:
                 reader.read_wz_int()?,
                 reader.read_wz_int()?
             );
-            let node = Node::new_wz_primitive_property(parent, Some(WzPropertyType::Vector(vec2)), property_name);
+            let node = Node::new_wz_primitive_property(parent, WzPropertyType::Vector(vec2), property_name);
             parent.add_node_child(node);
         },
         "Sound_DX8" => {
@@ -211,7 +211,7 @@ pub fn parse_more<Node: NodeMethods<Node = Node> + Clone>(parent: &Node, reader:
         },
         "UOL" => {
             let str_meta = reader.read_wz_string_block_meta(origin_offset)?;
-            let node = Node::new_wz_primitive_property(parent, Some(WzPropertyType::UOL(str_meta)), property_name);
+            let node = Node::new_wz_primitive_property(parent, WzPropertyType::UOL(str_meta), property_name);
             parent.add_node_child(node);
         },
         "RawData" => {

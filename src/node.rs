@@ -24,7 +24,7 @@ pub trait NodeMethods {
     fn new_empty_wz_directory(name: String, parent: Option<&Self::Node>) -> Self::Node;
     fn new_with_parent(parent: &Self::Node, object_type: WzObjectType, property_type: Option<WzPropertyType>, name: String, offset: usize, block_size: usize) -> Self::Node;
     fn new_sub_property(parent: &Self::Node, name: String, offset: usize, block_size: usize) -> Self::Node;
-    fn new_wz_primitive_property(parent: &Self::Node, property_type: Option<WzPropertyType>, name: String) -> Self::Node;
+    fn new_wz_primitive_property(parent: &Self::Node, property_type: WzPropertyType, name: String) -> Self::Node;
 
     fn first_image(&self) -> Option<Self::Node>;
     fn at(&self, name: &str) -> Option<Self::Node>;
@@ -54,6 +54,11 @@ pub trait NodeMethods {
     fn parse_wz_image(&self) -> Result<(), NodeParseError>;
     fn parse_wz_directory(&self) -> Result<(), NodeParseError>;
     fn parse_wz_file(&self, patch_version: Option<i32>) -> Result<(), NodeParseError>;
+
+    fn is_sound(&self) -> bool;
+    fn is_string(&self) -> bool;
+    fn is_png(&self) -> bool;
+    fn is_lua(&self) -> bool;
 
     fn save_sound(&self, path: &str) -> Result<(), String>;
 }

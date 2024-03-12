@@ -16,7 +16,7 @@ pub type WzNodeRc = Rc<WzNodeRef>;
 pub struct WzNode {
     pub reader: Option<Rc<WzReader>>,
     pub object_type: WzObjectType,
-    pub property_type: Option<WzPropertyType>,
+    pub property_type: WzPropertyType,
     pub name: String,
     pub offset: usize,
     pub block_size: usize,
@@ -35,7 +35,7 @@ impl WzNode {
 
     pub fn resolve_string(&self) -> Result<String, String> {
         match &self.property_type {
-            Some(WzPropertyType::String(meta)) => {
+            WzPropertyType::String(meta) => {
                 if let Some(reader) = &self.reader {
                     Ok(reader.resolve_wz_string_meta(meta).unwrap())
                 } else {
@@ -47,7 +47,7 @@ impl WzNode {
     }
     pub fn resolve_png(&self) -> Result<DynamicImage, WzPngParseError> {
         match &self.property_type {
-            Some(WzPropertyType::PNG(png)) => {
+            WzPropertyType::PNG(png) => {
                 if let Some(reader) = &self.reader {
                     let buffer = reader.get_slice(self.get_offset_range());
                     png.extract_png(buffer)
@@ -59,7 +59,7 @@ impl WzNode {
         }
     }
     pub fn is_png(&self) -> bool {
-        matches!(&self.property_type, Some(WzPropertyType::PNG(_)))
+        matches!(&self.property_type, WzPropertyType::PNG(_))
     }
 }
 
@@ -92,7 +92,7 @@ impl NodeMethods for WzNodeRc {
 
         Rc::new(RefCell::new(WzNode {
             object_type: WzObjectType::File,
-            property_type: None,
+            property_type: WzPropertyType::Null,
             offset: offset as usize,
             block_size,
             name,
@@ -106,7 +106,7 @@ impl NodeMethods for WzNodeRc {
     fn new(object_type: WzObjectType, property_type: Option<WzPropertyType>, name: String, offset: usize, block_size: usize) -> WzNodeRc {
         Rc::new(RefCell::new(WzNode {
             object_type,
-            property_type,
+            property_type: property_type.unwrap_or(WzPropertyType::Null),
             offset,
             block_size,
             name,
@@ -125,7 +125,7 @@ impl NodeMethods for WzNodeRc {
         };
         Rc::new(RefCell::new(WzNode {
             object_type: WzObjectType::Directory,
-            property_type: None,
+            property_type: WzPropertyType::Null,
             offset: 0,
             block_size: 0,
             name,
@@ -139,7 +139,7 @@ impl NodeMethods for WzNodeRc {
     fn new_with_parent(parent: &WzNodeRc, object_type: WzObjectType, property_type: Option<WzPropertyType>, name: String, offset: usize, block_size: usize) -> WzNodeRc {
         Rc::new(RefCell::new(WzNode {
             object_type,
-            property_type,
+            property_type: property_type.unwrap_or(WzPropertyType::Null),
             offset,
             block_size,
             name,
@@ -153,7 +153,7 @@ impl NodeMethods for WzNodeRc {
     fn new_sub_property(parent: &WzNodeRc, name: String, offset: usize, block_size: usize) -> WzNodeRc {
         Rc::new(RefCell::new(WzNode {
             object_type: WzObjectType::Property,
-            property_type: Some(WzPropertyType::SubProperty),
+            property_type: WzPropertyType::SubProperty,
             offset,
             block_size,
             name,
@@ -164,7 +164,7 @@ impl NodeMethods for WzNodeRc {
             wz_file_meta: None
         }))
     }
-    fn new_wz_primitive_property(parent: &WzNodeRc, property_type: Option<WzPropertyType>, name: String) -> WzNodeRc {
+    fn new_wz_primitive_property(parent: &WzNodeRc, property_type: WzPropertyType, name: String) -> WzNodeRc {
         Rc::new(RefCell::new(WzNode {
             object_type: WzObjectType::Property,
             property_type,
@@ -282,7 +282,7 @@ impl NodeMethods for WzNodeRc {
     fn update_wz_png_meta(&self, name: String, offset: usize, block_size: usize, property_type: WzPropertyType) {
         let mut node = self.borrow_mut();
         node.name = name;
-        node.property_type = Some(property_type);
+        node.property_type = property_type;
         node.offset = offset;
         node.block_size = block_size;
     }
@@ -349,10 +349,24 @@ impl NodeMethods for WzNodeRc {
         Ok(())
     }
 
+
+    fn is_png(&self) -> bool {
+        matches!(self.borrow().property_type, WzPropertyType::PNG(_))
+    }
+    fn is_sound(&self) -> bool {
+        matches!(self.borrow().property_type, WzPropertyType::Sound(_))
+    }
+    fn is_string(&self) -> bool {
+        matches!(self.borrow().property_type, WzPropertyType::String(_))
+    }
+    fn is_lua(&self) -> bool {
+        matches!(self.borrow().property_type, WzPropertyType::Lua)
+    }
+
     fn save_sound(&self, path: &str) -> Result<(), String> {
         let node = self.borrow();
         match &node.property_type {
-            Some(WzPropertyType::Sound(sound)) => {
+            WzPropertyType::Sound(sound) => {
                 if let Some(reader) = &node.reader {
                     let path = Path::new(path).join(node.name.clone());
                     sound.extract_sound(&reader.map, path)
