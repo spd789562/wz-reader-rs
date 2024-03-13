@@ -217,6 +217,20 @@ impl NodeMethods for WzNodeRc {
             };
         }
     }
+    fn get_uol_wz_node(&self) -> Option<WzNodeRc> {
+        let node = self.borrow();
+        match &node.property_type {
+            WzPropertyType::UOL(meta) => {
+                if let Some(reader) = &node.reader {
+                    let path = reader.resolve_wz_string_meta(meta).map_err(WzStringParseError::from).unwrap();
+                    self.resolve_relative_path(&format!("../{path}"), true)
+                } else {
+                    panic!("WzReader not found in WzPropertyType::UOL")
+                }
+            },
+            _ => panic!("This method only available for WzPropertyType::UOL")
+        }
+    }
 
     fn get_name(&self) -> String {
         self.borrow().name.clone()
@@ -398,6 +412,9 @@ impl NodeMethods for WzNodeRc {
     }
     fn is_lua(&self) -> bool {
         matches!(self.borrow().property_type, WzPropertyType::Lua)
+    }
+    fn is_uol(&self) -> bool {
+        matches!(self.borrow().property_type, WzPropertyType::UOL(_))
     }
 
 

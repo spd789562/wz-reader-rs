@@ -36,6 +36,7 @@ pub trait NodeMethods {
     fn at_path(&self, path: &str, force_parse: bool) -> Option<Self::Node>;
     fn get_parent_wz_image(&self) -> Option<Self::Node>;
     fn get_base_wz_file(&self) -> Option<Self::Node>;
+    fn get_uol_wz_node(&self) -> Option<Self::Node>;
 
     fn get_name(&self) -> String;
     fn get_offset(&self) -> usize;
@@ -68,6 +69,7 @@ pub trait NodeMethods {
     fn is_string(&self) -> bool;
     fn is_png(&self) -> bool;
     fn is_lua(&self) -> bool;
+    fn is_uol(&self) -> bool;
 
     fn get_string(&self) -> Result<String, WzStringParseError>;
     fn get_sound(&self) -> Result<Vec<u8>, WzSoundParseError>;
