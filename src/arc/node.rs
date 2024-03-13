@@ -410,7 +410,7 @@ impl NodeMethods for WzNodeArc {
     fn get_string(&self) -> Result<String, WzStringParseError> {
         let node = self.read().unwrap();
         match &node.property_type {
-            WzPropertyType::String(meta) => {
+            WzPropertyType::String(meta) | WzPropertyType::UOL(meta) => {
                 if let Some(reader) = &node.reader {
                     reader.resolve_wz_string_meta(meta).map_err(WzStringParseError::from)
                 } else {

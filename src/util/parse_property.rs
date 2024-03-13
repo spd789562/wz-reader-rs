@@ -210,8 +210,16 @@ pub fn parse_more<Node: NodeMethods<Node = Node> + Clone>(parent: &Node, reader:
             parent.add_node_child(node);
         },
         "UOL" => {
+            reader.skip(1);
             let str_meta = reader.read_wz_string_block_meta(origin_offset)?;
-            let node = Node::new_wz_primitive_property(parent, WzPropertyType::UOL(str_meta), property_name);
+            let node = Node::new_with_parent(
+                &parent,
+                WzObjectType::Property,
+                Some(WzPropertyType::UOL(str_meta.clone())),
+                property_name,
+                str_meta.offset,
+                str_meta.length as usize
+            );
             parent.add_node_child(node);
         },
         "RawData" => {
