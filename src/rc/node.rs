@@ -33,32 +33,6 @@ impl WzNode {
     pub fn get_offset_range(&self) -> (usize, usize) {
         (self.offset, self.offset + self.block_size)
     }
-
-    pub fn resolve_string(&self) -> Result<String, String> {
-        match &self.property_type {
-            WzPropertyType::String(meta) => {
-                if let Some(reader) = &self.reader {
-                    Ok(reader.resolve_wz_string_meta(meta).unwrap())
-                } else {
-                    panic!("WzReader not found in WzPropertyType::String")
-                }
-            },
-            _ => Err("Not a string property".to_string())
-        }
-    }
-    pub fn resolve_png(&self) -> Result<DynamicImage, WzPngParseError> {
-        match &self.property_type {
-            WzPropertyType::PNG(png) => {
-                if let Some(reader) = &self.reader {
-                    let buffer = reader.get_slice(self.get_offset_range());
-                    png.extract_png(buffer)
-                } else {
-                    Err(WzPngParseError::NotPngProperty)
-                }
-            },
-            _ => Err(WzPngParseError::NotPngProperty)
-        }
-    }
 }
 
 impl NodeMethods for WzNodeRc {
@@ -369,7 +343,7 @@ impl NodeMethods for WzNodeRc {
         match &node.property_type {
             WzPropertyType::String(meta) => {
                 if let Some(reader) = &node.reader {
-                    reader.resolve_wz_string_meta(meta).map_err(|e| WzStringParseError::from(e))
+                    reader.resolve_wz_string_meta(meta).map_err(WzStringParseError::from)
                 } else {
                     panic!("WzReader not found in WzPropertyType::String")
                 }
@@ -395,7 +369,7 @@ impl NodeMethods for WzNodeRc {
         if self.is_png() {
             let image = self.get_image()?;
             let path = Path::new(path).join(name.unwrap_or(&self.get_name()));
-            image.save(path).map_err(|e| WzPngParseError::from(e))
+            image.save(path).map_err(WzPngParseError::from)
         } else {
             Err(WzPngParseError::NotPngProperty)
         }

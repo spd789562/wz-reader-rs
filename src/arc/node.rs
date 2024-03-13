@@ -350,7 +350,7 @@ impl NodeMethods for WzNodeArc {
         match &node.property_type {
             WzPropertyType::String(meta) => {
                 if let Some(reader) = &node.reader {
-                    reader.resolve_wz_string_meta(meta).map_err(|e| WzStringParseError::from(e))
+                    reader.resolve_wz_string_meta(meta).map_err(WzStringParseError::from)
                 } else {
                     panic!("WzReader not found in WzPropertyType::String")
                 }
@@ -376,7 +376,7 @@ impl NodeMethods for WzNodeArc {
         if self.is_png() {
             let image = self.get_image()?;
             let path = Path::new(path).join(name.unwrap_or(&self.get_name()));
-            image.save(path).map_err(|e| WzPngParseError::from(e))
+            image.save(path).map_err(WzPngParseError::from)
         } else {
             Err(WzPngParseError::NotPngProperty)
         }
