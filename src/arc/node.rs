@@ -329,6 +329,9 @@ impl NodeMethods for WzNodeArc {
         Ok(())
     }
 
+    fn is_end(&self) -> bool {
+        self.read().unwrap().children.is_empty()
+    }
     fn is_png(&self) -> bool {
         matches!(self.read().unwrap().property_type, WzPropertyType::PNG(_))
     }

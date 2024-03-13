@@ -347,7 +347,9 @@ impl NodeMethods for WzNodeRc {
         Ok(())
     }
 
-
+    fn is_end(&self) -> bool {
+        self.borrow().children.is_empty()
+    }
     fn is_png(&self) -> bool {
         matches!(self.borrow().property_type, WzPropertyType::PNG(_))
     }

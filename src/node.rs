@@ -57,6 +57,7 @@ pub trait NodeMethods {
     fn parse_wz_directory(&self) -> Result<(), NodeParseError>;
     fn parse_wz_file(&self, patch_version: Option<i32>) -> Result<(), NodeParseError>;
 
+    fn is_end(&self) -> bool;
     fn is_sound(&self) -> bool;
     fn is_string(&self) -> bool;
     fn is_png(&self) -> bool;
