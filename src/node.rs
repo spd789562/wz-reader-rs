@@ -5,6 +5,9 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum NodeParseError {
+    #[error("Node has been using")]
+    NodeHasBeenUsing,
+
     #[error("Error parsing WzDirectory: {0}")]
     WzDirectoryParseError(#[from] WzDirectoryParseError),
 
@@ -52,6 +55,7 @@ pub trait NodeMethods {
         }
     }
 
+    fn unparse_image(&self) -> Result<(), NodeParseError>;
     fn parse(&self) -> Result<(), NodeParseError>;
     fn parse_wz_image(&self) -> Result<(), NodeParseError>;
     fn parse_wz_directory(&self) -> Result<(), NodeParseError>;

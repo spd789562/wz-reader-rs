@@ -14,6 +14,8 @@ pub enum WzImageParseError {
     ParsePropertyListError(#[from] util::WzPropertyParseError),
     #[error("Binary reading error")]
     ReaderError(#[from] scroll::Error),
+    #[error("Not a Image object")]
+    NotImageObject,
 }
 
 pub const WZ_IMAGE_HEADER_BYTE_WITHOUT_OFFSET: u8 = 0x73;

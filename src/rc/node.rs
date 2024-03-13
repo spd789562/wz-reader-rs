@@ -5,7 +5,7 @@ use std::fs::File;
 use std::path::Path;
 use memmap2::Mmap;
 use crate::Reader;
-use crate::{ WzFileMeta, WzObjectType, WzReader, parse_wz_file, parse_wz_image, parse_wz_directory };
+use crate::{ WzFileMeta, WzObjectType, WzReader, WzImageParseError, parse_wz_file, parse_wz_image, parse_wz_directory };
 use crate::property::{WzPropertyType, png::WzPngParseError, string::WzStringParseError, sound::WzSoundParseError};
 use crate::node::{NodeMethods, NodeParseError};
 use image::DynamicImage;
@@ -273,6 +273,25 @@ impl NodeMethods for WzNodeRc {
         let mut node = self.borrow_mut();
         let child_name = child.get_name();
         node.children.insert(child_name, child);
+    }
+
+    fn unparse_image(&self) -> Result<(), NodeParseError> {
+        let node = self.try_borrow_mut();
+
+        if let Ok(mut node) = node {
+            if !node.is_parsed {
+                return Ok(());
+            }
+            if node.object_type != WzObjectType::Image {
+                return Err(NodeParseError::from(WzImageParseError::NotImageObject));
+            }
+            node.children.clear();
+            node.is_parsed = false;
+
+            Ok(())
+        } else {
+            Err(NodeParseError::NodeHasBeenUsing)
+        }
     }
     fn parse(&self) -> Result<(), NodeParseError> {
         let obejct_type = {
