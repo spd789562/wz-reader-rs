@@ -60,6 +60,8 @@ pub fn parse_wz_directory<R: Deref<Target = WzReader>, Node: NodeMethods<Node = 
         return Err(WzDirectoryParseError::InvalidEntryCount);
     }
 
+    let mut dir_nodes: Vec<Node> = Vec::new();
+
     for _ in 0..entry_count {
         let dir_byte = reader.read_u8()?;
         let mut dir_type = get_wz_directory_type_from_byte(dir_byte);
@@ -111,6 +113,7 @@ pub fn parse_wz_directory<R: Deref<Target = WzReader>, Node: NodeMethods<Node = 
         match dir_type {
             WzDirectoryType::WzDirectory => {
                 let node = Node::new_with_parent(wz_node, WzObjectType::Directory, None, fname.clone(), offset, fsize as usize);
+                dir_nodes.push(node.clone());
                 wz_node.add_node_child(node);
             }
             WzDirectoryType::WzImage => {
@@ -122,6 +125,10 @@ pub fn parse_wz_directory<R: Deref<Target = WzReader>, Node: NodeMethods<Node = 
             }
         }
 
+    }
+
+    for dir_node in dir_nodes {
+        parse_wz_directory(&dir_node)?;
     }
 
     Ok(())
