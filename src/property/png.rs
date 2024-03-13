@@ -1,5 +1,5 @@
 use flate2::{Decompress, FlushDecompress};
-use image::{GenericImage, DynamicImage};
+use image::{GenericImage, DynamicImage, ImageError};
 use thiserror::Error;
 use crate::reader;
 
@@ -16,6 +16,9 @@ pub enum WzPngParseError {
     
     #[error(transparent)]
     ReadColorError(#[from] scroll::Error),
+
+    #[error(transparent)]
+    SaveError(#[from] ImageError),
 
     #[error("Not a PNG property")]
     NotPngProperty,

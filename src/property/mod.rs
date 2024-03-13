@@ -19,7 +19,6 @@ pub enum WzPropertyType {
   String(WzStringMeta),
 
   SubProperty,
-  Canvas,
   Vector(Vector2D),
   Convex,
   Sound(WzSoundMeta),

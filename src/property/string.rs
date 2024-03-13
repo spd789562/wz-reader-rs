@@ -1,3 +1,14 @@
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum WzStringParseError {
+    #[error(transparent)]
+    ParseError(#[from] scroll::Error),
+
+    #[error("Not a String property")]
+    NotStringProperty,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum WzStringType {
     Ascii,

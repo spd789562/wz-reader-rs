@@ -1,4 +1,6 @@
-use crate::{ WzFileMeta, WzObjectType, WzDirectoryParseError, WzFileParseError, WzImageParseError, property::WzPropertyType};
+use crate::{ WzFileMeta, WzObjectType, WzDirectoryParseError, WzFileParseError, WzImageParseError};
+use crate::property::{WzPropertyType, png::WzPngParseError, string::WzStringParseError, sound::WzSoundParseError};
+use image::DynamicImage;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -60,5 +62,9 @@ pub trait NodeMethods {
     fn is_png(&self) -> bool;
     fn is_lua(&self) -> bool;
 
-    fn save_sound(&self, path: &str) -> Result<(), String>;
+    fn get_string(&self) -> Result<String, WzStringParseError>;
+    fn get_sound(&self) -> Result<Vec<u8>, WzSoundParseError>;
+    fn get_image(&self) -> Result<DynamicImage, WzPngParseError>;
+    fn save_sound(&self, path: &str, name: Option<&str>) -> Result<(), WzSoundParseError>;
+    fn save_image(&self, path: &str, name: Option<&str>) -> Result<(), WzPngParseError>;
 }

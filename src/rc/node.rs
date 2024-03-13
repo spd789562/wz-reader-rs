@@ -5,7 +5,8 @@ use std::fs::File;
 use std::path::Path;
 use memmap2::Mmap;
 use crate::Reader;
-use crate::{ WzFileMeta, WzObjectType, property::WzPropertyType, property::png::WzPngParseError, WzReader, parse_wz_file, parse_wz_image, parse_wz_directory };
+use crate::{ WzFileMeta, WzObjectType, WzReader, parse_wz_file, parse_wz_image, parse_wz_directory };
+use crate::property::{WzPropertyType, png::WzPngParseError, string::WzStringParseError, sound::WzSoundParseError};
 use crate::node::{NodeMethods, NodeParseError};
 use image::DynamicImage;
 
@@ -57,9 +58,6 @@ impl WzNode {
             },
             _ => Err(WzPngParseError::NotPngProperty)
         }
-    }
-    pub fn is_png(&self) -> bool {
-        matches!(&self.property_type, WzPropertyType::PNG(_))
     }
 }
 
@@ -363,18 +361,68 @@ impl NodeMethods for WzNodeRc {
         matches!(self.borrow().property_type, WzPropertyType::Lua)
     }
 
-    fn save_sound(&self, path: &str) -> Result<(), String> {
+
+    fn get_string(&self) -> Result<String, WzStringParseError> {
+        let node = self.borrow();
+        match &node.property_type {
+            WzPropertyType::String(meta) => {
+                if let Some(reader) = &node.reader {
+                    reader.resolve_wz_string_meta(meta).map_err(|e| WzStringParseError::from(e))
+                } else {
+                    panic!("WzReader not found in WzPropertyType::String")
+                }
+            },
+            _ => Err(WzStringParseError::NotStringProperty)
+        }
+    }
+    fn get_image(&self) -> Result<DynamicImage, WzPngParseError> {
+        let node = self.borrow();
+        match &node.property_type {
+            WzPropertyType::PNG(png) => {
+                if let Some(reader) = &node.reader {
+                    let buffer = reader.get_slice(node.get_offset_range());
+                    png.extract_png(buffer)
+                } else {
+                    panic!("WzReader not found in WzPropertyType::PNG, maybe is a bug")
+                }
+            },
+            _ => Err(WzPngParseError::NotPngProperty)
+        }
+    }
+    fn save_image(&self, path: &str, name: Option<&str>) -> Result<(), WzPngParseError> {
+        if self.is_png() {
+            let image = self.get_image()?;
+            let path = Path::new(path).join(name.unwrap_or(&self.get_name()));
+            image.save(path).map_err(|e| WzPngParseError::from(e))
+        } else {
+            Err(WzPngParseError::NotPngProperty)
+        }
+    }
+    fn get_sound(&self) -> Result<Vec<u8>, WzSoundParseError> {
+        let node = self.borrow();
+        match &node.property_type {
+            WzPropertyType::Sound(meta) => {
+                if let Some(reader) = &node.reader {
+                    Ok(meta.get_buffer(&reader.map))
+                } else {
+                    panic!("WzReader not found in WzPropertyType::Sound")
+                }
+            },
+            _ => Err(WzSoundParseError::NotSoundProperty)
+        }
+    }
+    fn save_sound(&self, path: &str, name: Option<&str>) -> Result<(), WzSoundParseError> {
         let node = self.borrow();
         match &node.property_type {
             WzPropertyType::Sound(sound) => {
                 if let Some(reader) = &node.reader {
-                    let path = Path::new(path).join(node.name.clone());
+                    let path = Path::new(path).join(name.unwrap_or(&node.name));
                     sound.extract_sound(&reader.map, path)
                 } else {
-                    Err("WzReader not found in WzPropertyType::Sound".to_string())
+                    panic!("WzReader not found in WzPropertyType::Sound")
                 }
             },
-            _ => Err("Not a sound property".to_string())
+            _ => Err(WzSoundParseError::NotSoundProperty)
         }
     }
 }

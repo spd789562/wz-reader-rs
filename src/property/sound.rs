@@ -4,6 +4,23 @@ use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
 
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum WzSoundParseError {
+    #[error("Unsupported sound format")]
+    UnsupportedFormat,
+    
+    #[error(transparent)]
+    ParseError(#[from] scroll::Error),
+
+    #[error(transparent)]
+    SaveError(#[from] std::io::Error),
+
+    #[error("Not a Sound property")]
+    NotSoundProperty,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum WzSoundType {
     Mp3,
@@ -86,23 +103,37 @@ impl WzSoundMeta {
 
         wav_header
     }
-    pub fn extract_sound(&self, data: &[u8], path: PathBuf) -> Result<(), String> {
+    pub fn get_buffer(&self, data: &[u8]) -> Vec<u8> {
+        let buffer = &data[self.get_buffer_range()];
+        match self.sound_type {
+            WzSoundType::Wav => {
+                let mut wav_buffer = Vec::with_capacity(44 + buffer.len());
+                wav_buffer.extend_from_slice(&self.get_wav_header(data));
+                wav_buffer.extend_from_slice(buffer);
+                wav_buffer
+            },
+            _ => {
+                buffer.to_vec()
+            }
+        }
+    }
+    pub fn extract_sound(&self, data: &[u8], path: PathBuf) -> Result<(), WzSoundParseError> {
         let buffer = &data[self.get_buffer_range()];
 
         match self.sound_type {
             WzSoundType::Wav => {
-                let mut file = File::create(path.with_extension("wav")).unwrap();
+                let mut file = File::create(path.with_extension("wav"))?;
                 let wav_header = self.get_wav_header(data);
-                file.write_all(&wav_header).unwrap();
-                file.write_all(buffer).unwrap();
+                file.write_all(&wav_header)?;
+                file.write_all(buffer)?;
             },
             WzSoundType::Mp3 => {
-                let mut file = File::create(path.with_extension("mp3")).unwrap();
-                file.write_all(buffer).unwrap();
+                let mut file = File::create(path.with_extension("mp3"))?;
+                file.write_all(buffer)?;
             },
             _ => {
-            let mut file = File::create(path).unwrap();
-                file.write_all(buffer).unwrap();
+            let mut file = File::create(path)?;
+                file.write_all(buffer)?;
             }
         }
 
