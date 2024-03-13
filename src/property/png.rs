@@ -20,6 +20,9 @@ pub enum WzPngParseError {
     #[error(transparent)]
     SaveError(#[from] ImageError),
 
+    #[error("Can't not resolve _inlink or _outlink")]
+    LinkError,
+
     #[error("Not a PNG property")]
     NotPngProperty,
 }

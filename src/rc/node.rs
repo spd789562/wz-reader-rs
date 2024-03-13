@@ -161,9 +161,12 @@ impl NodeMethods for WzNodeRc {
     fn at(&self, name: &str) -> Option<WzNodeRc> {
         self.borrow().children.get(name).map(Rc::clone)
     }
-    fn at_path(&self, path: &str) -> Option<WzNodeRc> {
+    fn at_path(&self, path: &str, force_parse: bool) -> Option<WzNodeRc> {
         let mut current_node = self.clone();
         for name in path.split('/') {
+            if force_parse {
+                current_node.parse().unwrap();
+            }
             current_node = {
                 match current_node.at(name) {
                     Some(node) => node,
@@ -172,6 +175,47 @@ impl NodeMethods for WzNodeRc {
             };
         }
         Some(current_node)
+    }
+    fn get_parent_wz_image(&self) -> Option<WzNodeRc> {
+        let mut current_node = self.clone();
+        loop {
+            current_node = {
+                let node = current_node.borrow();
+                match node.parent.upgrade() {
+                    Some(parent) => {
+                        if parent.borrow().object_type == WzObjectType::Image {
+                            return Some(parent);
+                        }
+                        parent
+                    },
+                    None => {
+                        return None
+                    }
+                }
+            };
+        }
+    }
+    fn get_base_wz_file(&self) -> Option<WzNodeRc> {
+        let mut current_node = self.clone();
+        loop {
+            current_node = {
+                let node = current_node.borrow();
+                match node.parent.upgrade() {
+                    Some(parent) => {
+                        {
+                            let parent_read = parent.borrow();
+                            if parent_read.object_type == WzObjectType::File && parent_read.name.as_str() == "Base" {
+                                return Some(parent.clone());
+                            }
+                        }
+                        parent
+                    },
+                    None => {
+                        return None
+                    }
+                }
+            };
+        }
     }
 
     fn get_name(&self) -> String {
@@ -374,6 +418,30 @@ impl NodeMethods for WzNodeRc {
         let node = self.borrow();
         match &node.property_type {
             WzPropertyType::PNG(png) => {
+                if let Some(inlink) = self.at("_inlink") {
+                    if let Some(parent_node) = self.get_parent_wz_image() {
+                        let path = inlink.get_string().unwrap();
+                        let target = parent_node.at_path(&path, false);
+                        if let Some(target) = target {
+                            return target.get_image();
+                        }
+                        return Err(WzPngParseError::LinkError);
+                    }
+                    return Err(WzPngParseError::LinkError);
+                }
+                if let Some(outlink) = self.at("_outlink") {
+                    /* outlink always resolve from base */
+                    if let Some(base_node) = self.get_base_wz_file() {
+                        let path = outlink.get_string().unwrap();
+                        let target = base_node.at_path(&path, true);
+                        if let Some(target) = target {
+                            return target.get_image();
+                        }
+                        return Err(WzPngParseError::LinkError);
+                    }
+                    return Err(WzPngParseError::LinkError);
+                }
+                /* if don't have both _inlink or _outlink */
                 if let Some(reader) = &node.reader {
                     let buffer = reader.get_slice(node.get_offset_range());
                     png.extract_png(buffer)
@@ -387,7 +455,7 @@ impl NodeMethods for WzNodeRc {
     fn save_image(&self, path: &str, name: Option<&str>) -> Result<(), WzPngParseError> {
         if self.is_png() {
             let image = self.get_image()?;
-            let path = Path::new(path).join(name.unwrap_or(&self.get_name()));
+            let path = Path::new(path).join(name.unwrap_or(&self.get_name())).with_extension(".png");
             image.save(path).map_err(WzPngParseError::from)
         } else {
             Err(WzPngParseError::NotPngProperty)

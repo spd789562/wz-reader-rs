@@ -33,7 +33,9 @@ pub trait NodeMethods {
 
     fn first_image(&self) -> Option<Self::Node>;
     fn at(&self, name: &str) -> Option<Self::Node>;
-    fn at_path(&self, path: &str) -> Option<Self::Node>;
+    fn at_path(&self, path: &str, force_parse: bool) -> Option<Self::Node>;
+    fn get_parent_wz_image(&self) -> Option<Self::Node>;
+    fn get_base_wz_file(&self) -> Option<Self::Node>;
 
     fn get_name(&self) -> String;
     fn get_offset(&self) -> usize;

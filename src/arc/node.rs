@@ -167,9 +167,12 @@ impl NodeMethods for WzNodeArc {
         let node = self.read().unwrap();
         node.children.get(name).map(Arc::clone)
     }
-    fn at_path(&self, path: &str) -> Option<WzNodeArc> {
+    fn at_path(&self, path: &str, force_parse: bool) -> Option<WzNodeArc> {
         let mut current_node = self.clone();
         for name in path.split('/') {
+            if force_parse {
+                current_node.parse().unwrap();
+            }
             current_node = {
                 match current_node.at(name) {
                     Some(node) => node,
@@ -179,7 +182,47 @@ impl NodeMethods for WzNodeArc {
         }
         Some(current_node)
     }
-
+    fn get_parent_wz_image(&self) -> Option<WzNodeArc> {
+        let mut current_node = self.clone();
+        loop {
+            current_node = {
+                let node = current_node.read().unwrap();
+                match node.parent.upgrade() {
+                    Some(parent) => {
+                        if parent.read().unwrap().object_type == WzObjectType::Image {
+                            break Some(parent);
+                        }
+                        parent
+                    },
+                    None => {
+                        break None
+                    }
+                }
+            };
+        }
+    }
+    fn get_base_wz_file(&self) -> Option<WzNodeArc> {
+        let mut current_node = self.clone();
+        loop {
+            current_node = {
+                let node = current_node.read().unwrap();
+                match node.parent.upgrade() {
+                    Some(parent) => {
+                        {
+                            let parent_read = parent.read().unwrap();
+                            if parent_read.object_type == WzObjectType::File && parent_read.name.as_str() == "Base" {
+                                break Some(parent.clone());
+                            }
+                        }
+                        parent
+                    },
+                    None => {
+                        break None
+                    }
+                }
+            };
+        }
+    }
     
     fn get_name(&self) -> String {
         self.read().unwrap().name.clone()
@@ -379,8 +422,33 @@ impl NodeMethods for WzNodeArc {
     }
     fn get_image(&self) -> Result<DynamicImage, WzPngParseError> {
         let node = self.read().unwrap();
+
         match &node.property_type {
             WzPropertyType::PNG(png) => {
+                if let Some(inlink) = self.at("_inlink") {
+                    if let Some(parent_node) = self.get_parent_wz_image() {
+                        let path = inlink.get_string().unwrap();
+                        let target = parent_node.at_path(&path, false);
+                        if let Some(target) = target {
+                            return target.get_image();
+                        }
+                        return Err(WzPngParseError::LinkError);
+                    }
+                    return Err(WzPngParseError::LinkError);
+                }
+                if let Some(outlink) = self.at("_outlink") {
+                    /* outlink always resolve from base */
+                    if let Some(base_node) = self.get_base_wz_file() {
+                        let path = outlink.get_string().unwrap();
+                        let target = base_node.at_path(&path, true);
+                        if let Some(target) = target {
+                            return target.get_image();
+                        }
+                        return Err(WzPngParseError::LinkError);
+                    }
+                    return Err(WzPngParseError::LinkError);
+                }
+                /* if don't have both _inlink or _outlink */
                 if let Some(reader) = &node.reader {
                     let buffer = reader.get_slice(node.get_offset_range());
                     png.extract_png(buffer)
@@ -394,7 +462,7 @@ impl NodeMethods for WzNodeArc {
     fn save_image(&self, path: &str, name: Option<&str>) -> Result<(), WzPngParseError> {
         if self.is_png() {
             let image = self.get_image()?;
-            let path = Path::new(path).join(name.unwrap_or(&self.get_name()));
+            let path = Path::new(path).join(name.unwrap_or(&self.get_name())).with_extension(".png");
             image.save(path).map_err(WzPngParseError::from)
         } else {
             Err(WzPngParseError::NotPngProperty)
