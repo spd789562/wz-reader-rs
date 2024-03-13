@@ -16,21 +16,20 @@ pub fn get_root_wz_file_path(dir: &DirEntry) -> Option<String> {
     None
 }
 
-pub fn resolve_root_wz_file_dir<Node: NodeMethods<Node = Node> + Clone>(dir: String, parent: Option<&Node>) -> Result<Node, String> {
+pub fn resolve_root_wz_file_dir<Node: NodeMethods<Node = Node> + Clone>(dir: String, parent: Option<&Node>) -> Result<Node, io::Error> {
     let root_node = Node::new_wz_file(&dir, parent);
     let wz_dir = Path::new(&dir).parent().unwrap();
 
     root_node.parse().unwrap();
 
-    for entry in wz_dir.read_dir().unwrap() {
-        let entry = entry.unwrap();
-        let file_type = entry.file_type().unwrap();
+    for entry in wz_dir.read_dir()? {
+        let entry = entry?;
+        let file_type = entry.file_type()?;
         let name = entry.file_name();
 
         if file_type.is_dir() && root_node.at(name.to_str().unwrap()).is_some() {
-            let file_path = get_root_wz_file_path(&entry);
-            if let Some(file_path) = file_path {
-                let dir_node = resolve_root_wz_file_dir(file_path, Some(&root_node)).unwrap();
+            if let Some(file_path) = get_root_wz_file_path(&entry) {
+                let dir_node = resolve_root_wz_file_dir(file_path, Some(&root_node))?;
                 
                 /* replace the original one */
                 root_node.add_node_child(dir_node);
@@ -66,12 +65,12 @@ pub fn resolve_base<Node: NodeMethods<Node = Node> + Clone>(path: &str) -> Resul
         return Err(io::Error::new(io::ErrorKind::InvalidInput, "not a Base.wz"));
     }
 
-    let base_node = resolve_root_wz_file_dir::<Node>(path.to_string(), None).unwrap();
+    let base_node = resolve_root_wz_file_dir::<Node>(path.to_string(), None)?;
 
     let wz_root_path = Path::new(path).parent().unwrap().parent().unwrap();
 
-    for item in wz_root_path.read_dir().unwrap() {
-        let dir = item.unwrap();
+    for item in wz_root_path.read_dir()? {
+        let dir = item?;
         let file_name = dir.file_name();
 
         /* we need aquire wirte lock to "add_node_child" so need release read lock here */
@@ -81,7 +80,7 @@ pub fn resolve_base<Node: NodeMethods<Node = Node> + Clone>(path: &str) -> Resul
             let wz_path = get_root_wz_file_path(&dir);
 
             if let Some(file_path) = wz_path {
-                let dir_node = resolve_root_wz_file_dir(file_path, Some(&base_node)).unwrap();
+                let dir_node = resolve_root_wz_file_dir(file_path, Some(&base_node))?;
                 
                 /* replace the original one */
                 base_node.add_node_child(dir_node);
