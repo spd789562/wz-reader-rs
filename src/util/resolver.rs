@@ -16,9 +16,9 @@ pub fn get_root_wz_file_path(dir: &DirEntry) -> Option<String> {
     None
 }
 
-pub fn resolve_root_wz_file_dir<Node: NodeMethods<Node = Node> + Clone>(dir: String, parent: Option<&Node>) -> Result<Node, io::Error> {
+pub fn resolve_root_wz_file_dir<Node: NodeMethods<Node = Node> + Clone>(dir: &str, parent: Option<&Node>) -> Result<Node, io::Error> {
     let root_node = Node::new_wz_file(&dir, parent);
-    let wz_dir = Path::new(&dir).parent().unwrap();
+    let wz_dir = Path::new(dir).parent().unwrap();
 
     root_node.parse().unwrap();
 
@@ -29,7 +29,7 @@ pub fn resolve_root_wz_file_dir<Node: NodeMethods<Node = Node> + Clone>(dir: Str
 
         if file_type.is_dir() && root_node.at(name.to_str().unwrap()).is_ok() {
             if let Some(file_path) = get_root_wz_file_path(&entry) {
-                let dir_node = resolve_root_wz_file_dir(file_path, Some(&root_node))?;
+                let dir_node = resolve_root_wz_file_dir(&file_path, Some(&root_node))?;
                 
                 /* replace the original one */
                 root_node.add_node_child(dir_node);
@@ -65,7 +65,7 @@ pub fn resolve_base<Node: NodeMethods<Node = Node> + Clone>(path: &str) -> Resul
         return Err(io::Error::new(io::ErrorKind::InvalidInput, "not a Base.wz"));
     }
 
-    let base_node = resolve_root_wz_file_dir::<Node>(path.to_string(), None)?;
+    let base_node = resolve_root_wz_file_dir::<Node>(path, None)?;
 
     let wz_root_path = Path::new(path).parent().unwrap().parent().unwrap();
 
@@ -80,7 +80,7 @@ pub fn resolve_base<Node: NodeMethods<Node = Node> + Clone>(path: &str) -> Resul
             let wz_path = get_root_wz_file_path(&dir);
 
             if let Some(file_path) = wz_path {
-                let dir_node = resolve_root_wz_file_dir(file_path, Some(&base_node))?;
+                let dir_node = resolve_root_wz_file_dir(&file_path, Some(&base_node))?;
                 
                 /* replace the original one */
                 base_node.add_node_child(dir_node);
