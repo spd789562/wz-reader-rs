@@ -27,7 +27,7 @@ pub fn resolve_root_wz_file_dir<Node: NodeMethods<Node = Node> + Clone>(dir: Str
         let file_type = entry.file_type()?;
         let name = entry.file_name();
 
-        if file_type.is_dir() && root_node.at(name.to_str().unwrap()).is_some() {
+        if file_type.is_dir() && root_node.at(name.to_str().unwrap()).is_ok() {
             if let Some(file_path) = get_root_wz_file_path(&entry) {
                 let dir_node = resolve_root_wz_file_dir(file_path, Some(&root_node))?;
                 
@@ -74,7 +74,7 @@ pub fn resolve_base<Node: NodeMethods<Node = Node> + Clone>(path: &str) -> Resul
         let file_name = dir.file_name();
 
         /* we need aquire wirte lock to "add_node_child" so need release read lock here */
-        let has_dir = base_node.at(file_name.to_str().unwrap()).is_some();
+        let has_dir = base_node.at(file_name.to_str().unwrap()).is_ok();
 
         if has_dir {
             let wz_path = get_root_wz_file_path(&dir);

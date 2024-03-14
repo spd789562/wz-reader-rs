@@ -118,7 +118,7 @@ fn try_decode_with_wz_version_number<R: Deref<Target = WzReader>, Node: NodeMeth
 
     let first_image_node = wz_node.first_image();
 
-    if let Some(image_node) = first_image_node {
+    if let Ok(image_node) = first_image_node {
 
         let check_byte = if let Ok(b) = reader.read_u8_at(image_node.get_offset()) {
             b

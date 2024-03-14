@@ -159,15 +159,23 @@ impl NodeMethods for WzNodeArc {
     }
 
     
-    fn first_image(&self) -> Option<WzNodeArc> {
+    fn first_image(&self) ->Result<WzNodeArc, NodeParseError> {
         let node = self.read().unwrap();
-        node.children.iter().find(|node| node.1.read().unwrap().object_type == WzObjectType::Image).map(|(_, node)| Arc::clone(node))
+        if let Some(node) = node.children.values().find(|node| node.read().unwrap().object_type == WzObjectType::Image) {
+            Ok(Arc::clone(node))
+        } else {
+            Err(NodeParseError::NodeNotFound)
+        }
     }
-    fn at(&self, name: &str) -> Option<WzNodeArc> {
+    fn at(&self, name: &str) -> Result<WzNodeArc, NodeParseError> {
         let node = self.read().unwrap();
-        node.children.get(name).map(Arc::clone)
+        if let Some(node) = node.children.get(name) {
+            Ok(Arc::clone(node))
+        } else {
+            Err(NodeParseError::NodeNotFound)
+        }
     }
-    fn at_path(&self, path: &str, force_parse: bool) -> Option<WzNodeArc> {
+    fn at_path(&self, path: &str, force_parse: bool) -> Result<WzNodeArc, NodeParseError> {
         let mut current_node = self.clone();
         for name in path.split('/') {
             if force_parse {
@@ -175,14 +183,14 @@ impl NodeMethods for WzNodeArc {
             }
             current_node = {
                 match current_node.at(name) {
-                    Some(node) => node,
-                    None => return None
+                    Ok(node) => node,
+                    _ => return Err(NodeParseError::NodeNotFound)
                 }
             };
         }
-        Some(current_node)
+        Ok(current_node)
     }
-    fn get_parent_wz_image(&self) -> Option<WzNodeArc> {
+    fn get_parent_wz_image(&self) -> Result<WzNodeArc, NodeParseError> {
         let mut current_node = self.clone();
         loop {
             current_node = {
@@ -190,18 +198,18 @@ impl NodeMethods for WzNodeArc {
                 match node.parent.upgrade() {
                     Some(parent) => {
                         if parent.read().unwrap().object_type == WzObjectType::Image {
-                            break Some(parent);
+                            break Ok(parent);
                         }
                         parent
                     },
                     None => {
-                        break None
+                        break Err(NodeParseError::NodeNotFound)
                     }
                 }
             };
         }
     }
-    fn get_base_wz_file(&self) -> Option<WzNodeArc> {
+    fn get_base_wz_file(&self) -> Result<WzNodeArc, NodeParseError> {
         let mut current_node = self.clone();
         loop {
             current_node = {
@@ -211,19 +219,19 @@ impl NodeMethods for WzNodeArc {
                         {
                             let parent_read = parent.read().unwrap();
                             if parent_read.object_type == WzObjectType::File && parent_read.name.as_str() == "Base" {
-                                break Some(parent.clone());
+                                break Ok(parent.clone());
                             }
                         }
                         parent
                     },
                     None => {
-                        break None
+                        break Err(NodeParseError::NodeNotFound)
                     }
                 }
             };
         }
     }
-    fn get_uol_wz_node(&self) -> Option<WzNodeArc> {
+    fn get_uol_wz_node(&self) -> Result<WzNodeArc, NodeParseError> {
         let node = self.read().unwrap();
         match &node.property_type {
             WzPropertyType::UOL(meta) => {
@@ -270,7 +278,7 @@ impl NodeMethods for WzNodeArc {
         }
         path
     }
-    fn resolve_relative_path(&self, path: &str, force_parse: bool) -> Option<WzNodeArc> {
+    fn resolve_relative_path(&self, path: &str, force_parse: bool) -> Result<WzNodeArc, NodeParseError> {
         let mut current_node = self.clone();
 
         
@@ -287,13 +295,13 @@ impl NodeMethods for WzNodeArc {
 
                 current_node = {
                     match current_node.at(name) {
-                        Some(node) => node,
-                        None => return None
+                        Ok(node) => node,
+                        _ => return Err(NodeParseError::NodeNotFound)
                     }
                 };
             }
         }
-        Some(current_node)
+        Ok(current_node)
     }
 
     fn update_parse_status(&self, status: bool) {
@@ -442,23 +450,21 @@ impl NodeMethods for WzNodeArc {
 
         match &node.property_type {
             WzPropertyType::PNG(png) => {
-                if let Some(inlink) = self.at("_inlink") {
-                    if let Some(parent_node) = self.get_parent_wz_image() {
+                if let Ok(inlink) = self.at("_inlink") {
+                    if let Ok(parent_node) = self.get_parent_wz_image() {
                         let path = inlink.get_string().unwrap();
-                        let target = parent_node.at_path(&path, false);
-                        if let Some(target) = target {
+                        if let Ok(target) = parent_node.at_path(&path, false) {
                             return target.get_image();
                         }
                         return Err(WzPngParseError::LinkError);
                     }
                     return Err(WzPngParseError::LinkError);
                 }
-                if let Some(outlink) = self.at("_outlink") {
+                if let Ok(outlink) = self.at("_outlink") {
                     /* outlink always resolve from base */
-                    if let Some(base_node) = self.get_base_wz_file() {
+                    if let Ok(base_node) = self.get_base_wz_file() {
                         let path = outlink.get_string().unwrap();
-                        let target = base_node.at_path(&path, true);
-                        if let Some(target) = target {
+                        if let Ok(target) = base_node.at_path(&path, true) {
                             return target.get_image();
                         }
                         return Err(WzPngParseError::LinkError);
