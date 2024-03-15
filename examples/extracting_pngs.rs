@@ -24,7 +24,7 @@ fn main() {
     walk_node_arc(base_node, true, &save_image_fn);
 
     /* resolve whole wz folder */
-    let root_node = resolve_root_wz_file_dir::<WzNodeArc>(r"D:\MapleStory\Data\Npc\_Canvas", None).unwrap();
+    let root_node = resolve_root_wz_file_dir::<WzNodeArc>(r"D:\MapleStory\Data\Npc\_Canvas\_Canvas.wz", None).unwrap();
 
     walk_node_arc(root_node, true, &save_image_fn);
 }

@@ -22,7 +22,7 @@ fn main() {
     walk_node_arc(sound_node, true, &save_sound_fn);
 
     /* resolve whole wz folder */
-    let root_node = resolve_root_wz_file_dir::<WzNodeArc>(r"D:\MapleStory\Data\Sound", None).unwrap();
+    let root_node = resolve_root_wz_file_dir::<WzNodeArc>(r"D:\MapleStory\Data\Sound\Sound.wz", None).unwrap();
 
     walk_node_arc(root_node, true, &save_sound_fn);
 }
