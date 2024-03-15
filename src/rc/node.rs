@@ -6,7 +6,7 @@ use std::path::Path;
 use memmap2::Mmap;
 use crate::Reader;
 use crate::{ WzFileMeta, WzObjectType, WzReader, WzImageParseError, parse_wz_file, parse_wz_image, parse_wz_directory };
-use crate::property::{WzPropertyType, png::WzPngParseError, string::WzStringParseError, sound::WzSoundParseError};
+use crate::property::{WzPropertyType, png::WzPngParseError, string::WzStringParseError, sound::WzSoundParseError, lua::{WzLuaParseError, extract_lua}};
 use crate::node::{NodeMethods, NodeParseError};
 use image::DynamicImage;
 
@@ -509,6 +509,19 @@ impl NodeMethods for WzNodeRc {
                 }
             },
             _ => Err(WzSoundParseError::NotSoundProperty)
+        }
+    }
+    fn get_lua(&self) -> Result<String, WzLuaParseError> {
+        let node = self.borrow();
+        match &node.property_type {
+            WzPropertyType::Lua => {
+                if let Some(reader) = &node.reader {
+                    extract_lua(reader.get_slice(node.get_offset_range()))
+                } else {
+                    panic!("WzReader not found in WzPropertyType::Lua")
+                }
+            },
+            _ => Err(WzLuaParseError::NotLuaProperty)
         }
     }
 }

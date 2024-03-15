@@ -2,11 +2,13 @@ pub mod vector;
 pub mod png;
 pub mod string;
 pub mod sound;
+pub mod lua;
 
 pub use vector::*;
 pub use png::*;
 pub use string::*;
 pub use sound::*;
+pub use lua::*;
 
 #[derive(Debug, Clone)]
 pub enum WzPropertyType {

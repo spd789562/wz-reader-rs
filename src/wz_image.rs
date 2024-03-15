@@ -1,5 +1,5 @@
 use std::ops::Deref;
-use crate::{ util, WzReader, Reader, NodeMethods };
+use crate::{ property::WzPropertyType, util, NodeMethods, Reader, WzObjectType, WzReader };
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -46,7 +46,20 @@ pub fn parse_wz_image<R: Deref<Target = WzReader> + Clone, Node: NodeMethods<Nod
     match header_byte {
         0x1 => {
             if wz_node.get_name().ends_with(".lua") {
-                // maybe do something else
+                let len = reader.read_wz_int()?;
+                let offset = reader.get_pos();
+
+                let node = Node::new_with_parent(
+                    wz_node,
+                    WzObjectType::Property,
+                    Some(WzPropertyType::Lua),
+                    String::from("Script"),
+                    offset,
+                    len as usize
+                );
+                
+                wz_node.add_node_child(node);
+
                 return Ok(());
             }
             return Err(WzImageParseError::LuaParseError)

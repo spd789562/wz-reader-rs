@@ -54,8 +54,6 @@ pub fn parse_wz_directory<R: Deref<Target = WzReader>, Node: NodeMethods<Node = 
 
     let entry_count = reader.read_wz_int()?;
 
-    // println!("entry_count: {}", entry_count);
-
     if !(0..=1000000).contains(&entry_count) {
         return Err(WzDirectoryParseError::InvalidEntryCount);
     }
@@ -75,7 +73,7 @@ pub fn parse_wz_directory<R: Deref<Target = WzReader>, Node: NodeMethods<Node = 
                 continue;
             }
             WzDirectoryType::RetrieveStringFromOffset => {
-                let str_offset = reader.read_i32().unwrap();
+                let str_offset = reader.read_i32()?;
                 
                 let pos = reader.get_pos();
 
@@ -102,7 +100,6 @@ pub fn parse_wz_directory<R: Deref<Target = WzReader>, Node: NodeMethods<Node = 
         let _checksum = reader.read_wz_int()?;
         let offset = reader.read_wz_offset(None)?;
         let buf_start = offset;
-        
         
         let buf_end = buf_start + fsize as usize;
 
