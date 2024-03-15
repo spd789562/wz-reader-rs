@@ -451,7 +451,7 @@ impl<'a> Reader<'a> for WzReader {
         let fstart = WzHeader::get_wz_fstart(&self.map)? as usize;
         let offset = (offset - fstart) ^ 0xFFFFFFFF;
         let offset = (offset * hash) & 0xFFFFFFFF;
-        let offset = offset - WZ_OFFSET as usize;
+        let offset = offset.overflowing_sub(WZ_OFFSET as usize).0;
         let offset = offset.rotate_left((offset as u32) & 0x1F) & 0xFFFFFFFF;
         
         let encrypted_offset = self.read_u32()?;
@@ -518,7 +518,7 @@ impl<'a> Reader<'a> for WzSliceReader<'a> {
 
         let offset = (offset - fstart) ^ 0xFFFFFFFF;
         let offset = (offset * self.hash) & 0xFFFFFFFF;
-        let offset = offset - (WZ_OFFSET as usize);
+        let offset = offset.overflowing_sub(WZ_OFFSET as usize).0;
         let offset = (offset as i32).rotate_left((offset as u32) & 0x1F) as usize & 0xFFFFFFFF;
         
         let encrypted_offset = self.read_u32()? as usize;
@@ -619,7 +619,7 @@ pub fn read_wz_long(buf: &[u8], offset: Option<usize>) -> Result<i64, scroll::Er
 pub fn read_wz_offset(buf: &[u8], encrypted_offset: usize, fstart: usize, offset: usize, hash: usize) -> Result<usize, scroll::Error> {
     let offset = (offset - fstart) ^ 0xFFFFFFFF;
     let offset = (offset * hash) & 0xFFFFFFFF;
-    let offset = offset - WZ_OFFSET as usize;
+    let offset = offset.overflowing_sub(WZ_OFFSET as usize).0;
     let offset = offset.rotate_left((offset as u32) & 0x1F) & 0xFFFFFFFF;
     
     let encrypted_offset = buf.pread_with::<u32>(encrypted_offset, LE)?;
