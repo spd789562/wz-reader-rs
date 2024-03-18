@@ -4,7 +4,7 @@ use wz_reader::util::{resolve_base, resolve_root_wz_file_dir, walk_node_arc};
 
 fn main() {
     let save_sound_fn = |node: WzNodeArc| {
-        if node.is_png() {
+        if node.is_sound() {
             node.save_sound("./sounds", None).unwrap();
         }
     };
