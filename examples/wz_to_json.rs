@@ -43,10 +43,12 @@ fn walk_node_and_to_json(node_arc: WzNodeArc, json: &mut Map<String, Value>) {
                 },
                 WzPropertyType::SubProperty | WzPropertyType::Convex | WzPropertyType::PNG(_) => {
                     let mut child_json = Map::new();
-                    for value in node.children.values() {
-                        walk_node_and_to_json(value.clone(), &mut child_json);
+                    if node.children.len() != 0 {
+                        for value in node.children.values() {
+                            walk_node_and_to_json(value.clone(), &mut child_json);
+                        }
+                        json.insert(node.name.clone(), Value::Object(child_json));
                     }
-                    json.insert(node.name.clone(), Value::Object(child_json));
                 },
                 WzPropertyType::Null | WzPropertyType::RawData | WzPropertyType::Sound(_) | WzPropertyType::Lua => {
                     json.insert(node.name.clone(), Value::Null);
@@ -55,10 +57,12 @@ fn walk_node_and_to_json(node_arc: WzNodeArc, json: &mut Map<String, Value>) {
         },
         WzObjectType::Directory | WzObjectType::Image | WzObjectType::File => {
             let mut child_json = Map::new();
-            for value in node.children.values() {
-                walk_node_and_to_json(value.clone(), &mut child_json);
+            if node.children.len() != 0 {
+                for value in node.children.values() {
+                    walk_node_and_to_json(value.clone(), &mut child_json);
+                }
+                json.insert(node.name.clone(), Value::Object(child_json));
             }
-            json.insert(node.name.clone(), Value::Object(child_json));
         }
         _ => {}
     }
@@ -73,9 +77,7 @@ fn main() {
     let mut json = Map::new();
 
     for (key, value) in node.read().unwrap().children.iter() {
-        let mut child_json = Map::new();
-        walk_node_and_to_json(value.clone(), &mut child_json);
-        json.insert(key.clone(), Value::Object(child_json));
+        walk_node_and_to_json(value.clone(), &mut json);
     }
 
     let json_string = serde_json::to_string_pretty(&Value::Object(json)).unwrap();
