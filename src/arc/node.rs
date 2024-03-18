@@ -78,6 +78,32 @@ impl NodeMethods for WzNodeArc {
             wz_file_meta: Some(wz_file_meta),
         }))
     }
+    fn new_wz_img_file(path: &str, parent: Option<&WzNodeArc>) -> WzNodeArc {
+        let file: File = File::open(path).expect("file not found");
+        let map = unsafe { Mmap::map(&file).unwrap() };
+        let name = Path::new(path).file_stem().unwrap().to_str().unwrap().to_string();
+
+        let block_size = map.len();
+        let reader = WzReader::new(map);
+
+        let parent = match parent {
+            Some(parent) => Arc::downgrade(parent),
+            None => Weak::new()
+        };
+
+        Arc::new(RwLock::new(WzNode {
+            object_type: WzObjectType::Image,
+            property_type: WzPropertyType::Null,
+            offset: 0,
+            block_size,
+            name,
+            is_parsed: false,
+            parent,
+            children: HashMap::new(),
+            reader: Some(Arc::new(reader)),
+            wz_file_meta: None,
+        }))
+    }
     fn new(object_type: WzObjectType, property_type: Option<WzPropertyType>, name: String, offset: usize, block_size: usize) -> WzNodeArc {
         Arc::new(RwLock::new(WzNode {
             object_type,

@@ -29,6 +29,7 @@ pub trait NodeMethods {
     fn get_reader(&self) -> Option<Self::Reader>;
 
     fn new_wz_file(path: &str, parent: Option<&Self::Node>) -> Self::Node;
+    fn new_wz_img_file(path: &str, parent: Option<&Self::Node>) -> Self::Node;
     fn new(object_type: WzObjectType, property_type: Option<WzPropertyType>, name: String, offset: usize, block_size: usize) -> Self::Node;
     fn new_empty_wz_directory(name: String, parent: Option<&Self::Node>) -> Self::Node;
     fn new_with_parent(parent: &Self::Node, object_type: WzObjectType, property_type: Option<WzPropertyType>, name: String, offset: usize, block_size: usize) -> Self::Node;

@@ -1,6 +1,6 @@
 use scroll::{ctx, Endian, Pread, LE};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct WzHeader<'a> {
     pub ident: &'a str,
     pub fsize: u64,

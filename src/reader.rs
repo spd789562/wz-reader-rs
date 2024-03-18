@@ -345,7 +345,7 @@ impl WzReader {
     }
     
     pub fn create_header(&self) -> WzHeader {
-        self.map.pread::<WzHeader>(0).unwrap()
+        self.map.pread::<WzHeader>(0).unwrap_or(WzHeader::default())
     }
     pub fn get_ref_slice(&self) -> &[u8] {
         &self.map
