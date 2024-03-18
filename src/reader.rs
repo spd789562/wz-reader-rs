@@ -8,7 +8,6 @@ use crate::property::{WzStringMeta, WzStringType};
 #[derive(Debug)]
 pub struct WzReader {
     pub map: Mmap,
-    pub hash: Cell<usize>,
 }
 #[derive(Debug, Clone)]
 pub struct WzSliceReader<'a> {
@@ -22,7 +21,6 @@ pub struct WzSliceReader<'a> {
 static WZ_OFFSET: i32 = 0x581C3F6D;
 
 pub trait Reader<'a> {
-    fn update_hash(&self, hash: usize);
     fn get_size(&self) -> usize;
     fn get_pos(&self) -> usize;
     fn set_pos(&self, pos: usize);
@@ -308,14 +306,14 @@ pub trait Reader<'a> {
         if sl == i8::MIN {
             self.read_i32_at(pos).unwrap()
         } else {
-            (-sl).try_into().unwrap()
+            (-sl).into()
         }
     }
     fn read_ascii_str_len(&self, sl: i8) -> i32 {
         if sl == i8::MIN {
             self.read_i32().unwrap()
         } else {
-            (-sl).try_into().unwrap()
+            (-sl).into()
         }
     }
     fn read_ascii_string(&self, sl: i8) -> Result<String, scroll::Error> {
@@ -339,8 +337,7 @@ pub trait Reader<'a> {
 impl WzReader {
     pub fn new(map: Mmap) -> Self {
         WzReader {
-            map,
-            hash: Cell::new(0),
+            map
         }
     }
     
@@ -359,8 +356,14 @@ impl WzReader {
     pub fn get_wz_fsize(&self) -> Result<u64, scroll::Error> {
         WzHeader::get_wz_fsize(&self.map)
     }
+    pub fn create_slice_reader_without_hash(&self) -> WzSliceReader {
+        WzSliceReader::new_with_existing_header(&self.map, WzHeader::default(), None)
+    }
+    pub fn create_slice_reader_with_hash(&self, hash: usize) -> WzSliceReader {
+        WzSliceReader::new_with_existing_header(&self.map, self.create_header(), Some(hash))
+    }
     pub fn create_slice_reader(&self) -> WzSliceReader {
-        WzSliceReader::new_with_existing_header(&self.map, self.create_header(), Some(self.hash.get()))
+        WzSliceReader::new_with_existing_header(&self.map, self.create_header(), None)
     }
 }
 
@@ -393,9 +396,6 @@ impl<'a> WzSliceReader<'a> {
 }
 
 impl<'a> Reader<'a> for WzReader {
-    fn update_hash(&self, hash: usize) {
-        self.hash.set(hash);
-    }
     fn read_u8_at(&self, pos: usize) -> Result<u8, scroll::Error> {
         self.map.pread_with::<u8>(pos, LE)
     }
@@ -442,28 +442,12 @@ impl<'a> Reader<'a> for WzReader {
     fn set_save_pos(&self, _pos: usize) {
         
     }
-    fn read_wz_offset(&self, offset: Option<usize>) -> Result<usize, scroll::Error> {
-        // let offset: usize = self.get_pos();
-        let offset = offset.unwrap_or(self.get_pos());
-
-        let hash = self.hash.get();
-        
-        let fstart = WzHeader::get_wz_fstart(&self.map)? as usize;
-        let offset = (offset - fstart) ^ 0xFFFFFFFF;
-        let offset = (offset * hash) & 0xFFFFFFFF;
-        let offset = offset.overflowing_sub(WZ_OFFSET as usize).0;
-        let offset = offset.rotate_left((offset as u32) & 0x1F) & 0xFFFFFFFF;
-        
-        let encrypted_offset = self.read_u32()?;
-        let offset = (offset ^ encrypted_offset as usize) & 0xFFFFFFFF;
-        let offset = (offset + fstart * 2) & 0xFFFFFFFF;
-    
-        Ok(offset)
+    fn read_wz_offset(&self, _offset: Option<usize>) -> Result<usize, scroll::Error> {
+        panic!("Don't use this on WzReader");
     }
 }
 
 impl<'a> Reader<'a> for WzSliceReader<'a> {
-    fn update_hash(&self, _hash: usize) {}
     fn read_u8_at(&self, pos: usize) -> Result<u8, scroll::Error> {
         self.buf.pread_with::<u8>(pos, LE)
     }
@@ -665,7 +649,7 @@ pub fn read_ascii_string(buf: &[u8], sl: i8) -> Result<String, scroll::Error> {
         len = read_i32_at(buf, 0)?;
         offset = 4;
     } else {
-        len = (-sl).try_into().unwrap();
+        len = (-sl).into();
     }
 
     if len == 0 {

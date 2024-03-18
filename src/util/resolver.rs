@@ -17,7 +17,7 @@ pub fn get_root_wz_file_path(dir: &DirEntry) -> Option<String> {
 }
 
 pub fn resolve_root_wz_file_dir<Node: NodeMethods<Node = Node> + Clone>(dir: &str, parent: Option<&Node>) -> Result<Node, io::Error> {
-    let root_node = Node::new_wz_file(&dir, parent);
+    let root_node = Node::new_wz_file(dir, parent);
     let wz_dir = Path::new(dir).parent().unwrap();
 
     root_node.parse().unwrap();

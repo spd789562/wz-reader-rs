@@ -61,8 +61,9 @@ pub fn parse_wz_file<R: Deref<Target = WzReader> + Clone, Node: NodeMethods<Node
         /* not hold encver in wz_file, directly try 770 - 780 */
         if !wz_with_encrypt_version_header {
             for ver_to_decode in WZ_VERSION_HEADER_64BIT_START..WZ_VERSION_HEADER_64BIT_START + 10 {
-                
-                if try_decode_with_wz_version_number(wz_node, &reader, &mut wz_file_meta, ver_to_decode as i32).is_ok() {
+                wz_file_meta.hash = check_and_get_version_hash(wz_file_meta.wz_version_header, ver_to_decode as i32) as usize;
+                if try_decode_with_wz_version_number(wz_node, &reader, &wz_file_meta, ver_to_decode as i32).is_ok() {
+                    wz_file_meta.patch_version = ver_to_decode as i32;
                     wz_node.update_wz_file_meta(wz_file_meta);
                     return Ok(());
                 }
@@ -74,8 +75,10 @@ pub fn parse_wz_file<R: Deref<Target = WzReader> + Clone, Node: NodeMethods<Node
         let max_patch_version = 2000;
 
         for ver_to_decode in 1..max_patch_version {
+            wz_file_meta.hash = check_and_get_version_hash(wz_file_meta.wz_version_header, ver_to_decode) as usize;
             // println!("try_decode_with_wz_version_number: {}", ver_to_decode);
-            if try_decode_with_wz_version_number(wz_node, &reader, &mut wz_file_meta, ver_to_decode).is_ok() {
+            if try_decode_with_wz_version_number(wz_node, &reader, &wz_file_meta, ver_to_decode).is_ok() {
+                wz_file_meta.patch_version = ver_to_decode;
                 wz_node.update_wz_file_meta(wz_file_meta);
                 return Ok(());
             }
@@ -85,14 +88,11 @@ pub fn parse_wz_file<R: Deref<Target = WzReader> + Clone, Node: NodeMethods<Node
     }
 
     wz_file_meta.hash = check_and_get_version_hash(wz_file_meta.wz_version_header, wz_file_meta.patch_version) as usize;
-    reader.update_hash(wz_file_meta.hash);
-
+    wz_node.update_wz_file_meta(wz_file_meta);
     
     if parse_wz_directory(wz_node).is_err() {
         return Err(WzFileParseError::ErrorGameVerHash);
     }
-
-    wz_node.update_wz_file_meta(wz_file_meta);
 
     Ok(())
 }
@@ -100,17 +100,14 @@ pub fn parse_wz_file<R: Deref<Target = WzReader> + Clone, Node: NodeMethods<Node
 fn try_decode_with_wz_version_number<R: Deref<Target = WzReader>, Node: NodeMethods<Node = Node, Reader = R> + Clone>(
     wz_node: &Node, 
     reader: &R,
-    meta: &mut WzFileMeta,
+    meta: &WzFileMeta,
     use_maplestory_patch_version: i32
 ) -> Result<(), WzFileParseError> {
-    let version_hash = check_and_get_version_hash(meta.wz_version_header, use_maplestory_patch_version) as usize;
-
-    if version_hash == 0 {
+    if meta.hash == 0 {
         return Err(WzFileParseError::ErrorGameVerHash);
     }
-    
-    meta.hash = version_hash;
-    reader.update_hash(version_hash);
+
+    wz_node.update_wz_file_meta(meta.clone());
 
     if parse_wz_directory(wz_node).is_err() {
         return Err(WzFileParseError::ErrorGameVerHash);
@@ -143,7 +140,6 @@ fn try_decode_with_wz_version_number<R: Deref<Target = WzReader>, Node: NodeMeth
         return Err(WzFileParseError::ErrorGameVerHash);
     }
 
-    meta.patch_version = use_maplestory_patch_version;
     Ok(())
 }
 

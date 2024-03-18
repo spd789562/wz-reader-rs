@@ -35,7 +35,7 @@ pub fn parse_wz_image<R: Deref<Target = WzReader> + Clone, Node: NodeMethods<Nod
         panic!("Reader not found in wz_img node")
     };
 
-    let reader = reader.create_slice_reader();
+    let reader = reader.create_slice_reader_without_hash();
 
     let node_offset = wz_node.get_offset();
 

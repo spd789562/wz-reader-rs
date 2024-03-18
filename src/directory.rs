@@ -38,14 +38,20 @@ pub fn get_wz_directory_type_from_byte(byte: u8) -> WzDirectoryType {
     }
 }
 
-pub fn parse_wz_directory<R: Deref<Target = WzReader>, Node: NodeMethods<Node = Node, Reader = R> + Clone>(wz_node: &Node) -> Result<(), WzDirectoryParseError> {
+pub fn parse_wz_directory<R: Deref<Target = WzReader>, Node: NodeMethods<Node = Node, Reader = R> + Clone>(wz_node: &Node, ) -> Result<(), WzDirectoryParseError> {
     let origin_reader = if let Some(reader) = wz_node.get_reader() {
         reader
     } else {
         panic!("Reader not found in wz_directory node")
     };
 
-    let reader = origin_reader.create_slice_reader();
+    let hash = if let Some(h) = wz_node.get_wz_file_hash() {
+        h
+    } else {
+        panic!("WzFile should hold file hash")
+    };
+
+    let reader = origin_reader.create_slice_reader_with_hash(hash);
     
     let node_offset = wz_node.get_offset();
     
@@ -109,7 +115,7 @@ pub fn parse_wz_directory<R: Deref<Target = WzReader>, Node: NodeMethods<Node = 
 
         match dir_type {
             WzDirectoryType::WzDirectory => {
-                let node = Node::new_with_parent(wz_node, WzObjectType::Directory, None, fname.clone(), offset, fsize as usize);
+                let node = Node::new_wz_directory(wz_node, fname.clone(), offset, fsize as usize);
                 dir_nodes.push(node.clone());
                 wz_node.add_node_child(node);
             }

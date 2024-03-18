@@ -28,9 +28,6 @@ pub struct WzNode {
     /// wz_file_meta is only available for WzObjectType::File
     pub wz_file_meta: Option<WzFileMeta>,
 }
-unsafe impl Send for WzNode {}
-unsafe impl Sync for WzNode {}
-
 
 impl WzNode {
     pub fn get_offset_range(&self) -> (usize, usize) {
@@ -134,6 +131,20 @@ impl NodeMethods for WzNodeArc {
             children: HashMap::new(),
             reader: None,
             wz_file_meta: None
+        }))
+    }
+    fn new_wz_directory(parent: &WzNodeArc, name: String, offset: usize, block_size: usize) -> WzNodeArc {
+        Arc::new(RwLock::new(WzNode {
+            object_type: WzObjectType::Directory,
+            property_type: WzPropertyType::Null,
+            offset,
+            block_size,
+            name,
+            is_parsed: false,
+            parent: Arc::downgrade(parent),
+            children: HashMap::new(),
+            reader: parent.get_reader(),
+            wz_file_meta: parent.read().unwrap().wz_file_meta.clone()
         }))
     }
     fn new_with_parent(parent: &WzNodeArc, object_type: WzObjectType, property_type: Option<WzPropertyType>, name: String, offset: usize, block_size: usize) -> WzNodeArc {
@@ -292,6 +303,9 @@ impl NodeMethods for WzNodeArc {
     }
     fn get_block_size(&self) -> usize {
         self.read().unwrap().block_size
+    }
+    fn get_wz_file_hash(&self) -> Option<usize> {
+        self.read().unwrap().wz_file_meta.as_ref().map(|meta| meta.hash)
     }
     fn get_full_path(&self) -> String {
         let mut current_node = self.clone();

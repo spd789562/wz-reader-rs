@@ -134,6 +134,20 @@ impl NodeMethods for WzNodeRc {
             wz_file_meta: None
         }))
     }
+    fn new_wz_directory(parent: &WzNodeRc, name: String, offset: usize, block_size: usize) -> WzNodeRc {
+        Rc::new(RefCell::new(WzNode {
+            object_type: WzObjectType::Directory,
+            property_type: WzPropertyType::Null,
+            offset,
+            block_size,
+            name,
+            is_parsed: false,
+            parent: Rc::downgrade(parent),
+            children: HashMap::new(),
+            reader: parent.get_reader(),
+            wz_file_meta: parent.borrow().wz_file_meta.clone()
+        }))
+    }
     fn new_with_parent(parent: &WzNodeRc, object_type: WzObjectType, property_type: Option<WzPropertyType>, name: String, offset: usize, block_size: usize) -> WzNodeRc {
         Rc::new(RefCell::new(WzNode {
             object_type,
@@ -286,6 +300,9 @@ impl NodeMethods for WzNodeRc {
     }
     fn get_block_size(&self) -> usize {
         self.borrow().block_size
+    }
+    fn get_wz_file_hash(&self) -> Option<usize> {
+        self.borrow().wz_file_meta.as_ref().map(|meta| meta.hash)
     }
     fn get_full_path(&self) -> String {
         let mut current_node = self.clone();
