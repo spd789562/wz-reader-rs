@@ -38,6 +38,7 @@ pub trait NodeMethods {
     fn first_image(&self) -> Result<Self::Node, NodeParseError>;
     fn at(&self, name: &str) -> Result<Self::Node, NodeParseError>;
     fn at_path(&self, path: &str, force_parse: bool) -> Result<Self::Node, NodeParseError>;
+    fn at_path_unchecked(&self, path: &str) -> Result<Self::Node, NodeParseError>;
     fn get_parent_wz_image(&self) -> Result<Self::Node, NodeParseError>;
     fn get_base_wz_file(&self) -> Result<Self::Node, NodeParseError>;
     fn get_uol_wz_node(&self) -> Result<Self::Node, NodeParseError>;
@@ -49,7 +50,6 @@ pub trait NodeMethods {
 
     fn resolve_relative_path(&self, path: &str, force_parse: bool) -> Result<Self::Node, NodeParseError>;
 
-    
     fn update_parse_status(&self, status: bool);
     fn update_wz_file_meta(&self, wz_file_meta: WzFileMeta);
     fn update_wz_png_meta(&self, name: String, offset: usize, block_size: usize, property_type: WzPropertyType);

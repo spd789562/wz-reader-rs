@@ -190,6 +190,18 @@ impl NodeMethods for WzNodeArc {
         }
         Ok(current_node)
     }
+    fn at_path_unchecked(&self, path: &str) -> Result<WzNodeArc, NodeParseError> {
+        let mut current_node = self.clone();
+        for name in path.split('/') {
+            current_node = {
+                match current_node.at(name) {
+                    Ok(node) => node,
+                    _ => return Err(NodeParseError::NodeNotFound)
+                }
+            };
+        }
+        Ok(current_node)
+    }
     fn get_parent_wz_image(&self) -> Result<WzNodeArc, NodeParseError> {
         let mut current_node = self.clone();
         loop {
