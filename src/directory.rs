@@ -120,7 +120,7 @@ pub fn parse_wz_directory<R: Deref<Target = WzReader>, Node: NodeMethods<Node = 
                 wz_node.add_node_child(node);
             }
             WzDirectoryType::WzImage => {
-                let node = Node::new_with_parent(wz_node, WzObjectType::Image, None, fname.clone(), offset, fsize as usize);
+                let node = Node::new_wz_image(wz_node, fname.clone(), offset, fsize as usize);
                 wz_node.add_node_child(node);
             }
             _ => {

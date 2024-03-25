@@ -30,9 +30,9 @@ pub trait NodeMethods {
 
     fn new_wz_file(path: &str, parent: Option<&Self::Node>) -> Self::Node;
     fn new_wz_img_file(path: &str, parent: Option<&Self::Node>) -> Self::Node;
-    fn new(object_type: WzObjectType, property_type: Option<WzPropertyType>, name: String, offset: usize, block_size: usize) -> Self::Node;
     fn new_empty_wz_directory(name: String, parent: Option<&Self::Node>) -> Self::Node;
     fn new_wz_directory(parent: &Self::Node, name: String, offset: usize, block_size: usize) -> Self::Node;
+    fn new_wz_image(parent: &Self::Node, name: String, offset: usize, block_size: usize) -> Self::Node;
     fn new_with_parent(parent: &Self::Node, object_type: WzObjectType, property_type: Option<WzPropertyType>, name: String, offset: usize, block_size: usize) -> Self::Node;
     fn new_sub_property(parent: &Self::Node, name: String, offset: usize, block_size: usize) -> Self::Node;
     fn new_wz_primitive_property(parent: &Self::Node, property_type: WzPropertyType, name: String) -> Self::Node;

@@ -1,4 +1,4 @@
-use std::sync::{Arc, RwLock, Weak};
+use std::sync::{Arc, RwLock, Weak, Mutex};
 use std::collections::HashMap;
 use std::fs::File;
 use std::path::Path;
@@ -21,7 +21,7 @@ pub struct WzNode {
     pub name: String,
     pub offset: usize,
     pub block_size: usize,
-    pub is_parsed: bool,
+    pub is_parsed: Option<Arc<Mutex<bool>>>,
     pub parent: Weak<RwLock<WzNode>>,
     pub children: HashMap<String, Arc<RwLock<WzNode>>>,
 
@@ -68,11 +68,11 @@ impl NodeMethods for WzNodeArc {
             offset: offset as usize,
             block_size,
             name,
-            is_parsed: false,
+            is_parsed: Some(Arc::new(Mutex::new(false))),
             parent,
             children: HashMap::new(),
             reader: Some(Arc::new(reader)),
-            wz_file_meta: Some(wz_file_meta),
+            wz_file_meta: Some(wz_file_meta)
         }))
     }
     fn new_wz_img_file(path: &str, parent: Option<&WzNodeArc>) -> WzNodeArc {
@@ -94,24 +94,10 @@ impl NodeMethods for WzNodeArc {
             offset: 0,
             block_size,
             name,
-            is_parsed: false,
+            is_parsed: Some(Arc::new(Mutex::new(false))),
             parent,
             children: HashMap::new(),
             reader: Some(Arc::new(reader)),
-            wz_file_meta: None,
-        }))
-    }
-    fn new(object_type: WzObjectType, property_type: Option<WzPropertyType>, name: String, offset: usize, block_size: usize) -> WzNodeArc {
-        Arc::new(RwLock::new(WzNode {
-            object_type,
-            property_type: property_type.unwrap_or(WzPropertyType::Null),
-            offset,
-            block_size,
-            name,
-            is_parsed: false,
-            parent: Weak::new(),
-            children: HashMap::new(),
-            reader: None,
             wz_file_meta: None,
         }))
     }
@@ -126,11 +112,11 @@ impl NodeMethods for WzNodeArc {
             offset: 0,
             block_size: 0,
             name,
-            is_parsed: true,
+            is_parsed: None,
             parent,
             children: HashMap::new(),
             reader: None,
-            wz_file_meta: None
+            wz_file_meta: None,
         }))
     }
     fn new_wz_directory(parent: &WzNodeArc, name: String, offset: usize, block_size: usize) -> WzNodeArc {
@@ -140,11 +126,25 @@ impl NodeMethods for WzNodeArc {
             offset,
             block_size,
             name,
-            is_parsed: false,
+            is_parsed: Some(Arc::new(Mutex::new(false))),
             parent: Arc::downgrade(parent),
             children: HashMap::new(),
             reader: parent.get_reader(),
-            wz_file_meta: parent.read().unwrap().wz_file_meta.clone()
+            wz_file_meta: parent.read().unwrap().wz_file_meta.clone(),
+        }))
+    }
+    fn new_wz_image(parent: &WzNodeArc, name: String, offset: usize, block_size: usize) -> WzNodeArc {
+        Arc::new(RwLock::new(WzNode {
+            object_type: WzObjectType::Image,
+            property_type: WzPropertyType::Null,
+            offset,
+            block_size,
+            name,
+            is_parsed: Some(Arc::new(Mutex::new(false))),
+            parent: Arc::downgrade(parent),
+            children: HashMap::new(),
+            reader: parent.get_reader(),
+            wz_file_meta: parent.read().unwrap().wz_file_meta.clone(),
         }))
     }
     fn new_with_parent(parent: &WzNodeArc, object_type: WzObjectType, property_type: Option<WzPropertyType>, name: String, offset: usize, block_size: usize) -> WzNodeArc {
@@ -154,11 +154,11 @@ impl NodeMethods for WzNodeArc {
             offset,
             block_size,
             name,
-            is_parsed: false,
+            is_parsed: None,
             parent: Arc::downgrade(parent),
             children: HashMap::new(),
             reader: parent.get_reader(),
-            wz_file_meta: None
+            wz_file_meta: None,
         }))
     }
     fn new_sub_property(parent: &WzNodeArc, name: String, offset: usize, block_size: usize) -> WzNodeArc {
@@ -168,11 +168,11 @@ impl NodeMethods for WzNodeArc {
             offset,
             block_size,
             name,
-            is_parsed: true,
+            is_parsed: None,
             parent: Arc::downgrade(parent),
             children: HashMap::new(),
             reader: parent.get_reader(),
-            wz_file_meta: None
+            wz_file_meta: None,
         }))
     }
     fn new_wz_primitive_property(parent: &WzNodeArc, property_type: WzPropertyType, name: String) -> WzNodeArc {
@@ -182,11 +182,11 @@ impl NodeMethods for WzNodeArc {
             offset: 0,
             block_size: 0,
             name,
-            is_parsed: true,
+            is_parsed: None,
             parent: Arc::downgrade(parent),
             children: HashMap::new(),
             reader: None,
-            wz_file_meta: None
+            wz_file_meta: None,
         }))
     }
 
@@ -357,8 +357,10 @@ impl NodeMethods for WzNodeArc {
     }
 
     fn update_parse_status(&self, status: bool) {
-        let mut node = self.write().unwrap();
-        node.is_parsed = status;
+        if let Some(is_parsed) = self.read().unwrap().is_parsed.clone() {
+            let mut is_parsed = is_parsed.lock().unwrap();
+            *is_parsed = status;
+        }
     }
     fn update_wz_file_meta(&self, wz_file_meta: WzFileMeta) {
         let mut node = self.write().unwrap();
@@ -404,14 +406,22 @@ impl NodeMethods for WzNodeArc {
         let node = self.write();
 
         if let Ok(mut node) = node {
-            if !node.is_parsed {
-                return Ok(());
-            }
             if node.object_type != WzObjectType::Image {
                 return Err(NodeParseError::from(WzImageParseError::NotImageObject));
             }
-            node.children.clear();
-            node.is_parsed = false;
+
+            let guard = node.is_parsed.clone();
+
+            if let Some(guard) = guard {
+                let mut guard = guard.lock().unwrap();
+                
+                if !*guard {
+                    return Ok(());
+                }
+
+                node.children.clear();
+                *guard = false;
+            }
 
             Ok(())
         } else {
@@ -422,8 +432,11 @@ impl NodeMethods for WzNodeArc {
         let obejct_type = {
             let node = self.read().unwrap();
 
-            if node.is_parsed {
-                return Ok(());
+            if let Some(guard) = node.is_parsed.clone() {
+                let guard = guard.lock().unwrap();
+                if *guard {
+                    return Ok(());
+                }
             }
 
             node.object_type
@@ -437,30 +450,56 @@ impl NodeMethods for WzNodeArc {
         }
     }
     fn parse_wz_image(&self) -> Result<(), NodeParseError> {
-        if let Err(e) = parse_wz_image(self) {
-            return Err(NodeParseError::from(e));
-        }
 
-        self.update_parse_status(true);
+        let guard = self.read().unwrap().is_parsed.clone();
+
+        if let Some(guard) = guard {
+            let mut guard = guard.lock().unwrap();
+            if *guard {
+                return Ok(());
+            }
+
+            if let Err(e) = parse_wz_image(self) {
+                return Err(NodeParseError::from(e));
+            }
+
+            *guard = true;
+        }
 
         Ok(())
     }
 
     fn parse_wz_directory(&self) -> Result<(), NodeParseError> {
-        if let Err(e) = parse_wz_directory(self) {
-            return Err(NodeParseError::from(e));
-        }
+        let guard = self.read().unwrap().is_parsed.clone();
+        if let Some(guard) = guard {
+            let mut guard = guard.lock().unwrap();
+            if *guard {
+                return Ok(());
+            }
 
-        self.update_parse_status(true);
+            if let Err(e) = parse_wz_directory(self) {
+                return Err(NodeParseError::from(e));
+            }
+
+            *guard = true;
+        }
 
         Ok(())
     }
     fn parse_wz_file(&self, patch_verions: Option<i32>) -> Result<(), NodeParseError> {
-        if let Err(e) = parse_wz_file(self, patch_verions) {
-            return Err(NodeParseError::from(e));
-        }
+        let guard = self.read().unwrap().is_parsed.clone();
+        if let Some(guard) = guard {
+            let mut guard = guard.lock().unwrap();
+            if *guard {
+                return Ok(());
+            }
 
-        self.update_parse_status(true);
+            if let Err(e) = parse_wz_file(self, patch_verions) {
+                return Err(NodeParseError::from(e));
+            }
+
+            *guard = true;
+        }
 
         Ok(())
     }
