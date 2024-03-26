@@ -55,7 +55,7 @@ pub trait NodeMethods {
 
     fn update_parse_status(&self, status: bool);
     fn update_wz_file_meta(&self, wz_file_meta: WzFileMeta);
-    fn update_wz_png_meta(&self, name: String, offset: usize, block_size: usize, property_type: WzPropertyType);
+    fn update_wz_png_meta(&self, offset: usize, block_size: usize, property_type: WzPropertyType);
 
     fn transfer_childs(&self, to: &Self::Node);
     fn add_node_child(&self, child: Self::Node);

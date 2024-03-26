@@ -71,11 +71,10 @@ pub fn parse_property_list<Node: NodeMethods<Node = Node> + Clone>(parent: &Node
             },
             8 => {
                 let str_meta = reader.read_wz_string_block_meta(origin_offset)?;
-
                 let node = Node::new_with_parent(
                     &parent,
                     WzObjectType::Property,
-                    Some(WzPropertyType::String(str_meta.clone())),
+                    Some(WzPropertyType::String(str_meta.string_type)),
                     name,
                     str_meta.offset,
                     str_meta.length as usize
@@ -143,7 +142,7 @@ pub fn parse_more<Node: NodeMethods<Node = Node> + Clone>(parent: &Node, reader:
                 parent,
                 WzObjectType::Property,
                 None,
-                String::new(),
+                property_name,
                 0,
                 0
             );
@@ -164,7 +163,7 @@ pub fn parse_more<Node: NodeMethods<Node = Node> + Clone>(parent: &Node, reader:
             let canvas_header = reader.read_u16().unwrap();
             let wz_png = WzPng::new(width as u32, height as u32, format1 as u32, format2 as u32, canvas_header as i32);
 
-            node.update_wz_png_meta(property_name, canvas_offset, canvas_slice_size as usize, WzPropertyType::PNG(wz_png));
+            node.update_wz_png_meta(canvas_offset, canvas_slice_size as usize, WzPropertyType::PNG(wz_png));
 
             parent.add_node_child(node);
         },
@@ -215,7 +214,7 @@ pub fn parse_more<Node: NodeMethods<Node = Node> + Clone>(parent: &Node, reader:
             let node = Node::new_with_parent(
                 parent,
                 WzObjectType::Property,
-                Some(WzPropertyType::UOL(str_meta.clone())),
+                Some(WzPropertyType::UOL(str_meta.string_type)),
                 property_name,
                 str_meta.offset,
                 str_meta.length as usize

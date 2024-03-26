@@ -212,11 +212,8 @@ pub trait Reader<'a> {
             }
         }
     }
-    fn resolve_wz_string_meta(&self, meta: &WzStringMeta) -> Result<String, scroll::Error> {
-        let offset = meta.offset;
-        let length = meta.length as usize;
-
-        match meta.string_type {
+    fn resolve_wz_string_meta(&self, meta_type: &WzStringType, offset: usize, length: usize) -> Result<String, scroll::Error> {
+        match meta_type {
             WzStringType::Empty => {
                 Ok(String::new())
             },

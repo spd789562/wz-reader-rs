@@ -18,13 +18,13 @@ pub enum WzPropertyType {
   Long(i64),
   Float(f32),
   Double(f64),
-  String(WzStringMeta),
+  String(WzStringType),
 
   SubProperty,
   Vector(Vector2D),
   Convex,
   Sound(WzSoundMeta),
-  UOL(WzStringMeta),
+  UOL(WzStringType),
   Lua,
 
   PNG(WzPng),

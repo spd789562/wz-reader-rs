@@ -285,7 +285,7 @@ impl NodeMethods for WzNodeArc {
         match &node.property_type {
             WzPropertyType::UOL(meta) => {
                 if let Some(reader) = &node.reader {
-                    let path = reader.resolve_wz_string_meta(meta).map_err(WzStringParseError::from).unwrap();
+                    let path = reader.resolve_wz_string_meta(meta, node.offset, node.block_size).map_err(WzStringParseError::from).unwrap();
                     self.resolve_relative_path(&format!("../{path}"), true)
                 } else {
                     panic!("WzReader not found in WzPropertyType::UOL")
@@ -377,9 +377,8 @@ impl NodeMethods for WzNodeArc {
             node.wz_file_meta = Some(wz_file_meta);
         }
     }
-    fn update_wz_png_meta(&self, name: String, offset: usize, block_size: usize, property_type: WzPropertyType) {
+    fn update_wz_png_meta(&self, offset: usize, block_size: usize, property_type: WzPropertyType) {
         let mut node = self.write().unwrap();
-        node.name = name;
         node.property_type = property_type;
         node.offset = offset;
         node.block_size = block_size;
@@ -528,7 +527,7 @@ impl NodeMethods for WzNodeArc {
         match &node.property_type {
             WzPropertyType::String(meta) | WzPropertyType::UOL(meta) => {
                 if let Some(reader) = &node.reader {
-                    reader.resolve_wz_string_meta(meta).map_err(WzStringParseError::from)
+                    reader.resolve_wz_string_meta(meta, node.offset, node.block_size).map_err(WzStringParseError::from)
                 } else {
                     panic!("WzReader not found in WzPropertyType::String")
                 }
