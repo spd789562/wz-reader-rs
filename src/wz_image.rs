@@ -43,8 +43,6 @@ pub fn parse_wz_image<R: Deref<Target = WzReader> + Clone, Node: NodeMethods<Nod
 
     let header_byte = reader.read_u8()?;
 
-    println!("parsing wz image: {}", wz_node.get_name());
-
     match header_byte {
         0x1 => {
             if wz_node.get_name().ends_with(".lua") {

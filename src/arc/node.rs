@@ -213,31 +213,15 @@ impl NodeMethods for WzNodeArc {
         }
     }
     fn at_path(&self, path: &str, force_parse: bool) -> Result<WzNodeArc, NodeParseError> {
-        let mut current_node = self.clone();
-        for name in path.split('/') {
+        path.split('/').try_fold(self.clone(), |node, name| {
             if force_parse {
-                current_node.parse().unwrap();
+                node.parse()?;
             }
-            current_node = {
-                match current_node.at(name) {
-                    Ok(node) => node,
-                    _ => return Err(NodeParseError::NodeNotFound)
-                }
-            };
-        }
-        Ok(current_node)
+            node.at(name)
+        })
     }
     fn at_path_unchecked(&self, path: &str) -> Result<WzNodeArc, NodeParseError> {
-        let mut current_node = self.clone();
-        for name in path.split('/') {
-            current_node = {
-                match current_node.at(name) {
-                    Ok(node) => node,
-                    _ => return Err(NodeParseError::NodeNotFound)
-                }
-            };
-        }
-        Ok(current_node)
+        path.split('/').try_fold(self.clone(), |node, name| node.at(name))
     }
     fn get_parent_wz_image(&self) -> Result<WzNodeArc, NodeParseError> {
         let mut current_node = self.clone();
@@ -331,29 +315,16 @@ impl NodeMethods for WzNodeArc {
         path
     }
     fn resolve_relative_path(&self, path: &str, force_parse: bool) -> Result<WzNodeArc, NodeParseError> {
-        let mut current_node = self.clone();
-
-        
-        for name in path.split('/') {
-            if name == ".." {
-                current_node = {
-                    let node = current_node.read().unwrap();
-                    node.parent.upgrade().unwrap()
-                };
-            } else {
-                if force_parse {
-                    current_node.parse().unwrap();
+        path.split('/')
+            .try_fold(self.clone(), |node, name| {
+                if name == ".." {
+                    return node.read().unwrap().parent.upgrade().ok_or(NodeParseError::NodeNotFound);
                 }
-
-                current_node = {
-                    match current_node.at(name) {
-                        Ok(node) => node,
-                        _ => return Err(NodeParseError::NodeNotFound)
-                    }
-                };
-            }
-        }
-        Ok(current_node)
+                if force_parse {
+                    node.parse()?;
+                }
+                node.at(name)
+            })
     }
 
     fn update_parse_status(&self, status: bool) {

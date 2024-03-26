@@ -60,7 +60,8 @@ pub fn parse_property_list<Node: NodeMethods<Node = Node> + Clone>(parent: &Node
                         parent.add_node_child(node);
                     },
                     _ => {
-
+                        let node = Node::new_wz_primitive_property(&parent, WzPropertyType::Float(0_f32), name);
+                        parent.add_node_child(node);
                     }
                 }
             },
