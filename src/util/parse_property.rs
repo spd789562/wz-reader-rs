@@ -137,7 +137,7 @@ pub fn parse_more<Node: NodeMethods<Node = Node> + Clone>(parent: &Node, reader:
         },
         "Canvas" => {
             reader.skip(1);
-            let has_child = reader.read_u8().unwrap() == 1;
+            let has_child = reader.read_u8()? == 1;
 
             let node = Node::new_with_parent(
                 parent,
@@ -156,12 +156,12 @@ pub fn parse_more<Node: NodeMethods<Node = Node> + Clone>(parent: &Node, reader:
             let width = reader.read_wz_int()?;
             let height = reader.read_wz_int()?;
             let format1 = reader.read_wz_int()?;
-            let format2 = reader.read_i8().unwrap();
+            let format2 = reader.read_i8()?;
             reader.skip(4);
-            let canvas_slice_size = reader.read_i32().unwrap() - 1;
+            let canvas_slice_size = reader.read_i32()? - 1;
             reader.skip(1);
             let canvas_offset = reader.get_pos();
-            let canvas_header = reader.read_u16().unwrap();
+            let canvas_header = reader.read_u16()?;
             let wz_png = WzPng::new(width as u32, height as u32, format1 as u32, format2 as u32, canvas_header as i32);
 
             node.update_wz_png_meta(canvas_offset, canvas_slice_size as usize, WzPropertyType::PNG(wz_png));

@@ -470,22 +470,20 @@ impl NodeMethods for WzNodeRc {
             WzPropertyType::PNG(png) => {
                 if let Ok(inlink) = self.at("_inlink") {
                     if let Ok(parent_node) = self.get_parent_wz_image() {
-                        let path = inlink.get_string().unwrap();
+                        let path = inlink.get_string().map_err(|_| WzPngParseError::LinkError)?;
                         if let Ok(target) = parent_node.at_path(&path, false) {
                             return target.get_image();
                         }
-                        return Err(WzPngParseError::LinkError);
                     }
                     return Err(WzPngParseError::LinkError);
                 }
                 if let Ok(outlink) = self.at("_outlink") {
                     /* outlink always resolve from base */
                     if let Ok(base_node) = self.get_base_wz_file() {
-                        let path = outlink.get_string().unwrap();
+                        let path = outlink.get_string().map_err(|_| WzPngParseError::LinkError)?;
                         if let Ok(target) = base_node.at_path(&path, true) {
                             return target.get_image();
                         }
-                        return Err(WzPngParseError::LinkError);
                     }
                     return Err(WzPngParseError::LinkError);
                 }

@@ -160,7 +160,7 @@ fn check_64bit_client(wz_reader: &WzSliceReader) -> (bool, u16) {
             return (false, 0);
         }
         if encrypt_version == 0x80 {
-            let prop_count = wz_reader.read_i32_at(wz_reader.header.fstart).unwrap();
+            let prop_count = wz_reader.read_i32_at(wz_reader.header.fstart + 2).unwrap();
             if prop_count > 0 && (prop_count & 0xff) == 0 && prop_count <= 0xffff {
                 return (false, 0);
             }
