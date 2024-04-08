@@ -1,6 +1,5 @@
-use std::ops::Deref;
-use crate::{ Reader, WzObjectType, WzReader };
-use crate::node::NodeMethods;
+use std::sync::Arc;
+use crate::{ Reader, WzImage, WzNodeLink, WzNodeLinkArc, WzObjectType, WzReader };
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -38,101 +37,142 @@ pub fn get_wz_directory_type_from_byte(byte: u8) -> WzDirectoryType {
     }
 }
 
-pub fn parse_wz_directory<R: Deref<Target = WzReader>, Node: NodeMethods<Node = Node, Reader = R> + Clone>(wz_node: &Node, ) -> Result<(), WzDirectoryParseError> {
-    let origin_reader = if let Some(reader) = wz_node.get_reader() {
-        reader
-    } else {
-        panic!("Reader not found in wz_directory node")
-    };
+#[derive(Debug, Clone)]
+pub struct WzDirectory {
+    pub reader: Arc<WzReader>,
+    pub offset: usize,
+    pub block_size: usize,
+    pub hash: usize,
+    pub is_parsed: bool
+}
 
-    let hash = if let Some(h) = wz_node.get_wz_file_hash() {
-        h
-    } else {
-        panic!("WzFile should hold file hash")
-    };
-
-    let reader = origin_reader.create_slice_reader_with_hash(hash);
-    
-    let node_offset = wz_node.get_offset();
-    
-    reader.seek(node_offset);
-
-
-    let entry_count = reader.read_wz_int()?;
-
-    if !(0..=1000000).contains(&entry_count) {
-        return Err(WzDirectoryParseError::InvalidEntryCount);
+impl WzDirectory {
+    pub fn new(offset: usize, block_size: usize, reader: &Arc<WzReader>, is_parsed: bool) -> Self {
+        Self {
+            reader: reader.clone(),
+            offset,
+            block_size,
+            hash: 0,
+            is_parsed
+        }
+    }
+    pub fn with_hash(mut self, hash: usize) -> Self {
+        self.hash = hash;
+        self
     }
 
-    let mut dir_nodes: Vec<Node> = Vec::new();
+    pub fn resolve_children(&self, parent: &WzNodeLinkArc) -> Result<Vec<(String, WzNodeLinkArc)>, WzDirectoryParseError> {
+        let reader = self.reader.create_slice_reader_with_hash(self.hash);
 
-    for _ in 0..entry_count {
-        let dir_byte = reader.read_u8()?;
-        let mut dir_type = get_wz_directory_type_from_byte(dir_byte);
+        reader.seek(self.offset);
 
-        let fname: String;
+        let entry_count = reader.read_wz_int()?;
 
-        match dir_type {
-            WzDirectoryType::UnknownType => {
-                /* unknown, just skip this chunk */
-                reader.skip(4 + 4 + 2);
-                continue;
+        if !(0..=1000000).contains(&entry_count) {
+            return Err(WzDirectoryParseError::InvalidEntryCount);
+        }
+
+        let mut nodes: Vec<(String, WzNodeLinkArc)> = Vec::new();
+
+        for _ in 0..entry_count {
+            let dir_byte = reader.read_u8()?;
+            let mut dir_type = get_wz_directory_type_from_byte(dir_byte);
+    
+            let fname: String;
+    
+            match dir_type {
+                WzDirectoryType::UnknownType => {
+                    /* unknown, just skip this chunk */
+                    reader.skip(4 + 4 + 2);
+                    continue;
+                }
+                WzDirectoryType::RetrieveStringFromOffset => {
+                    let str_offset = reader.read_i32()?;
+                    
+                    let pos = reader.get_pos();
+    
+                    let offset = reader.header.fstart + str_offset as usize;
+    
+                    reader.seek(offset);
+    
+                    dir_type = get_wz_directory_type_from_byte(reader.read_u8().unwrap());
+                    fname = reader.read_wz_string()?;
+    
+                    reader.seek(pos);
+                }
+                WzDirectoryType::WzDirectory |
+                WzDirectoryType::WzImage => {
+                    fname = reader.read_wz_string()?;
+                }
+                WzDirectoryType::NewUnknownType => {
+                    println!("NewUnknownType: {}", dir_byte);
+                    return Err(WzDirectoryParseError::UnknownWzDirectoryType(dir_byte, reader.get_pos()))
+                }
             }
-            WzDirectoryType::RetrieveStringFromOffset => {
-                let str_offset = reader.read_i32()?;
+            
+            let fsize = reader.read_wz_int()?;
+            let _checksum = reader.read_wz_int()?;
+            let offset = reader.read_wz_offset(None)?;
+            let buf_start = offset;
+            
+            let buf_end = buf_start + fsize as usize;
+    
+            if !reader.is_valid_pos(buf_end) {
+                return Err(WzDirectoryParseError::InvalidWzVersion);
+            }
+    
+            match dir_type {
+                WzDirectoryType::WzDirectory => {
+                    let node = WzDirectory::new(
+                            offset,
+                            fsize as usize,
+                            &self.reader,
+                            false
+                        )
+                        .with_hash(self.hash);
+
+                    let obj_node = WzNodeLink::new(
+                        fname.clone(),
+                        WzObjectType::Directory(Box::new(node)),
+                        Some(parent)
+                    );
+
+                    nodes.push((fname, obj_node.into_lock()));
+                }
+                WzDirectoryType::WzImage => {
+                    let node = WzImage::new(
+                        fname.clone(),
+                        offset,
+                        fsize as usize,
+                        &self.reader
+                    );
+
+                    let obj_node = WzNodeLink::new(
+                        fname.clone(),
+                        WzObjectType::Image(Box::new(node)),
+                        Some(parent)
+                    );
+
+                    nodes.push((fname, obj_node.into_lock()));
+                }
+                _ => {
+                    // should never be here
+                }
+            }
+    
+        }
+    
+        for (_, node) in nodes.iter() {
+            let mut write = node.write().unwrap();
+            if let WzObjectType::Directory(dir) = &mut write.object_type {
+                let children = dir.resolve_children(node)?;
                 
-                let pos = reader.get_pos();
-
-                let offset = reader.header.fstart + str_offset as usize;
-
-                reader.seek(offset);
-
-                dir_type = get_wz_directory_type_from_byte(reader.read_u8().unwrap());
-                fname = reader.read_wz_string()?;
-
-                reader.seek(pos);
-            }
-            WzDirectoryType::WzDirectory |
-            WzDirectoryType::WzImage => {
-                fname = reader.read_wz_string()?;
-            }
-            WzDirectoryType::NewUnknownType => {
-                println!("NewUnknownType: {}", dir_byte);
-                return Err(WzDirectoryParseError::UnknownWzDirectoryType(dir_byte, reader.get_pos()))
-            }
-        }
-        
-        let fsize = reader.read_wz_int()?;
-        let _checksum = reader.read_wz_int()?;
-        let offset = reader.read_wz_offset(None)?;
-        let buf_start = offset;
-        
-        let buf_end = buf_start + fsize as usize;
-
-        if !reader.is_valid_pos(buf_end) {
-            return Err(WzDirectoryParseError::InvalidWzVersion);
-        }
-
-        match dir_type {
-            WzDirectoryType::WzDirectory => {
-                let node = Node::new_wz_directory(wz_node, fname.clone(), offset, fsize as usize);
-                dir_nodes.push(node.clone());
-                wz_node.add_node_child(node);
-            }
-            WzDirectoryType::WzImage => {
-                let node = Node::new_wz_image(wz_node, fname.clone(), offset, fsize as usize);
-                wz_node.add_node_child(node);
-            }
-            _ => {
-                // should never be here
+                for (name, child) in children {
+                    write.children.insert(name, child);
+                }
             }
         }
 
+        Ok(nodes)
     }
-
-    for dir_node in dir_nodes {
-        parse_wz_directory(&dir_node)?;
-    }
-
-    Ok(())
 }

@@ -1,4 +1,7 @@
+use std::sync::Arc;
+use crate::{WzReader, Reader};
 use thiserror::Error;
+
 
 #[derive(Debug, Error)]
 pub enum WzStringParseError {
@@ -18,6 +21,16 @@ pub enum WzStringType {
 
 #[derive(Debug, Clone)]
 pub struct WzStringMeta {
+    /// string start offset
+    pub offset: usize,
+    /// string length
+    pub length: u32,
+    pub string_type: WzStringType,
+}
+
+#[derive(Debug, Clone)]
+pub struct WzString {
+    reader: Arc<WzReader>,
     /// string start offset
     pub offset: usize,
     /// string length
@@ -53,5 +66,19 @@ impl WzStringMeta {
             length,
             string_type: WzStringType::Unicode,
         }
+    }
+}
+
+impl WzString {
+    pub fn from_meta(meta: WzStringMeta, reader: &Arc<WzReader>) -> Self {
+        Self {
+            reader: Arc::clone(reader),
+            offset: meta.offset,
+            length: meta.length,
+            string_type: meta.string_type,
+        }
+    }
+    pub fn get_string(&self) -> Result<String, WzStringParseError> {
+        self.reader.resolve_wz_string_meta(&self.string_type, self.offset, self.length as usize).map_err(WzStringParseError::from)
     }
 }

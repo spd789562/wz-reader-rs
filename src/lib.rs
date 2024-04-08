@@ -6,8 +6,6 @@ mod wz_image;
 mod file;
 pub mod property;
 mod node;
-pub mod arc;
-pub mod rc;
 pub mod util;
 
 pub use reader::*;

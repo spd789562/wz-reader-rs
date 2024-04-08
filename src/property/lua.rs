@@ -1,4 +1,23 @@
+use std::sync::Arc;
+use crate::WzReader;
 use thiserror::Error;
+
+#[derive(Debug, Clone)]
+pub struct WzLua {
+    reader: Arc<WzReader>,
+    pub offset: usize,
+    pub length: usize,
+}
+
+impl WzLua {
+    pub fn new(reader: &Arc<WzReader>, offset: usize, length: usize) -> Self {
+        Self {
+            reader: Arc::clone(reader),
+            offset,
+            length,
+        }
+    }
+}
 
 #[derive(Debug, Error)]
 pub enum WzLuaParseError {

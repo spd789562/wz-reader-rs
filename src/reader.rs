@@ -344,8 +344,8 @@ impl WzReader {
     pub fn get_ref_slice(&self) -> &[u8] {
         &self.map
     }
-    pub fn get_slice(&self, range: (usize, usize)) -> &[u8] {
-        &self.map[range.0..range.1]
+    pub fn get_slice(&self, range: std::ops::Range<usize>) -> &[u8] {
+        &self.map[range]
     }
     pub fn get_wz_fstart(&self) -> Result<u32, scroll::Error> {
         WzHeader::get_wz_fstart(&self.map)
@@ -384,8 +384,8 @@ impl<'a> WzSliceReader<'a> {
             hash: hash.unwrap_or(0)
         }
     }
-    pub fn get_slice(&self, range: (usize, usize)) -> &[u8] {
-        &self.buf[range.0..range.1]
+    pub fn get_slice(&self, range: std::ops::Range<usize>) -> &[u8] {
+        &self.buf[range]
     }
     pub fn get_slice_from_current(&self, len: usize) -> &[u8] {
         &self.buf[self.get_pos()..self.get_pos() + len]
