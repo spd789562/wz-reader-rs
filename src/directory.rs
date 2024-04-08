@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use crate::{ Reader, WzImage, WzNodeLink, WzNodeLinkArc, WzObjectType, WzReader };
+use crate::{ Reader, WzImage, WzNode, WzNodeArc, WzObjectType, WzReader };
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -61,7 +61,7 @@ impl WzDirectory {
         self
     }
 
-    pub fn resolve_children(&self, parent: &WzNodeLinkArc) -> Result<Vec<(String, WzNodeLinkArc)>, WzDirectoryParseError> {
+    pub fn resolve_children(&self, parent: &WzNodeArc) -> Result<Vec<(String, WzNodeArc)>, WzDirectoryParseError> {
         let reader = self.reader.create_slice_reader_with_hash(self.hash);
 
         reader.seek(self.offset);
@@ -72,7 +72,7 @@ impl WzDirectory {
             return Err(WzDirectoryParseError::InvalidEntryCount);
         }
 
-        let mut nodes: Vec<(String, WzNodeLinkArc)> = Vec::new();
+        let mut nodes: Vec<(String, WzNodeArc)> = Vec::new();
 
         for _ in 0..entry_count {
             let dir_byte = reader.read_u8()?;
@@ -131,7 +131,7 @@ impl WzDirectory {
                         )
                         .with_hash(self.hash);
 
-                    let obj_node = WzNodeLink::new(
+                    let obj_node = WzNode::new(
                         fname.clone(),
                         WzObjectType::Directory(Box::new(node)),
                         Some(parent)
@@ -147,7 +147,7 @@ impl WzDirectory {
                         &self.reader
                     );
 
-                    let obj_node = WzNodeLink::new(
+                    let obj_node = WzNode::new(
                         fname.clone(),
                         WzObjectType::Image(Box::new(node)),
                         Some(parent)

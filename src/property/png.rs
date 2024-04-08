@@ -3,7 +3,7 @@ use flate2::{Decompress, FlushDecompress};
 use image::{DynamicImage, ImageError, ImageBuffer, Rgb, Rgba};
 use thiserror::Error;
 use rayon::prelude::*;
-use crate::{reader, WzNodeLinkArc, WzObjectType, property::WzSubProperty};
+use crate::{reader, WzNodeArc, WzObjectType, property::WzSubProperty};
 use crate::util::color::{SimpleColor, SimpleColorAlpha};
 
 #[derive(Debug, Error)]
@@ -33,7 +33,7 @@ pub enum WzPngParseError {
 type ImageBufferRgbaChunk = ImageBuffer<Rgba<u8>, Vec<u8>>;
 type ImageBufferRgbChunk = ImageBuffer<Rgb<u8>, Vec<u8>>;
 
-pub fn get_image(node: &WzNodeLinkArc) -> Result<DynamicImage, WzPngParseError> {
+pub fn get_image(node: &WzNodeArc) -> Result<DynamicImage, WzPngParseError> {
     let node_read = node.read().unwrap();
     match &node_read.object_type {
         WzObjectType::Property(WzSubProperty::PNG(png)) => {

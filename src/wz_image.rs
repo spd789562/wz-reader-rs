@@ -1,6 +1,6 @@
 use std::ops::Deref;
 use std::sync::Arc;
-use crate::{ property::{WzLua, WzValue}, util, Reader, WzNodeLink, WzNodeLinkArc, WzObjectType, WzReader };
+use crate::{ property::{WzLua, WzValue}, util, Reader, WzNode, WzNodeArc, WzObjectType, WzReader };
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -43,14 +43,14 @@ impl WzImage {
         }
     }
 
-    pub fn resolve_children(&self, parent: &WzNodeLinkArc) -> Result<Vec<(String, WzNodeLinkArc)>, WzImageParseError> {
+    pub fn resolve_children(&self, parent: &WzNodeArc) -> Result<Vec<(String, WzNodeArc)>, WzImageParseError> {
         let reader = self.reader.create_slice_reader_without_hash();
 
         reader.seek(self.offset);
 
         let header_byte = reader.read_u8()?;
 
-        let mut childrens: Vec<(String, WzNodeLinkArc)> = Vec::new();
+        let mut childrens: Vec<(String, WzNodeArc)> = Vec::new();
 
         match header_byte {
             0x1 => {
@@ -66,7 +66,7 @@ impl WzImage {
                         len as usize
                     );
 
-                    let lua_node = WzNodeLink::new(
+                    let lua_node = WzNode::new(
                         name.clone(), 
                         WzObjectType::Value(WzValue::Lua(wz_lua)),
                         Some(parent)

@@ -1,10 +1,10 @@
 
-use wz_reader::{WzNodeLink};
+use wz_reader::{WzNode};
 use wz_reader::property::{get_image};
 // use wz_reader::util::{resolve_base, walk_node_arc};
 
 fn main() {
-    let node = WzNodeLink::from_wz_file(r"D:\MapleStoryV257\MapleStoryV257\Data\Etc\Etc_000.wz", None).unwrap().into_lock();
+    let node = WzNode::from_wz_file(r"D:\MapleStoryV257\MapleStoryV257\Data\Etc\Etc_000.wz", None).unwrap().into_lock();
 
     {
         node.write().unwrap().parse(&node).unwrap();

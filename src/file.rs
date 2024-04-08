@@ -1,7 +1,7 @@
 use std::fs::File;
 use std::sync::Arc;
 use memmap2::Mmap;
-use crate::{Reader, WzDirectory, WzNodeLinkArc, WzNodeLinkArcVec, WzObjectType, WzReader, WzSliceReader};
+use crate::{Reader, WzDirectory, WzNodeArc, WzNodeArcVec, WzObjectType, WzReader, WzSliceReader};
 
 use thiserror::Error;
 
@@ -63,7 +63,7 @@ impl WzFile {
             wz_file_meta
         })
     }
-    pub fn parse(&mut self, parent: &WzNodeLinkArc, patch_version: Option<i32>) -> Result<WzNodeLinkArcVec, WzFileParseError> {
+    pub fn parse(&mut self, parent: &WzNodeArc, patch_version: Option<i32>) -> Result<WzNodeArcVec, WzFileParseError> {
         let reader = self.reader.clone();
 
         let mut wz_file_meta = WzFileMeta {
@@ -123,11 +123,11 @@ impl WzFile {
 
     pub fn try_decode_with_wz_version_number(
         &self,
-        parent: &WzNodeLinkArc,
+        parent: &WzNodeArc,
         reader: &WzSliceReader,
         meta: &WzFileMeta,
         use_maplestory_patch_version: i32
-    ) -> Result<WzNodeLinkArcVec, WzFileParseError> {
+    ) -> Result<WzNodeArcVec, WzFileParseError> {
         if meta.hash == 0 {
             return Err(WzFileParseError::ErrorGameVerHash);
         }

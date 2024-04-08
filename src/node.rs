@@ -24,18 +24,18 @@ pub enum NodeParseError {
 }
 
 #[derive(Debug)]
-pub struct WzNodeLink {
+pub struct WzNode {
     pub name: String,
     pub object_type: WzObjectType,
-    pub parent: Weak<RwLock<WzNodeLink>>,
-    pub children: HashMap<String, Arc<RwLock<WzNodeLink>>>,
+    pub parent: Weak<RwLock<WzNode>>,
+    pub children: HashMap<String, Arc<RwLock<WzNode>>>,
 }
 
-pub type WzNodeLinkArc = Arc<RwLock<WzNodeLink>>;
-pub type WzNodeLinkArcVec = Vec<(String, WzNodeLinkArc)>;
+pub type WzNodeArc = Arc<RwLock<WzNode>>;
+pub type WzNodeArcVec = Vec<(String, WzNodeArc)>;
 
-impl WzNodeLink {
-    pub fn new(name: String, object_type: WzObjectType, parent: Option<&WzNodeLinkArc>) -> Self {
+impl WzNode {
+    pub fn new(name: String, object_type: WzObjectType, parent: Option<&WzNodeArc>) -> Self {
         Self {
             name,
             object_type,
@@ -43,20 +43,20 @@ impl WzNodeLink {
             children: HashMap::new(),
         }
     }
-    pub fn from_wz_file(path: &str, parent: Option<&WzNodeLinkArc>) -> Result<Self, NodeParseError> {
+    pub fn from_wz_file(path: &str, parent: Option<&WzNodeArc>) -> Result<Self, NodeParseError> {
         let name = Path::new(path).file_stem().unwrap().to_str().unwrap().to_string();
         let wz_file = WzFile::from_file(path)?;
-        return Ok(WzNodeLink::new(
+        return Ok(WzNode::new(
             name, 
             WzObjectType::File(Box::new(wz_file)), 
             parent
         ));
     }
-    pub fn into_lock(self) -> WzNodeLinkArc {
+    pub fn into_lock(self) -> WzNodeArc {
         Arc::new(RwLock::new(self))
     }
-    pub fn parse(&mut self, parent: &WzNodeLinkArc) -> Result<(), NodeParseError> {
-        let mut childs: WzNodeLinkArcVec = vec![];
+    pub fn parse(&mut self, parent: &WzNodeArc) -> Result<(), NodeParseError> {
+        let mut childs: WzNodeArcVec = vec![];
 
         match self.object_type {
             WzObjectType::Directory(ref mut directory) => {
@@ -77,17 +77,17 @@ impl WzNodeLink {
 
         Ok(())
     }
-    pub fn at(&self, name: &str) -> Option<WzNodeLinkArc> {
+    pub fn at(&self, name: &str) -> Option<WzNodeArc> {
         self.children.get(name).cloned()
     }
-    pub fn at_relative(&self, path: &str) -> Option<WzNodeLinkArc> {
+    pub fn at_relative(&self, path: &str) -> Option<WzNodeArc> {
         if path == ".." {
             self.parent.upgrade()
         } else {
             self.at(path)
         }
     }
-    pub fn at_path(&self, path: &str) -> Option<WzNodeLinkArc> {
+    pub fn at_path(&self, path: &str) -> Option<WzNodeArc> {
         let mut pathes = path.split("/");
         let first = self.at(pathes.next().unwrap());
         if let Some(first) = first {
@@ -96,7 +96,7 @@ impl WzNodeLink {
             None
         }
     }
-    pub fn at_path_parsed(&mut self, path: &str) -> Result<WzNodeLinkArc, NodeParseError> {
+    pub fn at_path_parsed(&mut self, path: &str) -> Result<WzNodeArc, NodeParseError> {
         let mut pathes = path.split("/");
         
         let first = self.at(pathes.next().unwrap());
@@ -110,7 +110,7 @@ impl WzNodeLink {
             Err(NodeParseError::NodeNotFound)
         }
     }
-    pub fn at_path_relative(&self, path: &str) -> Option<WzNodeLinkArc> {
+    pub fn at_path_relative(&self, path: &str) -> Option<WzNodeArc> {
         let mut pathes = path.split("/");
         let first = self.at_relative(pathes.next().unwrap());
         if let Some(first) = first {
@@ -119,8 +119,8 @@ impl WzNodeLink {
             None
         }
     }
-    pub fn filter_parent<F>(&self, cb: F) -> Option<WzNodeLinkArc> 
-        where F: Fn(&WzNodeLink) -> bool
+    pub fn filter_parent<F>(&self, cb: F) -> Option<WzNodeArc> 
+        where F: Fn(&WzNode) -> bool
     {
         let mut parent = self.parent.upgrade();
         loop {
@@ -136,14 +136,14 @@ impl WzNodeLink {
             }
         }
     }
-    pub fn get_parent_wz_image(&self) -> Option<WzNodeLinkArc> {
+    pub fn get_parent_wz_image(&self) -> Option<WzNodeArc> {
         self.filter_parent(|node| matches!(node.object_type, WzObjectType::Image(_)))
     }
-    pub fn get_base_wz_file(&self) -> Option<WzNodeLinkArc> {
+    pub fn get_base_wz_file(&self) -> Option<WzNodeArc> {
         self.filter_parent(|node| matches!(node.object_type, WzObjectType::File(_)) && node.name.as_str() == "Base")
     }
 
-    pub fn resolve_inlink(&self, node: &WzNodeLinkArc) -> Option<WzNodeLinkArc> {
+    pub fn resolve_inlink(&self, node: &WzNodeArc) -> Option<WzNodeArc> {
         let path = match &node.read().unwrap().object_type {
             WzObjectType::Value(WzValue::String(meta)) => {
                 if let Ok(path) = meta.get_string() {
@@ -163,7 +163,7 @@ impl WzNodeLink {
         parent_wz_image.at_path(&path)
     }
 
-    pub fn resolve_outlink(&self, node: &WzNodeLinkArc, force_parse: bool) -> Option<WzNodeLinkArc> {
+    pub fn resolve_outlink(&self, node: &WzNodeArc, force_parse: bool) -> Option<WzNodeArc> {
         let path = match &node.read().unwrap().object_type {
             WzObjectType::Value(WzValue::String(meta)) => {
                 if let Ok(path) = meta.get_string() {
@@ -187,7 +187,7 @@ impl WzNodeLink {
         }
     }
 
-    pub fn transfer_childs(&mut self, to: &WzNodeLinkArc) {
+    pub fn transfer_childs(&mut self, to: &WzNodeArc) {
         let mut write = to.write().unwrap();
         for (name, child) in self.children.drain() {
             write.children.insert(name, child);
