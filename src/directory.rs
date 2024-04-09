@@ -120,7 +120,7 @@ impl WzDirectory {
             if !reader.is_valid_pos(buf_end) {
                 return Err(WzDirectoryParseError::InvalidWzVersion);
             }
-    
+
             match dir_type {
                 WzDirectoryType::WzDirectory => {
                     let node = WzDirectory::new(

@@ -34,6 +34,12 @@ pub struct WzNode {
 pub type WzNodeArc = Arc<RwLock<WzNode>>;
 pub type WzNodeArcVec = Vec<(String, WzNodeArc)>;
 
+impl From<WzNode> for WzNodeArc {
+    fn from(node: WzNode) -> Self {
+        node.into_lock()
+    }
+}
+
 impl WzNode {
     pub fn new(name: String, object_type: WzObjectType, parent: Option<&WzNodeArc>) -> Self {
         Self {
@@ -56,16 +62,25 @@ impl WzNode {
         Arc::new(RwLock::new(self))
     }
     pub fn parse(&mut self, parent: &WzNodeArc) -> Result<(), NodeParseError> {
-        let mut childs: WzNodeArcVec = vec![];
+        let childs: WzNodeArcVec;
 
         match self.object_type {
             WzObjectType::Directory(ref mut directory) => {
+                if directory.is_parsed {
+                    return Ok(());
+                }
                 childs = directory.resolve_children(parent)?;
             },
             WzObjectType::File(ref mut file) => {
+                if file.is_parsed {
+                    return Ok(());
+                }
                 childs = file.parse(parent, None)?;
             },
             WzObjectType::Image(ref mut image) => {
+                if image.is_parsed {
+                    return Ok(());
+                }
                 childs = image.resolve_children(parent)?;
             },
             _ => return Ok(()),
@@ -77,6 +92,22 @@ impl WzNode {
 
         Ok(())
     }
+
+    pub fn get_full_path(&self) -> String {
+        let mut path = self.name.clone();
+        let mut parent = self.parent.upgrade();
+        loop {
+            if let Some(parent_inner) = parent {
+                let read = parent_inner.read().unwrap();
+                path = format!("{}/{}", read.name, path);
+                parent = read.parent.upgrade();
+            } else {
+                break;
+            }
+        }
+        path
+    }
+
     pub fn at(&self, name: &str) -> Option<WzNodeArc> {
         self.children.get(name).cloned()
     }

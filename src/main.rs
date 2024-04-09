@@ -1,14 +1,12 @@
 
 use wz_reader::{WzNode};
 use wz_reader::property::{get_image};
-// use wz_reader::util::{resolve_base, walk_node_arc};
+use wz_reader::util::{resolve_base, walk_node};
 
 fn main() {
-    let node = WzNode::from_wz_file(r"D:\MapleStoryV257\MapleStoryV257\Data\Etc\Etc_000.wz", None).unwrap().into_lock();
+    let node = resolve_base(r"D:\MapleStoryV257\MapleStoryV257\Data\Base\Base.wz").unwrap();
 
-    {
-        node.write().unwrap().parse(&node).unwrap();
-    }
+    let node = node.read().unwrap().at("Etc").unwrap();
 
     let other_node = node.read().unwrap().at("BossDunkel.img").unwrap();
 
@@ -26,13 +24,11 @@ fn main() {
 
         let child = other_node.read().unwrap().at_path("AreaWarning/7/areaWarning/2");
 
-
-        // println!("child {:?}", child);
         if let Some(child) = child {
-            // let image = get_image(&child).unwrap();
-            // image.save("test.png").unwrap();
+            println!("node current path: {}", child.read().unwrap().get_full_path());
+            let image = get_image(&child).unwrap();
+            image.save("test.png").unwrap();
         }
-        // dbg!(&child);
         
         println!("walk time: {:?}", before.elapsed());
     }
