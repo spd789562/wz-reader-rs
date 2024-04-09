@@ -1,8 +1,9 @@
-use crate::reader::read_i32_at;
 use std::ops::Range;
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
+use std::sync::Arc;
+use crate::reader::{read_i32_at, WzReader};
 
 use thiserror::Error;
 
@@ -29,7 +30,8 @@ pub enum WzSoundType {
 }
 
 #[derive(Debug, Clone)]
-pub struct WzSoundMeta {
+pub struct WzSound {
+    reader: Arc<WzReader>,
     pub offset: usize,
     pub length: u32,
     pub header_offset: usize,
@@ -72,9 +74,10 @@ pub fn get_sound_type_from_header(header: &[u8], file_size: u32, duration: u32) 
     }
 }
 
-impl WzSoundMeta {
-    pub fn new(offset: usize, length: u32, header_offset: usize, header_size: usize, duration: u32, sound_type: WzSoundType) -> Self {
+impl WzSound {
+    pub fn new(reader: &Arc<WzReader>, offset: usize, length: u32, header_offset: usize, header_size: usize, duration: u32, sound_type: WzSoundType) -> Self {
         Self {
+            reader: Arc::clone(reader),
             offset,
             length,
             header_offset,
@@ -89,8 +92,8 @@ impl WzSoundMeta {
     pub fn get_header_range(&self) -> Range<usize> {
         self.header_offset..self.header_offset + self.header_size
     }
-    pub fn get_wav_header(&self, data: &[u8]) -> Vec<u8> {
-        let header = &data[self.get_header_range()];
+    pub fn get_wav_header(&self) -> Vec<u8> {
+        let header = self.reader.get_slice(self.get_header_range());
         let chunk_size = (self.length + 36).to_le_bytes();
         let u8_16_from_header = &header[0x34..0x34+16];
         let chunk2_size = self.length.to_le_bytes();
@@ -103,12 +106,12 @@ impl WzSoundMeta {
 
         wav_header
     }
-    pub fn get_buffer(&self, data: &[u8]) -> Vec<u8> {
-        let buffer = &data[self.get_buffer_range()];
+    pub fn get_buffer(&self) -> Vec<u8> {
+        let buffer = self.reader.get_slice(self.get_buffer_range());
         match self.sound_type {
             WzSoundType::Wav => {
                 let mut wav_buffer = Vec::with_capacity(44 + buffer.len());
-                wav_buffer.extend_from_slice(&self.get_wav_header(data));
+                wav_buffer.extend_from_slice(&self.get_wav_header());
                 wav_buffer.extend_from_slice(buffer);
                 wav_buffer
             },
@@ -117,13 +120,13 @@ impl WzSoundMeta {
             }
         }
     }
-    pub fn extract_sound(&self, data: &[u8], path: PathBuf) -> Result<(), WzSoundParseError> {
-        let buffer = &data[self.get_buffer_range()];
+    pub fn extract_sound(&self, path: PathBuf) -> Result<(), WzSoundParseError> {
+        let buffer = self.reader.get_slice(self.get_buffer_range());
 
         match self.sound_type {
             WzSoundType::Wav => {
                 let mut file = File::create(path.with_extension("wav"))?;
-                let wav_header = self.get_wav_header(data);
+                let wav_header = self.get_wav_header();
                 file.write_all(&wav_header)?;
                 file.write_all(buffer)?;
             },

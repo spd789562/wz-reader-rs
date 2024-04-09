@@ -1,8 +1,11 @@
-#[derive(Debug, Clone, Copy, PartialEq)]
+use crate::{WzFile, WzDirectory, WzImage};
+use crate::property::{WzSubProperty, WzValue};
+
+#[derive(Debug, Clone)]
 pub enum WzObjectType {
-    File,
-    Image,
-    Directory,
-    Property,
-    List
+    File(Box<WzFile>),
+    Image(Box<WzImage>),
+    Directory(Box<WzDirectory>),
+    Property(WzSubProperty),
+    Value(WzValue),
 }

@@ -1,28 +1,32 @@
-use wz_reader::NodeMethods;
-use wz_reader::arc::WzNodeArc;
-use wz_reader::util::{resolve_base, resolve_root_wz_file_dir, walk_node_arc};
+use wz_reader::{WzNode, WzNodeArc, WzObjectType};
+use wz_reader::property::WzSubProperty;
+use wz_reader::util::{resolve_base, resolve_root_wz_file_dir, walk_node};
 
 fn main() {
-    let save_sound_fn = |node: WzNodeArc| {
-        if node.is_sound() {
-            node.save_sound("./sounds", None).unwrap();
+    let save_sound_fn = |node: &WzNodeArc| {
+        let node_read = node.read().unwrap();
+        if let WzObjectType::Property(WzSubProperty::Sound(wz_png)) = &node_read.object_type {
+            let path = std::path::Path::new("./sounds").join(&node_read.name);
+            if wz_png.extract_sound(path).is_err() {
+                println!("failed to extract sound: {}", node_read.get_full_path());
+            }
         }
     };
 
     /* resolve single wz file */
-    let node = WzNodeArc::new_wz_file(r"D:\MapleStory\Data\Sound\Sound_000.wz", None);
+    let node: WzNodeArc = WzNode::from_wz_file(r"D:\MapleStory\Data\Sound\Sound_000.wz", None).unwrap().into();
 
-    walk_node_arc(node, true, &save_sound_fn);
+    walk_node(&node, true, &save_sound_fn);
 
     /* resolve from base.wz */
-    let base_node = resolve_base::<WzNodeArc>(r"D:\MapleStory\Data\Base.wz").unwrap();
+    let base_node = resolve_base(r"D:\MapleStory\Data\Base.wz").unwrap();
 
     /* it't same as below method */
-    let sound_node = base_node.at("Sound").unwrap();
-    walk_node_arc(sound_node, true, &save_sound_fn);
+    let sound_node = base_node.read().unwrap().at("Sound").unwrap();
+    walk_node(&sound_node, true, &save_sound_fn);
 
     /* resolve whole wz folder */
-    let root_node = resolve_root_wz_file_dir::<WzNodeArc>(r"D:\MapleStory\Data\Sound\Sound.wz", None).unwrap();
+    let root_node = resolve_root_wz_file_dir(r"D:\MapleStory\Data\Sound\Sound.wz", None).unwrap();
 
-    walk_node_arc(root_node, true, &save_sound_fn);
+    walk_node(&root_node, true, &save_sound_fn);
 }

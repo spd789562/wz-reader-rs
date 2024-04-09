@@ -1,6 +1,7 @@
-use std::ops::Deref;
-use crate::{WzReader, WzSliceReader, Reader, NodeMethods, parse_wz_directory};
-use crate::arc::WzNodeArc;
+use std::fs::File;
+use std::sync::Arc;
+use memmap2::Mmap;
+use crate::{Reader, WzDirectory, WzNodeArc, WzNodeArcVec, WzObjectType, WzReader, WzSliceReader};
 
 use thiserror::Error;
 
@@ -21,136 +22,170 @@ pub enum WzFileParseError {
 #[derive(Debug, Clone)]
 pub struct WzFileMeta {
     pub path: String,
-    pub name: String,
     pub patch_version: i32,
     pub wz_version_header: i32,
     pub wz_with_encrypt_version_header: bool,
     pub hash: usize
 }
-const WZ_VERSION_HEADER_64BIT_START: u16 = 770;
 
-pub fn parse_wz_file<R: Deref<Target = WzReader> + Clone, Node: NodeMethods<Node = Node, Reader = R> + Clone>(wz_node: &Node, patch_version: Option<i32>) -> Result<(), WzFileParseError> {
-    let reader = if let Some(reader) = wz_node.get_reader() {
-        reader
-    } else {
-        panic!("wz_reader in WzFile should not be None")
-    };
+#[derive(Debug, Clone)]
+pub struct WzFile {
+    pub reader: Arc<WzReader>,
+    pub offset: usize,
+    pub block_size: usize,
+    pub is_parsed: bool,
+    pub wz_file_meta: WzFileMeta,
+}
 
-    let mut wz_file_meta = WzFileMeta {
-        path: "".to_string(),
-        name: "".to_string(),
-        patch_version: patch_version.unwrap_or(-1),
-        wz_version_header: 0,
-        wz_with_encrypt_version_header: true,
-        hash: 0
-    };
+impl WzFile {
+    pub fn from_file(path: &str) -> Result<WzFile, WzFileParseError> {
+        let file: File = File::open(path).expect("file not found");
+        let map = unsafe { Mmap::map(&file).unwrap() };
+
+        let block_size = map.len();
+        let reader = WzReader::new(map);
+
+        let offset = reader.get_wz_fstart().unwrap() + 2;
+
+        let wz_file_meta = WzFileMeta {
+            path: path.to_string(),
+            patch_version: -1,
+            wz_version_header: 0,
+            wz_with_encrypt_version_header: true,
+            hash: 0
+        };
+
+        Ok(WzFile {
+            offset: offset as usize,
+            block_size,
+            is_parsed: false,
+            reader: Arc::new(reader),
+            wz_file_meta
+        })
+    }
+    pub fn parse(&mut self, parent: &WzNodeArc, patch_version: Option<i32>) -> Result<WzNodeArcVec, WzFileParseError> {
+        let reader = self.reader.clone();
+
+        let mut wz_file_meta = WzFileMeta {
+            path: "".to_string(),
+            patch_version: patch_version.unwrap_or(-1),
+            wz_version_header: 0,
+            wz_with_encrypt_version_header: true,
+            hash: 0
+        };
+        
+        let slice_reader = reader.create_slice_reader();
+
+        let (wz_with_encrypt_version_header, encrypt_version) = check_64bit_client(&slice_reader);
+
+        wz_file_meta.wz_version_header = if wz_with_encrypt_version_header {
+            encrypt_version as i32
+        } else {
+            WZ_VERSION_HEADER_64BIT_START as i32
+        };
     
-    let slice_reader = reader.create_slice_reader();
+        wz_file_meta.wz_with_encrypt_version_header = wz_with_encrypt_version_header;
+    
+        if wz_file_meta.patch_version == -1 {
+            /* not hold encver in wz_file, directly try 770 - 780 */
+            if !wz_with_encrypt_version_header {
+                for ver_to_decode in WZ_VERSION_HEADER_64BIT_START..WZ_VERSION_HEADER_64BIT_START + 10 {
+                    wz_file_meta.hash = check_and_get_version_hash(wz_file_meta.wz_version_header, ver_to_decode as i32) as usize;
+                    if let Ok(childs) = self.try_decode_with_wz_version_number(parent, &slice_reader, &wz_file_meta, ver_to_decode as i32) {
+                        wz_file_meta.patch_version = ver_to_decode as i32;
+                        self.update_wz_file_meta(wz_file_meta);
+                        self.is_parsed = true;
+                        return Ok(childs);
+                    }
+                }
+            }
+    
+            /* there has code in maplelib to detect version from maplestory.exe here */
+    
+            let max_patch_version = 2000;
+    
+            for ver_to_decode in 1..max_patch_version {
+                wz_file_meta.hash = check_and_get_version_hash(wz_file_meta.wz_version_header, ver_to_decode) as usize;
+                // println!("try_decode_with_wz_version_number: {}", ver_to_decode);
+                if let Ok(childs) = self.try_decode_with_wz_version_number(parent, &slice_reader, &wz_file_meta, ver_to_decode) {
+                    wz_file_meta.patch_version = ver_to_decode;
+                    self.update_wz_file_meta(wz_file_meta);
+                    self.is_parsed = true;
+                    return Ok(childs);
+                }
+            }
+    
+            return Err(WzFileParseError::ErrorGameVerHash);
+        }
 
-    let (wz_with_encrypt_version_header, encrypt_version) = check_64bit_client(&slice_reader);
+        Ok(vec![])
+    }
 
-    wz_file_meta.wz_version_header = if wz_with_encrypt_version_header {
-        encrypt_version as i32
-    } else {
-        WZ_VERSION_HEADER_64BIT_START as i32
-    };
+    pub fn try_decode_with_wz_version_number(
+        &self,
+        parent: &WzNodeArc,
+        reader: &WzSliceReader,
+        meta: &WzFileMeta,
+        use_maplestory_patch_version: i32
+    ) -> Result<WzNodeArcVec, WzFileParseError> {
+        if meta.hash == 0 {
+            return Err(WzFileParseError::ErrorGameVerHash);
+        }
 
-    wz_file_meta.wz_with_encrypt_version_header = wz_with_encrypt_version_header;
+        let node = WzDirectory::new(
+                self.offset,
+                self.block_size,
+                &self.reader,
+                false
+            )
+            .with_hash(meta.hash);
 
-    if wz_file_meta.patch_version == -1 {
-        /* not hold encver in wz_file, directly try 770 - 780 */
-        if !wz_with_encrypt_version_header {
-            for ver_to_decode in WZ_VERSION_HEADER_64BIT_START..WZ_VERSION_HEADER_64BIT_START + 10 {
-                wz_file_meta.hash = check_and_get_version_hash(wz_file_meta.wz_version_header, ver_to_decode as i32) as usize;
-                if try_decode_with_wz_version_number(wz_node, &reader, &wz_file_meta, ver_to_decode as i32).is_ok() {
-                    wz_file_meta.patch_version = ver_to_decode as i32;
-                    wz_node.update_wz_file_meta(wz_file_meta);
-                    return Ok(());
+
+        let childs = node.resolve_children(parent).map_err(|_| WzFileParseError::ErrorGameVerHash)?;
+
+        let first_image_node = childs.iter().find(|(_, node)| matches!(node.read().unwrap().object_type, WzObjectType::Image(_)));
+
+        if let Some((name, image_node)) = first_image_node {
+            let offset = if let WzObjectType::Image(node) = &image_node.read().unwrap().object_type {
+                node.offset
+            } else {
+                return Err(WzFileParseError::ErrorGameVerHash);
+            };
+
+            let check_byte = if let Ok(b) = reader.read_u8_at(offset) {
+                b
+            } else {
+                return Err(WzFileParseError::ErrorGameVerHash);
+            };
+
+            match check_byte {
+                0x73 | 0x1b | 0x01 => {
+                },
+                _ => {
+                    /* 0x30, 0x6C, 0xBC */
+                    println!("UnknownImageHeader: check_byte = {}, File Name = {}", check_byte, name);
+                    return Err(WzFileParseError::UnknownImageHeader(check_byte, name.to_string()));
                 }
             }
         }
 
-        /* there has code in maplelib to detect version from maplestory.exe here */
-
-        let max_patch_version = 2000;
-
-        for ver_to_decode in 1..max_patch_version {
-            wz_file_meta.hash = check_and_get_version_hash(wz_file_meta.wz_version_header, ver_to_decode) as usize;
-            // println!("try_decode_with_wz_version_number: {}", ver_to_decode);
-            if try_decode_with_wz_version_number(wz_node, &reader, &wz_file_meta, ver_to_decode).is_ok() {
-                wz_file_meta.patch_version = ver_to_decode;
-                wz_node.update_wz_file_meta(wz_file_meta);
-                return Ok(());
-            }
-        }
-
-        return Err(WzFileParseError::ErrorGameVerHash);
-    }
-
-    wz_file_meta.hash = check_and_get_version_hash(wz_file_meta.wz_version_header, wz_file_meta.patch_version) as usize;
-    wz_node.update_wz_file_meta(wz_file_meta);
-    
-    if parse_wz_directory(wz_node).is_err() {
-        return Err(WzFileParseError::ErrorGameVerHash);
-    }
-
-    Ok(())
-}
-
-fn try_decode_with_wz_version_number<R: Deref<Target = WzReader>, Node: NodeMethods<Node = Node, Reader = R> + Clone>(
-    wz_node: &Node, 
-    reader: &R,
-    meta: &WzFileMeta,
-    use_maplestory_patch_version: i32
-) -> Result<(), WzFileParseError> {
-    if meta.hash == 0 {
-        return Err(WzFileParseError::ErrorGameVerHash);
-    }
-
-    wz_node.update_wz_file_meta(meta.clone());
-
-    if parse_wz_directory(wz_node).is_err() {
-        return Err(WzFileParseError::ErrorGameVerHash);
-    }
-
-    let first_image_node = wz_node.first_image();
-
-    if let Ok(image_node) = first_image_node {
-
-        let check_byte = if let Ok(b) = reader.read_u8_at(image_node.get_offset()) {
-            b
-        } else {
+        if !meta.wz_with_encrypt_version_header && use_maplestory_patch_version == 113 {
+            // return Err("is_64bit_wz_file && patch_version == 113".to_string());
             return Err(WzFileParseError::ErrorGameVerHash);
-        };
-
-        match check_byte {
-            0x73 | 0x1b | 0x01 => {
-            },
-            _ => {
-                let name = wz_node.get_name();
-                /* 0x30, 0x6C, 0xBC */
-                println!("UnknownImageHeader: check_byte = {}, File Name = {}", check_byte, name);
-                return Err(WzFileParseError::UnknownImageHeader(check_byte, name));
-            }
         }
+
+        Ok(childs)
     }
 
-    if !meta.wz_with_encrypt_version_header && use_maplestory_patch_version == 113 {
-        // return Err("is_64bit_wz_file && patch_version == 113".to_string());
-        return Err(WzFileParseError::ErrorGameVerHash);
-    }
-
-    Ok(())
-}
-
-fn is_64bit_wz_file(wz_node: &WzNodeArc) -> bool {
-    let node = wz_node.read().unwrap();
-    if let Some(meta) = &node.wz_file_meta {
-        !meta.wz_with_encrypt_version_header
-    } else {
-        false
+    fn update_wz_file_meta(&mut self, wz_file_meta: WzFileMeta) {
+        self.wz_file_meta = WzFileMeta {
+            path: self.wz_file_meta.path.clone(),
+            ..wz_file_meta
+        };
     }
 }
+
+const WZ_VERSION_HEADER_64BIT_START: u16 = 770;
 
 fn check_64bit_client(wz_reader: &WzSliceReader) -> (bool, u16) {
     let encrypt_version = wz_reader.read_u16_at(wz_reader.header.fstart).unwrap();
@@ -160,7 +195,7 @@ fn check_64bit_client(wz_reader: &WzSliceReader) -> (bool, u16) {
             return (false, 0);
         }
         if encrypt_version == 0x80 {
-            let prop_count = wz_reader.read_i32_at(wz_reader.header.fstart).unwrap();
+            let prop_count = wz_reader.read_i32_at(wz_reader.header.fstart + 2).unwrap();
             if prop_count > 0 && (prop_count & 0xff) == 0 && prop_count <= 0xffff {
                 return (false, 0);
             }

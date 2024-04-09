@@ -1,5 +1,6 @@
 use std::ops::Deref;
-use crate::{ property::WzPropertyType, util, NodeMethods, Reader, WzObjectType, WzReader };
+use std::sync::Arc;
+use crate::{ property::{WzLua, WzValue}, util, Reader, WzNode, WzNodeArc, WzObjectType, WzReader };
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -21,65 +22,81 @@ pub enum WzImageParseError {
 pub const WZ_IMAGE_HEADER_BYTE_WITHOUT_OFFSET: u8 = 0x73;
 pub const WZ_IMAGE_HEADER_BYTE_WITH_OFFSET: u8 = 0x1B;
 
+
+#[derive(Debug, Clone)]
+pub struct WzImage {
+    pub reader: Arc<WzReader>,
+    pub name: String,
+    pub offset: usize,
+    pub block_size: usize,
+    pub is_parsed: bool,
+}
+
+impl WzImage {
+    pub fn new(name: String, offset: usize, block_size: usize, reader: &Arc<WzReader>) -> Self {
+        Self {
+            reader: Arc::clone(reader),
+            name,
+            offset,
+            block_size,
+            is_parsed: false,
+        }
+    }
+
+    pub fn resolve_children(&self, parent: &WzNodeArc) -> Result<Vec<(String, WzNodeArc)>, WzImageParseError> {
+        let reader = self.reader.create_slice_reader_without_hash();
+
+        reader.seek(self.offset);
+
+        let header_byte = reader.read_u8()?;
+
+        let mut childrens: Vec<(String, WzNodeArc)> = Vec::new();
+
+        match header_byte {
+            0x1 => {
+                if self.name.ends_with(".lua") {
+                    let len = reader.read_wz_int()?;
+                    let offset = reader.get_pos();
+    
+                    let name = String::from("Script");
+
+                    let wz_lua = WzLua::new(
+                        &self.reader,
+                        offset,
+                        len as usize
+                    );
+
+                    let lua_node = WzNode::new(
+                        name.clone(), 
+                        WzObjectType::Value(WzValue::Lua(wz_lua)),
+                        Some(parent)
+                    );
+
+                    childrens.push((name, lua_node.into_lock()));
+                    return Ok(childrens);
+                }
+                return Err(WzImageParseError::LuaParseError)
+            },
+            WZ_IMAGE_HEADER_BYTE_WITHOUT_OFFSET => {
+                let name = reader.read_wz_string()?;
+                let value = reader.read_u16()?;
+                if name != "Property" && value != 0 {
+                    return Err(WzImageParseError::ParseError(reader.get_pos()));
+                }
+            },
+            _ => {
+                return Err(WzImageParseError::UnknownImageHeader(header_byte, reader.get_pos()));
+            }
+        }
+
+        util::parse_property_list(parent, &self.reader, &reader, reader.get_pos(), self.offset)
+            .map_err(WzImageParseError::from)
+    }
+}
+
 pub fn is_lua_image(name: &str) -> bool {
     name.ends_with(".lua")
 }
 pub fn is_valid_wz_image(check_byte: u8) -> bool {
     check_byte == WZ_IMAGE_HEADER_BYTE_WITH_OFFSET || check_byte == WZ_IMAGE_HEADER_BYTE_WITHOUT_OFFSET
-}
-
-pub fn parse_wz_image<R: Deref<Target = WzReader> + Clone, Node: NodeMethods<Node = Node, Reader = R> + Clone>(wz_node: &Node) -> Result<(), WzImageParseError> {
-    let reader = if let Some(reader) = wz_node.get_reader() {
-        reader
-    } else {
-        panic!("Reader not found in wz_img node")
-    };
-
-    let reader = reader.create_slice_reader_without_hash();
-
-    let node_offset = wz_node.get_offset();
-
-    reader.seek(node_offset);
-
-    let header_byte = reader.read_u8()?;
-
-    println!("parsing wz image: {}", wz_node.get_name());
-
-    match header_byte {
-        0x1 => {
-            if wz_node.get_name().ends_with(".lua") {
-                let len = reader.read_wz_int()?;
-                let offset = reader.get_pos();
-
-                let node = Node::new_with_parent(
-                    wz_node,
-                    WzObjectType::Property,
-                    Some(WzPropertyType::Lua),
-                    String::from("Script"),
-                    offset,
-                    len as usize
-                );
-                
-                wz_node.add_node_child(node);
-
-                return Ok(());
-            }
-            return Err(WzImageParseError::LuaParseError)
-        },
-        WZ_IMAGE_HEADER_BYTE_WITHOUT_OFFSET => {
-            let name = reader.read_wz_string()?;
-            let value = reader.read_u16()?;
-            if name != "Property" && value != 0 {
-                return Err(WzImageParseError::ParseError(reader.get_pos()));
-            }
-        },
-        _ => {
-            return Err(WzImageParseError::UnknownImageHeader(header_byte, reader.get_pos()));
-        }
-    }
-
-    match util::parse_property_list::<Node>(wz_node, &reader, reader.get_pos(), node_offset) {
-        Ok(_) => Ok(()),
-        Err(e) => Err(WzImageParseError::from(e))
-    }
 }

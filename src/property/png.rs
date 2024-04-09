@@ -1,8 +1,9 @@
+use std::sync::Arc;
 use flate2::{Decompress, FlushDecompress};
 use image::{DynamicImage, ImageError, ImageBuffer, Rgb, Rgba};
 use thiserror::Error;
 use rayon::prelude::*;
-use crate::reader;
+use crate::{reader, WzNodeArc, WzObjectType, property::WzSubProperty};
 use crate::util::color::{SimpleColor, SimpleColorAlpha};
 
 #[derive(Debug, Error)]
@@ -32,8 +33,34 @@ pub enum WzPngParseError {
 type ImageBufferRgbaChunk = ImageBuffer<Rgba<u8>, Vec<u8>>;
 type ImageBufferRgbChunk = ImageBuffer<Rgb<u8>, Vec<u8>>;
 
+pub fn get_image(node: &WzNodeArc) -> Result<DynamicImage, WzPngParseError> {
+    let node_read = node.read().unwrap();
+    match &node_read.object_type {
+        WzObjectType::Property(WzSubProperty::PNG(png)) => {
+            if let Some(inlink) = node_read.at("_inlink") {
+                if let Some(target) = node_read.resolve_inlink(&inlink) {
+                    return get_image(&target)
+                }
+            }
+            if let Some(outlink) = node_read.at("_outlink") {
+                if let Some(target) = node_read.resolve_outlink(&outlink, true) {
+                    return get_image(&target)
+                }
+                println!("outlink resolve failed");
+            }
+            png.extract_png()
+        },
+        _ => {
+            return Err(WzPngParseError::NotPngProperty);
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct WzPng {
+    reader: Arc<reader::WzReader>,
+    pub offset: usize,
+    pub block_size: usize,
     pub width: u32,
     pub height: u32,
     pub format1: u32,
@@ -42,12 +69,15 @@ pub struct WzPng {
 }
 
 impl WzPng {
-    pub fn new(width: u32, height: u32, format1: u32, format2: u32, header: i32) -> WzPng {
+    pub fn new(reader: &Arc<reader::WzReader>, size: (u32, u32), format: (u32, u32), data_range: (usize, usize), header: i32) -> WzPng {
         WzPng {
-            width,
-            height,
-            format1,
-            format2,
+            reader: Arc::clone(reader),
+            offset: data_range.0,
+            block_size: data_range.1,
+            width: size.0,
+            height: size.1,
+            format1: format.0,
+            format2: format.1,
             header
         }
     }
@@ -57,7 +87,8 @@ impl WzPng {
     pub fn list_wz_used(&self) -> bool {
         self.header != 0x9C78 && self.header != 0xDA78 && self.header != 0x0178 && self.header != 0x5E78
     }
-    pub fn extract_png(&self, data: &[u8]) -> Result<DynamicImage, WzPngParseError> {
+    pub fn extract_png(&self) -> Result<DynamicImage, WzPngParseError> {
+        let data = self.reader.get_slice(self.offset..(self.offset + self.block_size));
         /* decompress */
         let pixels = self.get_raw_data(data)?;
 
