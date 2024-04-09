@@ -7,6 +7,7 @@ mod file;
 pub mod property;
 mod node;
 pub mod util;
+pub mod version;
 
 pub use reader::*;
 pub use object::*;
