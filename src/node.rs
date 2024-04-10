@@ -59,9 +59,11 @@ impl WzNode {
             parent
         ));
     }
+
     pub fn into_lock(self) -> WzNodeArc {
         Arc::new(RwLock::new(self))
     }
+
     pub fn parse(&mut self, parent: &WzNodeArc) -> Result<(), NodeParseError> {
         let childs: WzNodeArcVec;
 
@@ -90,6 +92,24 @@ impl WzNode {
         for (name, child) in childs {
             self.children.insert(name, child);
         }
+
+        Ok(())
+    }
+    pub fn unparse(&mut self) -> Result<(), NodeParseError> {
+        match &mut self.object_type {
+            WzObjectType::Directory(directory) => {
+                directory.is_parsed = false;
+            },
+            WzObjectType::File(file) => {
+                file.is_parsed = false;
+            },
+            WzObjectType::Image(image) => {
+                image.is_parsed = false;
+            },
+            _ => return Ok(()),
+        }
+        
+        self.children.clear();
 
         Ok(())
     }
