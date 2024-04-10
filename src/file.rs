@@ -38,12 +38,12 @@ pub struct WzFile {
 }
 
 impl WzFile {
-    pub fn from_file(path: &str) -> Result<WzFile, WzFileParseError> {
+    pub fn from_file(path: &str, wz_iv: [u8; 4]) -> Result<WzFile, WzFileParseError> {
         let file: File = File::open(path).expect("file not found");
         let map = unsafe { Mmap::map(&file).unwrap() };
 
         let block_size = map.len();
-        let reader = WzReader::new(map);
+        let reader = WzReader::new(map).with_iv(wz_iv);
 
         let offset = reader.get_wz_fstart().unwrap() + 2;
 

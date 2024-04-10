@@ -51,7 +51,7 @@ impl WzNode {
     }
     pub fn from_wz_file(path: &str, parent: Option<&WzNodeArc>) -> Result<Self, NodeParseError> {
         let name = Path::new(path).file_stem().unwrap().to_str().unwrap().to_string();
-        let wz_file = WzFile::from_file(path)?;
+        let wz_file = WzFile::from_file(path, crate::version::get_iv_by_maple_version(crate::version::WzMapleVersion::EMS))?;
         return Ok(WzNode::new(
             name, 
             WzObjectType::File(Box::new(wz_file)), 
