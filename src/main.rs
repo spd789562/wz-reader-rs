@@ -1,36 +1,33 @@
 
-use wz_reader::{WzNode};
-use wz_reader::property::{get_image};
+use wz_reader::{WzNode, WzObjectType};
+use wz_reader::property::{get_image, WzValue};
 use wz_reader::util::{resolve_base, walk_node};
 
 fn main() {
-    let node = resolve_base(r"D:\MapleStoryV257\MapleStoryV257\Data\Base\Base.wz").unwrap();
+    let node = resolve_base(r"D:\MapleStoryV257\MapleStoryV257\Data\Base\Base.wz", None).unwrap();
 
-    let node = node.read().unwrap().at("Etc").unwrap();
+    let node = node.read().unwrap().at_path("Etc/Script").unwrap();
 
-    let other_node = node.read().unwrap().at("BossDunkel.img").unwrap();
 
     {
         let before = std::time::Instant::now();
 
-        other_node.write().unwrap().parse(&other_node).unwrap();
+        node.write().unwrap().parse(&node).unwrap();
 
         println!("parse time: {:?}", before.elapsed());
     }
 
 
     {
-        let before = std::time::Instant::now();
-
-        let child = other_node.read().unwrap().at_path("AreaWarning/7/areaWarning/2");
-
-        if let Some(child) = child {
-            println!("node current path: {}", child.read().unwrap().get_full_path());
-            let image = get_image(&child).unwrap();
-            image.save("test.png").unwrap();
-        }
-        
-        println!("walk time: {:?}", before.elapsed());
+        walk_node(&node, true, &|node| {
+            let node_read = node.read().unwrap();
+            let lua_file_name = node_read.parent.upgrade().unwrap().read().unwrap().name.clone();
+            if let WzObjectType::Value(WzValue::Lua(lua)) = &node_read.object_type {
+                if let Ok(lua) = lua.extract_lua() {
+                    std::fs::write(format!("./{}", lua_file_name), lua).unwrap();
+                }
+            }
+        });
     }
 
     // let node = resolve_base::<WzNodeArc>(r"D:\MapleStoryV257\MapleStoryV257\Data\Base\Base.wz").unwrap();

@@ -2,7 +2,7 @@ use std::path::Path;
 use std::sync::{Arc, Weak, RwLock};
 use std::collections::HashMap;
 use crate::property::WzValue;
-use crate::{ WzObjectType, WzDirectoryParseError, WzFileParseError, WzImageParseError, WzFile};
+use crate::{ WzObjectType, WzDirectoryParseError, WzFileParseError, WzImageParseError, WzFile, version};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -49,9 +49,10 @@ impl WzNode {
             children: HashMap::new(),
         }
     }
-    pub fn from_wz_file(path: &str, parent: Option<&WzNodeArc>) -> Result<Self, NodeParseError> {
+    pub fn from_wz_file(path: &str, version: Option<version::WzMapleVersion>, patch_version: Option<i32>, parent: Option<&WzNodeArc>) -> Result<Self, NodeParseError> {
         let name = Path::new(path).file_stem().unwrap().to_str().unwrap().to_string();
-        let wz_file = WzFile::from_file(path, crate::version::get_iv_by_maple_version(crate::version::WzMapleVersion::EMS))?;
+        let version = version.unwrap_or(version::WzMapleVersion::EMS);
+        let wz_file = WzFile::from_file(path, version::get_iv_by_maple_version(version), patch_version)?;
         return Ok(WzNode::new(
             name, 
             WzObjectType::File(Box::new(wz_file)), 

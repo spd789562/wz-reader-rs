@@ -2,7 +2,7 @@ use std::io;
 use std::fs::DirEntry;
 use std::path::Path;
 use std::sync::Arc;
-use crate::{WzNode, WzNodeArc};
+use crate::{WzNode, WzNodeArc, WzObjectType, version::WzMapleVersion};
 
 pub fn get_root_wz_file_path(dir: &DirEntry) -> Option<String> {
     let dir_name = dir.file_name();
@@ -17,8 +17,8 @@ pub fn get_root_wz_file_path(dir: &DirEntry) -> Option<String> {
     None
 }
 
-pub fn resolve_root_wz_file_dir(dir: &str, parent: Option<&WzNodeArc>) -> Result<WzNodeArc, io::Error> {
-    let root_node: WzNodeArc = WzNode::from_wz_file(dir, parent).unwrap().into();
+pub fn resolve_root_wz_file_dir(dir: &str, version: Option<WzMapleVersion>, patch_version: Option<i32>, parent: Option<&WzNodeArc>) -> Result<WzNodeArc, io::Error> {
+    let root_node: WzNodeArc = WzNode::from_wz_file(dir, version, patch_version, parent).unwrap().into();
     let wz_dir = Path::new(dir).parent().unwrap();
 
     {
@@ -33,7 +33,7 @@ pub fn resolve_root_wz_file_dir(dir: &str, parent: Option<&WzNodeArc>) -> Result
     
             if file_type.is_dir() && root_node_write.at(name.to_str().unwrap()).is_some() {
                 if let Some(file_path) = get_root_wz_file_path(&entry) {
-                    let dir_node = resolve_root_wz_file_dir(&file_path, Some(&root_node))?;
+                    let dir_node = resolve_root_wz_file_dir(&file_path, version, patch_version, Some(&root_node))?;
                     
                     /* replace the original one */
                     root_node_write.children.insert(name.to_str().unwrap().to_string(), dir_node);
@@ -53,7 +53,7 @@ pub fn resolve_root_wz_file_dir(dir: &str, parent: Option<&WzNodeArc>) -> Result
                     continue;
                 }
     
-                let node = WzNode::from_wz_file(file_path.to_str().unwrap(), None).unwrap().into_lock();
+                let node = WzNode::from_wz_file(file_path.to_str().unwrap(), version, patch_version, None).unwrap().into_lock();
     
                 let mut node_write = node.write().unwrap();
     
@@ -72,12 +72,20 @@ pub fn resolve_root_wz_file_dir(dir: &str, parent: Option<&WzNodeArc>) -> Result
     Ok(root_node)
 }
 
-pub fn resolve_base(path: &str) -> Result<WzNodeArc, io::Error> {
+pub fn resolve_base(path: &str, version: Option<WzMapleVersion>) -> Result<WzNodeArc, io::Error> {
     if !path.ends_with("Base.wz") {
         return Err(io::Error::new(io::ErrorKind::InvalidInput, "not a Base.wz"));
     }
 
-    let base_node = resolve_root_wz_file_dir(path, None)?;
+    let base_node = resolve_root_wz_file_dir(path, version, None, None)?;
+
+    let patch_version = {
+        if let WzObjectType::File(file) = &base_node.read().unwrap().object_type {
+            file.wz_file_meta.patch_version
+        } else {
+            -1
+        }
+    };
 
     {
         let mut base_write = base_node.write().unwrap();
@@ -95,7 +103,7 @@ pub fn resolve_base(path: &str) -> Result<WzNodeArc, io::Error> {
                 let wz_path = get_root_wz_file_path(&dir);
     
                 if let Some(file_path) = wz_path {
-                    let dir_node = resolve_root_wz_file_dir(&file_path, Some(&base_node))?;
+                    let dir_node = resolve_root_wz_file_dir(&file_path, version, Some(patch_version), Some(&base_node))?;
 
                     /* replace the original one */
                     base_write.children.insert(file_name.to_str().unwrap().to_string(), dir_node);

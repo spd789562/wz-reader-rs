@@ -1,4 +1,4 @@
-use crate::util::{WZ_GMSIV, WZ_MSEAIV};
+use crate::util::maple_crypto_constants::{WZ_GMSIV, WZ_MSEAIV};
 
 pub fn get_iv_by_maple_version(version: WzMapleVersion) -> [u8; 4] {
     match version {
@@ -8,7 +8,7 @@ pub fn get_iv_by_maple_version(version: WzMapleVersion) -> [u8; 4] {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WzMapleVersion {
     /// Global MapleStory (old)
     GMS,

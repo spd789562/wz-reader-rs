@@ -1,7 +1,7 @@
 use aes::Aes256;
 use aes::cipher::{KeyInit, BlockSizeUser, block_padding::Pkcs7, BlockEncryptMut};
 use crate::reader::read_i32_at;
-use crate::util::{MAPLESTORY_USERKEY_DEFAULT, WZ_MSEAIV, get_trimmed_user_key};
+use super::maple_crypto_constants::{MAPLESTORY_USERKEY_DEFAULT, WZ_MSEAIV, get_trimmed_user_key};
 
 const BATCH_SIZE: f64 = 4096_f64;
 

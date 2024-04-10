@@ -38,7 +38,7 @@ pub struct WzFile {
 }
 
 impl WzFile {
-    pub fn from_file(path: &str, wz_iv: [u8; 4]) -> Result<WzFile, WzFileParseError> {
+    pub fn from_file(path: &str, wz_iv: [u8; 4], patch_version: Option<i32>) -> Result<WzFile, WzFileParseError> {
         let file: File = File::open(path).expect("file not found");
         let map = unsafe { Mmap::map(&file).unwrap() };
 
@@ -49,7 +49,7 @@ impl WzFile {
 
         let wz_file_meta = WzFileMeta {
             path: path.to_string(),
-            patch_version: -1,
+            patch_version: patch_version.unwrap_or(-1),
             wz_version_header: 0,
             wz_with_encrypt_version_header: true,
             hash: 0
@@ -68,7 +68,7 @@ impl WzFile {
 
         let mut wz_file_meta = WzFileMeta {
             path: "".to_string(),
-            patch_version: patch_version.unwrap_or(-1),
+            patch_version: patch_version.unwrap_or(self.wz_file_meta.patch_version),
             wz_version_header: 0,
             wz_with_encrypt_version_header: true,
             hash: 0
