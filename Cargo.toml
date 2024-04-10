@@ -6,10 +6,11 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+aes = "0.8.4"
+ecb = "0.1.2"
 flate2 = { version = "1.0.28", features = ["zlib-ng"], default-features = false }
 image = { version = "0.25.0", features = ["rayon"] }
 memmap2 = "0.9.4"
-openssl = "0.10.64"
 rayon = "1.9.0"
 scroll = "0.12.0"
 thiserror = "1.0.57"
