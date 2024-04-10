@@ -118,7 +118,13 @@ impl WzFile {
             return Err(WzFileParseError::ErrorGameVerHash);
         }
 
-        Ok(vec![])
+        wz_file_meta.hash = check_and_get_version_hash(wz_file_meta.wz_version_header, wz_file_meta.patch_version) as usize;
+
+        let childs = self.try_decode_with_wz_version_number(parent, &slice_reader, &wz_file_meta, wz_file_meta.patch_version)?;
+        self.update_wz_file_meta(wz_file_meta);
+        self.is_parsed = true;
+            
+        Ok(childs)
     }
 
     pub fn try_decode_with_wz_version_number(

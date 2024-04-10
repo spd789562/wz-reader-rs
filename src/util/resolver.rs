@@ -30,7 +30,7 @@ pub fn resolve_root_wz_file_dir(dir: &str, version: Option<WzMapleVersion>, patc
             let entry = entry?;
             let file_type = entry.file_type()?;
             let name = entry.file_name();
-    
+
             if file_type.is_dir() && root_node_write.at(name.to_str().unwrap()).is_some() {
                 if let Some(file_path) = get_root_wz_file_path(&entry) {
                     let dir_node = resolve_root_wz_file_dir(&file_path, version, patch_version, Some(&root_node))?;
@@ -54,14 +54,11 @@ pub fn resolve_root_wz_file_dir(dir: &str, version: Option<WzMapleVersion>, patc
                 }
     
                 let node = WzNode::from_wz_file(file_path.to_str().unwrap(), version, patch_version, None).unwrap().into_lock();
-    
+
                 let mut node_write = node.write().unwrap();
-    
-                if node_write.parse(&node).is_ok() {
+
+                if node_write.parse(&root_node).is_ok() {
                     for (name, child) in node_write.children.drain() {
-                        {
-                            child.write().unwrap().parent = Arc::downgrade(&root_node);
-                        }
                         root_node_write.children.insert(name, child);
                     }
                 }
