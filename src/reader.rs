@@ -1,6 +1,6 @@
 use scroll::{Pread, LE};
 use std::cell::Cell;
-use std::sync::Mutex;
+use std::sync::RwLock;
 use memmap2::Mmap;
 
 use crate::WzHeader;
@@ -11,7 +11,7 @@ use crate::property::{WzStringMeta, WzStringType};
 pub struct WzReader {
     pub map: Mmap,
     pub wz_iv: [u8; 4],
-    pub keys: Mutex<WzMutableKey>
+    pub keys: RwLock<WzMutableKey>
 }
 #[derive(Debug, Clone)]
 pub struct WzSliceReader<'a> {
@@ -339,14 +339,14 @@ impl WzReader {
     pub fn new(map: Mmap) -> Self {
         WzReader {
             map,
-            keys: Mutex::new(WzMutableKey::new([0; 4], [0; 32])),
+            keys: RwLock::new(WzMutableKey::new([0; 4], [0; 32])),
             wz_iv: [0; 4]
         }
     }
     pub fn with_iv(self, iv: [u8; 4]) -> Self {
         WzReader {
             wz_iv: iv,
-            keys: Mutex::new(WzMutableKey::from_iv(iv)),
+            keys: RwLock::new(WzMutableKey::from_iv(iv)),
             ..self
         }
     }

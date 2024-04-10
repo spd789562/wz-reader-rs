@@ -31,13 +31,21 @@ impl WzLua {
 
     pub fn extract_lua(&self) -> Result<String, WzLuaParseError> {
         let data = self.reader.get_slice(self.offset..self.length + self.offset);
-        let mut decoded = Vec::<u8>::with_capacity(data.len());
-        let mut key = self.reader.keys.lock().unwrap();
+        let len = data.len();
+        let mut decoded = Vec::<u8>::with_capacity(len);
 
-        key.ensure_key_size(data.len()).unwrap();
+        // check and release the lock, it will be block when the lock is not released(maybe is held by other thread)
+        let is_need_mut = !self.reader.keys.read().unwrap().is_enough(len);
+
+        if is_need_mut {
+            let mut key = self.reader.keys.write().unwrap();
+            key.ensure_key_size(data.len()).unwrap();
+        }
+
+        let key = self.reader.keys.read().unwrap();
 
         for (i, byte) in data.iter().enumerate() {
-            let k = key.at(i);
+            let k = key.try_at(i).unwrap_or(&0_u8);
             decoded.push(*byte ^ k);
         }
 

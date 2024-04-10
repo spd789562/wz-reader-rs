@@ -43,12 +43,15 @@ impl WzMutableKey {
     pub fn try_at(&self, index: usize) -> Option<&u8> {
         self.keys.get(index)
     }
+    pub fn is_enough(&self, size: usize) -> bool {
+        self.keys.len() >= size
+    }
     pub fn ensure_key_size(&mut self, size: usize) -> Result<(), String> {
-        if self.keys.len() >= size {
+        if self.is_enough(size) {
             return Ok(());
         }
 
-        let size = ((1.0 * (size as f64) / BATCH_SIZE).ceil() * BATCH_SIZE) as usize;
+        let size = (((size as f64) / BATCH_SIZE).ceil() * BATCH_SIZE) as usize;
 
         let tmp = read_i32_at(&self.iv, 0).unwrap_or(0);
 
