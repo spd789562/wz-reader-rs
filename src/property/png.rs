@@ -17,7 +17,7 @@ pub enum WzPngParseError {
     #[error("Unsupported header: {0}")]
     UnsupportedHeader(i32),
     
-    #[error(transparent)]
+    #[error("Error reading color: {0}")]
     ReadColorError(#[from] scroll::Error),
 
     #[error(transparent)]

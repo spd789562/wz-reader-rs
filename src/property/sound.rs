@@ -11,9 +11,6 @@ use thiserror::Error;
 pub enum WzSoundParseError {
     #[error("Unsupported sound format")]
     UnsupportedFormat,
-    
-    #[error(transparent)]
-    ParseError(#[from] scroll::Error),
 
     #[error(transparent)]
     SaveError(#[from] std::io::Error),

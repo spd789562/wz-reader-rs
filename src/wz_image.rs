@@ -1,10 +1,11 @@
-use std::ops::Deref;
 use std::sync::Arc;
 use crate::{ property::{WzLua, WzValue}, util, Reader, WzNode, WzNodeArc, WzObjectType, WzReader };
 use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum WzImageParseError {
+    #[error(transparent)]
+    FileError(#[from] std::io::Error),
     #[error("Lua parse error")]
     LuaParseError,
     #[error("parse as wz image failed, pos at {0}")]
@@ -41,6 +42,22 @@ impl WzImage {
             block_size,
             is_parsed: false,
         }
+    }
+    pub fn from_file(path: &str, wz_iv: [u8; 4]) -> Result<Self, WzImageParseError> {
+        let name = std::path::Path::new(path).file_stem().unwrap().to_str().unwrap().to_string();
+        let file = std::fs::File::open(path)?;
+        let map = unsafe { memmap2::Mmap::map(&file).unwrap() };
+
+        let block_size = map.len();
+        let reader = WzReader::new(map).with_iv(wz_iv);
+
+        Ok(WzImage {
+            reader: Arc::new(reader),
+            name,
+            offset: 0,
+            block_size,
+            is_parsed: false
+        })
     }
 
     pub fn resolve_children(&self, parent: &WzNodeArc) -> Result<Vec<(String, WzNodeArc)>, WzImageParseError> {

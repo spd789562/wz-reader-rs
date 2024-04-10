@@ -5,7 +5,7 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum WzStringParseError {
-    #[error(transparent)]
+    #[error("Error parsing WzString: {0}")]
     ParseError(#[from] scroll::Error),
 
     #[error("Not a String property")]

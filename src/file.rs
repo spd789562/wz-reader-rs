@@ -7,13 +7,13 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum WzFileParseError {
-    #[error("Path is null")]
-    PathIsNull,
+    #[error(transparent)]
+    FileError(#[from] std::io::Error),
     #[error("Error with game version hash : The specified game version is incorrect and WzLib was unable to determine the version itself")]
     ErrorGameVerHash,
     #[error("Failed, in this case the causes are undetermined.")]
     FailedUnknown,
-    #[error("Reader reading error")]
+    #[error("Binary reading error")]
     ReaderError(#[from] scroll::Error),
     #[error("[WzFile] New Wz image header found. checkByte = {0}, File Name = {1}")]
     UnknownImageHeader(u8, String),
@@ -39,7 +39,7 @@ pub struct WzFile {
 
 impl WzFile {
     pub fn from_file(path: &str, wz_iv: [u8; 4], patch_version: Option<i32>) -> Result<WzFile, WzFileParseError> {
-        let file: File = File::open(path).expect("file not found");
+        let file: File = File::open(path)?;
         let map = unsafe { Mmap::map(&file).unwrap() };
 
         let block_size = map.len();
