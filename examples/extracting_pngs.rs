@@ -15,18 +15,18 @@ fn main() {
     };
     
     /* resolve single wz file */
-    let node: WzNodeArc = WzNode::from_wz_file(r"D:\MapleStory\Data\Npc\_Canvas\_Canvas000.wz", None).unwrap().into();
+    let node: WzNodeArc = WzNode::from_wz_file(r"D:\MapleStory\Data\Npc\_Canvas\_Canvas000.wz", None, None, None).unwrap().into();
 
     walk_node(&node, true, &save_image_fn);
 
     /* resolve from base.wz */
-    let base_node = resolve_base(r"D:\MapleStory\Data\Base.wz").unwrap();
+    let base_node = resolve_base(r"D:\MapleStory\Data\Base.wz", None).unwrap();
 
     /* this will take millions years */
     walk_node(&base_node, true, &save_image_fn);
 
     /* resolve whole wz folder */
-    let root_node = resolve_root_wz_file_dir(r"D:\MapleStory\Data\Npc\_Canvas\_Canvas.wz", None).unwrap();
+    let root_node = resolve_root_wz_file_dir(r"D:\MapleStory\Data\Npc\_Canvas\_Canvas.wz", None, None, None).unwrap();
 
     walk_node(&root_node, true, &save_image_fn);
 }
