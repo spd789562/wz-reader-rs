@@ -5,6 +5,9 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum WzPropertyParseError {
+    #[error("Node not found")]
+    NodeNotFound,
+
     #[error("Unknown property type: {0}, at position: {1}")]
     UnknownPropertyType(u8, usize),
 
@@ -18,83 +21,87 @@ pub enum WzPropertyParseError {
     ReaderError(#[from] scroll::Error),
 }
 
-pub fn parse_property_list(parent: &WzNodeArc, org_reader: &Arc<WzReader> ,reader: &WzSliceReader, reader_offset: usize, origin_offset: usize) -> Result<WzNodeArcVec, WzPropertyParseError> {
-    // let parent = parent.clone();
-    reader.seek(reader_offset);
-
+pub fn parse_property_list(parent: &WzNodeArc, org_reader: &Arc<WzReader>, reader: &WzSliceReader, origin_offset: usize) -> Result<WzNodeArcVec, WzPropertyParseError> {
     let entry_count = reader.read_wz_int()?;
 
     let mut childs: Vec<(String, WzNodeArc)> = Vec::with_capacity(entry_count as usize);
+
     for _ in 0..entry_count {
-        let name: String = reader.read_wz_string_block(origin_offset)?;
-        let property_type: u8 = reader.read_u8()?;
-        // let offset = origin_offset + reader.get_pos();
+        let name = reader.read_wz_string_block(origin_offset)?;
+        let property_type = reader.read_u8()?;
+        let parsed_node = parse_property_node(name, property_type, parent, org_reader, reader, origin_offset)?;
+        childs.push(parsed_node);
+    }
 
-        match property_type {
-            0 => {
-                let node = WzNode::new(name.clone(), WzObjectType::Value(WzValue::Null), Some(parent));
-                childs.push((name, node.into_lock()));
-            },
-            2 | 11 => {
-                let num = reader.read_i16()?;
-                let node = WzNode::new(name.clone(), WzObjectType::Value(WzValue::Short(num)), Some(parent));
-                childs.push((name, node.into_lock()));
-            },
-            3 | 19 => {
-                let num = reader.read_wz_int()?;
-                let node = WzNode::new(name.clone(), WzObjectType::Value(WzValue::Int(num)), Some(parent));
-                childs.push((name, node.into_lock()));
-            },
-            20 => {
-                let num = reader.read_wz_int64()?;
-                let node = WzNode::new(name.clone(), WzObjectType::Value(WzValue::Long(num)), Some(parent));
-                childs.push((name, node.into_lock()));
-            },
-            4 => {
-                let float_type: u8 = reader.read_u8()?;
-                match float_type {
-                    0x80 => {
-                        let num = reader.read_float()?;
-                        let node = WzNode::new(name.clone(), WzObjectType::Value(WzValue::Float(num)), Some(parent));
-                        childs.push((name, node.into_lock()));
-                    },
-                    _ => {
-                        let node = WzNode::new(name.clone(), WzObjectType::Value(WzValue::Float(0_f32)), Some(parent));
-                        childs.push((name, node.into_lock()));
-                    }
+    Ok(childs)
+}
+
+pub fn parse_property_node(name: String, property_type: u8, parent: &WzNodeArc, org_reader: &Arc<WzReader> , reader: &WzSliceReader, origin_offset: usize) -> Result<(String, WzNodeArc), WzPropertyParseError> {
+    let result: (String, WzNodeArc);
+
+    match property_type {
+        0 => {
+            let node = WzNode::new(name.clone(), WzObjectType::Value(WzValue::Null), Some(parent));
+            result = (name, node.into_lock());
+        },
+        2 | 11 => {
+            let num = reader.read_i16()?;
+            let node = WzNode::new(name.clone(), WzObjectType::Value(WzValue::Short(num)), Some(parent));
+            result = (name, node.into_lock());
+        },
+        3 | 19 => {
+            let num = reader.read_wz_int()?;
+            let node = WzNode::new(name.clone(), WzObjectType::Value(WzValue::Int(num)), Some(parent));
+            result = (name, node.into_lock());
+        },
+        20 => {
+            let num = reader.read_wz_int64()?;
+            let node = WzNode::new(name.clone(), WzObjectType::Value(WzValue::Long(num)), Some(parent));
+            result = (name, node.into_lock());
+        },
+        4 => {
+            let float_type: u8 = reader.read_u8()?;
+            match float_type {
+                0x80 => {
+                    let num = reader.read_float()?;
+                    let node = WzNode::new(name.clone(), WzObjectType::Value(WzValue::Float(num)), Some(parent));
+                    result = (name, node.into_lock());
+                },
+                _ => {
+                    let node = WzNode::new(name.clone(), WzObjectType::Value(WzValue::Float(0_f32)), Some(parent));
+                    result = (name, node.into_lock());
                 }
-            },
-            5 => {
-                let num = reader.read_double()?;
-                let node = WzNode::new(name.clone(), WzObjectType::Value(WzValue::Double(num)), Some(parent));
-                childs.push((name, node.into_lock()));
-            },
-            8 => {
-                let str_meta = reader.read_wz_string_block_meta(origin_offset)?;
-                let node = WzNode::new(
-                    name.clone(),
-                    WzObjectType::Value(WzValue::String(WzString::from_meta(str_meta, org_reader))),
-                    Some(parent)
-                );
-                childs.push((name, node.into_lock()));
-            },
-            9 => {
-                let block_size = reader.read_u32()?;
-                let next_pos = reader.get_pos() + block_size as usize;
-
-                let node = parse_extended_prop(&parent, org_reader, reader, next_pos, origin_offset, name)?;
-
-                childs.push(node);
-
-                reader.seek(next_pos);
-                
-            },
-            _ => {
-                return Err(WzPropertyParseError::UnknownPropertyType(property_type, reader.get_pos()));
             }
+        },
+        5 => {
+            let num = reader.read_double()?;
+            let node = WzNode::new(name.clone(), WzObjectType::Value(WzValue::Double(num)), Some(parent));
+            result = (name, node.into_lock());
+        },
+        8 => {
+            let str_meta = reader.read_wz_string_block_meta(origin_offset)?;
+            let node = WzNode::new(
+                name.clone(),
+                WzObjectType::Value(WzValue::String(WzString::from_meta(str_meta, org_reader))),
+                Some(parent)
+            );
+            result = (name, node.into_lock());
+        },
+        9 => {
+            let block_size = reader.read_u32()?;
+            let next_pos = reader.get_pos() + block_size as usize;
+
+            let node = parse_extended_prop(&parent, org_reader, reader, next_pos, origin_offset, name)?;
+
+            result = node;
+
+            reader.seek(next_pos);
+        },
+        _ => {
+            return Err(WzPropertyParseError::UnknownPropertyType(property_type, reader.get_pos()));
         }
     }
-    Ok(childs)
+    Ok(result)
 }
 
 pub fn parse_extended_prop(parent: &WzNodeArc, org_reader: &Arc<WzReader>, reader: &WzSliceReader, end_of_block: usize, origin_offset: usize, property_name: String) -> Result<(String, WzNodeArc), WzPropertyParseError> {
@@ -131,7 +138,8 @@ pub fn parse_more(parent: &WzNodeArc, org_reader: &Arc<WzReader>, reader: &WzSli
                 Some(parent)
             ).into_lock();
 
-            let childs = parse_property_list(&node, org_reader, reader, reader.get_pos() + 2, origin_offset)?;
+            reader.skip(2);
+            let childs = parse_property_list(&node, org_reader, reader, origin_offset)?;
             
             {
                 let mut node_write = node.write().unwrap();
@@ -154,7 +162,7 @@ pub fn parse_more(parent: &WzNodeArc, org_reader: &Arc<WzReader>, reader: &WzSli
 
             if has_child {
                 reader.skip(2);
-                let childs = parse_property_list(&node, org_reader, reader, reader.get_pos(), origin_offset)?;
+                let childs = parse_property_list(&node, org_reader, reader, origin_offset)?;
                 let mut node_write = node.write().unwrap();
                 for (name, child) in childs {
                     node_write.children.insert(name, child);
@@ -209,7 +217,7 @@ pub fn parse_more(parent: &WzNodeArc, org_reader: &Arc<WzReader>, reader: &WzSli
         },
         "Sound_DX8" => {
             reader.skip(1);
-            let sound_start_offset = reader.get_pos();
+            let _sound_start_offset = reader.get_pos();
             let sound_size = reader.read_wz_int()? as u32;
             let sound_duration = reader.read_wz_int()? as u32;
             let sound_offset = end_of_block - (sound_size as usize);
@@ -257,4 +265,60 @@ pub fn parse_more(parent: &WzNodeArc, org_reader: &Arc<WzReader>, reader: &WzSli
             Err(WzPropertyParseError::UnknownExtendedPropertyType(extend_property_type.clone(), reader.get_pos()))
         }
     }
+}
+
+pub fn get_extend_property_type_name(reader: &WzSliceReader, origin_offset: usize) -> Result<String, WzPropertyParseError> {
+    let extended_type = reader.read_u8()?;
+    match extended_type {
+        0x01 | crate::wz_image::WZ_IMAGE_HEADER_BYTE_WITH_OFFSET => {
+            let name_offset = reader.read_i32()? as usize;
+            reader.read_wz_string_at_offset(name_offset + origin_offset).map_err(WzPropertyParseError::from)
+        },
+        0x00 | crate::wz_image::WZ_IMAGE_HEADER_BYTE_WITHOUT_OFFSET => {
+            return reader.read_wz_string().map_err(WzPropertyParseError::from)
+        },
+        _ => {
+            Err(WzPropertyParseError::UnknownExtendedHeaderType(extended_type, reader.get_pos()))
+        }
+    }
+}
+
+pub fn get_node(path: &str, parent: &WzNodeArc, org_reader: &Arc<WzReader>, reader: &WzSliceReader, origin_offset: usize) -> Result<(String, WzNodeArc), WzPropertyParseError> {
+    if path.is_empty() {
+        return Err(WzPropertyParseError::NodeNotFound);
+    }
+
+    let mut pathes = path.split("/");
+    let mut current_path = pathes.next();
+
+    while let Some(current_name) = current_path {
+        let entry_count = reader.read_wz_int()?;
+        let next_path = pathes.next();
+        for _ in 0..entry_count {
+            let name = reader.read_wz_string_block(origin_offset)?;
+            let property_type = reader.read_u8()?;
+            
+            if &name == current_name && next_path.is_none() {
+                return parse_property_node(name, property_type, parent, org_reader, reader, origin_offset);
+            }
+
+            if property_type == 9 {
+                if &name == current_name {
+                    current_path = next_path;
+                    // skip block size
+                    reader.skip(4);
+                    get_extend_property_type_name(reader, origin_offset)?;
+                    reader.skip(2);
+                    break;
+                } else {
+                    let block_size = reader.read_u32()?;
+                    reader.skip(block_size as usize);
+                }
+            } else {
+                parse_property_node(name, property_type, parent, org_reader, reader, origin_offset)?;
+            }
+        }
+    }
+
+    Err(WzPropertyParseError::NodeNotFound)
 }
