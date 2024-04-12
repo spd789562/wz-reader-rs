@@ -1,6 +1,6 @@
 use std::path::Path;
 use std::sync::{Arc, Weak, RwLock};
-use std::collections::HashMap;
+use hashbrown::HashMap;
 use crate::property::WzValue;
 use crate::{ version, WzDirectoryParseError, WzFile, WzFileParseError, WzImage, WzImageParseError, WzObjectType};
 use thiserror::Error;
