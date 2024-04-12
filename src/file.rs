@@ -127,7 +127,7 @@ impl WzFile {
         Ok(childs)
     }
 
-    pub fn try_decode_with_wz_version_number(
+    fn try_decode_with_wz_version_number(
         &self,
         parent: &WzNodeArc,
         reader: &WzSliceReader,

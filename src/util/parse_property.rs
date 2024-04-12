@@ -112,7 +112,6 @@ pub fn parse_extended_prop(parent: &WzNodeArc, org_reader: &Arc<WzReader>, reade
             parse_more(parent, org_reader, reader, end_of_block, origin_offset, property_name, reader.read_wz_string_at_offset(name_offset + origin_offset)?)
         },
         0x00 | crate::wz_image::WZ_IMAGE_HEADER_BYTE_WITHOUT_OFFSET => {
-            let _name = String::from("");
             parse_more(parent, org_reader, reader, end_of_block, origin_offset, property_name, String::from(""))
         },
         _ => {
@@ -317,6 +316,10 @@ pub fn get_node(path: &str, parent: &WzNodeArc, org_reader: &Arc<WzReader>, read
             } else {
                 parse_property_node(name, property_type, parent, org_reader, reader, origin_offset)?;
             }
+        }
+
+        if next_path.is_none() {
+            break;
         }
     }
 

@@ -158,7 +158,7 @@ impl WzNode {
             None
         }
     }
-    pub fn at_path_parsed(&mut self, path: &str) -> Result<WzNodeArc, NodeParseError> {
+    pub fn at_path_parsed(&self, path: &str) -> Result<WzNodeArc, NodeParseError> {
         let mut pathes = path.split("/");
         
         let first = self.at(pathes.next().unwrap());
