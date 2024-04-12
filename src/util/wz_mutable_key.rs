@@ -105,3 +105,54 @@ impl WzMutableKey {
     }
 }
 
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_expand_key() {
+        let mut key = WzMutableKey::new_lua();
+
+        assert!(key.ensure_key_size(16).is_ok());
+        assert_eq!(key.keys.len(), 4096);
+
+        assert!(key.ensure_key_size(4200).is_ok());
+        assert_eq!(key.keys.len(), 4096 * 2);
+
+        assert!(key.ensure_key_size(4096 * 4 + 5).is_ok());
+        assert_eq!(key.keys.len(), 4096 * 5);
+    }
+
+    #[test]
+    fn test_force_at() {
+        let mut key = WzMutableKey::new_lua();
+
+        let _ = key.at(1);
+
+        assert_eq!(key.keys.len(), 4096);
+
+        let _ = key.at(4000);
+
+        assert_eq!(key.keys.len(), 4096);
+
+        let _ = key.at(4097);
+
+        assert_eq!(key.keys.len(), 4096 * 2);
+    }
+
+    #[test]
+    fn test_at() {
+        let mut key = WzMutableKey::new_lua();
+
+        assert!(key.try_at(1).is_none());
+        assert!(key.try_at(100).is_none());
+        assert!(key.try_at(10000).is_none());
+        
+        assert!(key.ensure_key_size(10000).is_ok());
+
+        assert!(key.try_at(1).is_some());
+        assert!(key.try_at(100).is_some());
+        assert!(key.try_at(10000).is_some());
+        assert!(key.try_at(20000).is_none());
+    }
+}
