@@ -1,7 +1,6 @@
 use std::io;
 use std::fs::DirEntry;
 use std::path::Path;
-use std::sync::Arc;
 use crate::{WzNode, WzNodeArc, WzObjectType, version::WzMapleVersion};
 
 pub fn get_root_wz_file_path(dir: &DirEntry) -> Option<String> {

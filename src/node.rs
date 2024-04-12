@@ -45,7 +45,7 @@ impl WzNode {
         Self {
             name,
             object_type,
-            parent: parent.map(Arc::downgrade).unwrap_or(Weak::new()),
+            parent: parent.map(Arc::downgrade).unwrap_or_default(),
             children: HashMap::new(),
         }
     }
@@ -53,21 +53,21 @@ impl WzNode {
         let name = Path::new(path).file_stem().unwrap().to_str().unwrap().to_string();
         let version = version.unwrap_or(version::WzMapleVersion::EMS);
         let wz_file = WzFile::from_file(path, version::get_iv_by_maple_version(version), patch_version)?;
-        return Ok(WzNode::new(
+        Ok(WzNode::new(
             name, 
             WzObjectType::File(Box::new(wz_file)), 
             parent
-        ));
+        ))
     }
     pub fn from_img_file(path: &str, version: Option<version::WzMapleVersion>, parent: Option<&WzNodeArc>) -> Result<Self, NodeParseError> {
         let name = Path::new(path).file_stem().unwrap().to_str().unwrap().to_string();
         let version = version.unwrap_or(version::WzMapleVersion::EMS);
         let wz_image = WzImage::from_file(path, version::get_iv_by_maple_version(version))?;
-        return Ok(WzNode::new(
+        Ok(WzNode::new(
             name, 
             WzObjectType::Image(Box::new(wz_image)), 
             parent
-        ));
+        ))
     }
 
     pub fn into_lock(self) -> WzNodeArc {
@@ -75,29 +75,27 @@ impl WzNode {
     }
 
     pub fn parse(&mut self, parent: &WzNodeArc) -> Result<(), NodeParseError> {
-        let childs: WzNodeArcVec;
-
-        match self.object_type {
+        let childs: WzNodeArcVec = match self.object_type {
             WzObjectType::Directory(ref mut directory) => {
                 if directory.is_parsed {
                     return Ok(());
                 }
-                childs = directory.resolve_children(parent)?;
+                directory.resolve_children(parent)?
             },
             WzObjectType::File(ref mut file) => {
                 if file.is_parsed {
                     return Ok(());
                 }
-                childs = file.parse(parent, None)?;
+                file.parse(parent, None)?
             },
             WzObjectType::Image(ref mut image) => {
                 if image.is_parsed {
                     return Ok(());
                 }
-                childs = image.resolve_children(parent)?;
+                image.resolve_children(parent)?
             },
             _ => return Ok(()),
-        }
+        };
         
         for (name, child) in childs {
             self.children.insert(name, child);
@@ -127,14 +125,10 @@ impl WzNode {
     pub fn get_full_path(&self) -> String {
         let mut path = self.name.clone();
         let mut parent = self.parent.upgrade();
-        loop {
-            if let Some(parent_inner) = parent {
-                let read = parent_inner.read().unwrap();
-                path = format!("{}/{}", read.name, path);
-                parent = read.parent.upgrade();
-            } else {
-                break;
-            }
+        while let Some(parent_inner) = parent {
+            let read = parent_inner.read().unwrap();
+            path = format!("{}/{}", read.name, path);
+            parent = read.parent.upgrade();
         }
         path
     }
@@ -150,7 +144,7 @@ impl WzNode {
         }
     }
     pub fn at_path(&self, path: &str) -> Option<WzNodeArc> {
-        let mut pathes = path.split("/");
+        let mut pathes = path.split('/');
         let first = self.at(pathes.next().unwrap());
         if let Some(first) = first {
             pathes.try_fold(first, |node, name| node.read().unwrap().at(name))
@@ -159,7 +153,7 @@ impl WzNode {
         }
     }
     pub fn at_path_parsed(&self, path: &str) -> Result<WzNodeArc, NodeParseError> {
-        let mut pathes = path.split("/");
+        let mut pathes = path.split('/');
         
         let first = self.at(pathes.next().unwrap());
         if let Some(first) = first {
@@ -173,7 +167,7 @@ impl WzNode {
         }
     }
     pub fn at_path_relative(&self, path: &str) -> Option<WzNodeArc> {
-        let mut pathes = path.split("/");
+        let mut pathes = path.split('/');
         let first = self.at_relative(pathes.next().unwrap());
         if let Some(first) = first {
             pathes.try_fold(first, |node, name| node.read().unwrap().at_relative(name))

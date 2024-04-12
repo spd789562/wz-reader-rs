@@ -91,7 +91,7 @@ pub fn parse_property_node(name: String, property_type: u8, parent: &WzNodeArc, 
             let block_size = reader.read_u32()?;
             let next_pos = reader.get_pos() + block_size as usize;
 
-            let node = parse_extended_prop(&parent, org_reader, reader, next_pos, origin_offset, name)?;
+            let node = parse_extended_prop(parent, org_reader, reader, next_pos, origin_offset, name)?;
 
             result = node;
 
@@ -274,7 +274,7 @@ pub fn get_extend_property_type_name(reader: &WzSliceReader, origin_offset: usiz
             reader.read_wz_string_at_offset(name_offset + origin_offset).map_err(WzPropertyParseError::from)
         },
         0x00 | crate::wz_image::WZ_IMAGE_HEADER_BYTE_WITHOUT_OFFSET => {
-            return reader.read_wz_string().map_err(WzPropertyParseError::from)
+            reader.read_wz_string().map_err(WzPropertyParseError::from)
         },
         _ => {
             Err(WzPropertyParseError::UnknownExtendedHeaderType(extended_type, reader.get_pos()))
@@ -287,7 +287,7 @@ pub fn get_node(path: &str, parent: &WzNodeArc, org_reader: &Arc<WzReader>, read
         return Err(WzPropertyParseError::NodeNotFound);
     }
 
-    let mut pathes = path.split("/");
+    let mut pathes = path.split('/');
     let mut current_path = pathes.next();
 
     while let Some(current_name) = current_path {
@@ -297,12 +297,12 @@ pub fn get_node(path: &str, parent: &WzNodeArc, org_reader: &Arc<WzReader>, read
             let name = reader.read_wz_string_block(origin_offset)?;
             let property_type = reader.read_u8()?;
             
-            if &name == current_name && next_path.is_none() {
+            if name == current_name && next_path.is_none() {
                 return parse_property_node(name, property_type, parent, org_reader, reader, origin_offset);
             }
 
             if property_type == 9 {
-                if &name == current_name {
+                if name == current_name {
                     current_path = next_path;
                     // skip block size
                     reader.skip(4);

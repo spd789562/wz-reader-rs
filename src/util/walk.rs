@@ -3,10 +3,10 @@ use crate::{WzNodeArc, WzObjectType};
 
 pub fn walk_node(node: &WzNodeArc, force_parse: bool, f: &dyn Fn(&WzNodeArc)) {
     if force_parse {
-        node.write().unwrap().parse(&node).unwrap();
+        node.write().unwrap().parse(node).unwrap();
     }
 
-    f(&node);
+    f(node);
 
     for child in node.read().unwrap().children.values() {
         walk_node(child, force_parse, f);

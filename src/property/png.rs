@@ -51,7 +51,7 @@ pub fn get_image(node: &WzNodeArc) -> Result<DynamicImage, WzPngParseError> {
             png.extract_png()
         },
         _ => {
-            return Err(WzPngParseError::NotPngProperty);
+            Err(WzPngParseError::NotPngProperty)
         }
     }
 }
@@ -217,7 +217,7 @@ fn get_image_from_dxt3(raw_data: &[u8], width: u32, height: u32) -> Result<Dynam
             v.push(img_buffer);
             Ok(v)
         })
-        .try_reduce(|| Vec::new(), |mut acc, v| {
+        .try_reduce(Vec::new, |mut acc, v| {
             acc.extend(v);
             Ok(acc)
         })?;
@@ -225,7 +225,7 @@ fn get_image_from_dxt3(raw_data: &[u8], width: u32, height: u32) -> Result<Dynam
     // combine image buffer
     let grid_row_count = width / 4;
     let img_buffer = image::ImageBuffer::from_par_fn(width, height, |x, y| {
-        image_buffer_chunks[((x / 4 + y / 4 * grid_row_count)) as usize].get_pixel(x % 4, y % 4).clone()
+        *image_buffer_chunks[(x / 4 + y / 4 * grid_row_count) as usize].get_pixel(x % 4, y % 4)
     });
 
     Ok(img_buffer.into())
@@ -259,14 +259,14 @@ fn get_image_from_dxt5(raw_data: &[u8], width: u32, height: u32) -> Result<Dynam
             v.push(img_buffer);
             Ok(v)
         })
-        .try_reduce(|| Vec::new(), |mut acc, v| {
+        .try_reduce(Vec::new, |mut acc, v| {
             acc.extend(v);
             Ok(acc)
         })?;
 
     let grid_row_count = width / 4;
     let img_buffer = image::ImageBuffer::from_par_fn(width, height, |x, y| {
-        image_buffer_chunks[(x / 4 + y / 4 * grid_row_count) as usize].get_pixel(x % 4, y % 4).clone()
+        *image_buffer_chunks[(x / 4 + y / 4 * grid_row_count) as usize].get_pixel(x % 4, y % 4)
     });
 
     Ok(img_buffer.into())

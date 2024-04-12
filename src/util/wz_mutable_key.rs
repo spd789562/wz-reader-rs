@@ -65,7 +65,7 @@ impl WzMutableKey {
         }
 
         // initialize the first block
-        if self.keys.len() == 0 {
+        if self.keys.is_empty() {
             self.keys.resize(32, 0);
 
             let mut block = [0_u8; 16];
