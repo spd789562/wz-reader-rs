@@ -1,3 +1,4 @@
 /target
 *.wz
 .vscode
+!tests/*.wz
