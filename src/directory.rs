@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use crate::{ Reader, WzImage, WzNode, WzNodeArc, WzObjectType, WzReader };
+use crate::{ WzImage, WzNode, WzNodeArc, WzObjectType, WzReader };
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -89,7 +89,7 @@ impl WzDirectory {
                 WzDirectoryType::RetrieveStringFromOffset => {
                     let str_offset = reader.read_i32()?;
                     
-                    let pos = reader.get_pos();
+                    let pos = reader.pos.get();
     
                     let offset = reader.header.fstart + str_offset as usize;
     
@@ -106,7 +106,7 @@ impl WzDirectory {
                 }
                 WzDirectoryType::NewUnknownType => {
                     println!("NewUnknownType: {}", dir_byte);
-                    return Err(WzDirectoryParseError::UnknownWzDirectoryType(dir_byte, reader.get_pos()))
+                    return Err(WzDirectoryParseError::UnknownWzDirectoryType(dir_byte, reader.pos.get()))
                 }
             }
             

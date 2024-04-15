@@ -24,70 +24,8 @@ pub struct WzSliceReader<'a> {
 
 static WZ_OFFSET: i32 = 0x581C3F6D;
 
-pub trait Reader<'a> {
+pub trait Reader {
     fn get_size(&self) -> usize;
-    fn get_pos(&self) -> usize;
-    fn set_pos(&self, pos: usize);
-    fn get_save_pos(&self) -> usize;
-    fn set_save_pos(&self, pos: usize);
-    fn is_valid_pos(&self, pos: usize) -> bool {
-        pos <= self.get_size()
-    }
-    fn available(&self) -> usize {
-        self.get_size() - self.get_pos()
-    }
-    fn seek(&self, pos: usize) {
-        self.set_pos(pos);
-    }
-    fn skip(&self, len: usize) {
-        self.set_pos(self.get_pos() + len);
-    }
-    fn save_pos(&self) {
-        self.set_save_pos(self.get_pos());
-    }
-    fn restore_pos(&self) {
-        self.set_pos(self.get_save_pos());
-    }
-    fn read_u8(&self) -> Result<u8, scroll::Error> {
-        self.set_pos(self.get_pos() + 1);
-        self.read_u8_at(self.get_pos() - 1)
-    }
-    fn read_u16(&self) -> Result<u16, scroll::Error> {
-        self.set_pos(self.get_pos() + 2);
-        self.read_u16_at(self.get_pos() - 2)
-    }
-    fn read_u32(&self) -> Result<u32, scroll::Error> {
-        self.set_pos(self.get_pos() + 4);
-        self.read_u32_at(self.get_pos() - 4)
-    }
-    fn read_u64(&self) -> Result<u64, scroll::Error> {
-        self.set_pos(self.get_pos() + 8);
-        self.read_u64_at(self.get_pos() - 8)
-    }
-    fn read_i8(&self) -> Result<i8, scroll::Error> {
-        self.set_pos(self.get_pos() + 1);
-        self.read_i8_at(self.get_pos() - 1)
-    }
-    fn read_i16(&self) -> Result<i16, scroll::Error> {
-        self.set_pos(self.get_pos() + 2);
-        self.read_i16_at(self.get_pos() - 2)
-    }
-    fn read_i32(&self) -> Result<i32, scroll::Error> {
-        self.set_pos(self.get_pos() + 4);
-        self.read_i32_at(self.get_pos() - 4)
-    }
-    fn read_i64(&self) -> Result<i64, scroll::Error> {
-        self.set_pos(self.get_pos() + 8);
-        self.read_i64_at(self.get_pos() - 8)
-    }
-    fn read_float(&self) -> Result<f32, scroll::Error> {
-        self.set_pos(self.get_pos() + 4);
-        self.read_float_at(self.get_pos() - 4)
-    }
-    fn read_double(&self) -> Result<f64, scroll::Error> {
-        self.set_pos(self.get_pos() + 8);
-        self.read_double_at(self.get_pos() - 8)
-    }
     fn read_u8_at(&self, pos: usize) -> Result<u8, scroll::Error>;
     fn read_u16_at(&self, pos: usize) -> Result<u16, scroll::Error>;
     fn read_u32_at(&self, pos: usize) -> Result<u32, scroll::Error>;
@@ -99,121 +37,11 @@ pub trait Reader<'a> {
     fn read_float_at(&self, pos: usize) -> Result<f32, scroll::Error>;
     fn read_double_at(&self, pos: usize) -> Result<f64, scroll::Error>;
 
-    fn read_string_by_len(&self, len: usize) -> String {
-        let strvec: Vec<u8> = (0..len).map(|_| self.read_u8().unwrap()).collect();
-
-        String::from_utf8_lossy(&strvec).to_string()
-    }
     fn get_wz_string_type(&self, t: i8) -> WzStringType {
         match t {
             0 => WzStringType::Empty,
             t if t > 0 => WzStringType::Unicode,
             _ => WzStringType::Ascii
-        }
-    }
-    fn read_wz_string_meta_at(&self, offset: usize) -> Result<WzStringMeta, scroll::Error> {
-        self.save_pos();
-
-        self.set_pos(offset);
-        let meta = self.read_wz_string_meta();
-        
-        self.restore_pos();
-        meta
-    }
-    fn read_wz_string_meta(&self) -> Result<WzStringMeta, scroll::Error> {
-        let small_len = self.read_i8()?;
-
-        let string_type = self.get_wz_string_type(small_len);
-
-        match string_type {
-            WzStringType::Empty => {
-                Ok(WzStringMeta::empty())
-            },
-            WzStringType::Unicode => {
-                if small_len == i8::MAX {
-                    let length = self.read_i32()? as u32 * 2;
-                    /* remember skip char reading */
-                    let meta = WzStringMeta::new_unicode(self.get_pos(), length);
-                    self.skip(length as usize);
-                    Ok(meta)
-                } else {
-                    let length = small_len as u32 * 2;
-                    let meta = WzStringMeta::new_unicode(self.get_pos(), length);
-                    self.skip(length as usize);
-                    Ok(meta)
-                }
-            },
-            WzStringType::Ascii => {
-                if small_len == i8::MIN {
-                    let length = self.read_i32()?;
-                    let meta = WzStringMeta::new_ascii(self.get_pos(), length as u32);
-                    self.skip(length as usize);
-                    Ok(meta)
-                } else {
-                    let length = (-small_len) as u32;
-                    let meta = WzStringMeta::new_ascii(self.get_pos(), length);
-                    self.skip(length as usize);
-                    Ok(meta)
-                }
-            }
-        }
-    }
-
-    fn read_wz_string(&self) -> Result<String, scroll::Error> {
-
-        let small_len = self.read_i8()?;
-
-        match self.get_wz_string_type(small_len) {
-            WzStringType::Empty => {
-                Ok(String::new())
-            },
-            WzStringType::Unicode => {
-                self.read_unicode_string(small_len)
-            },
-            WzStringType::Ascii => {
-                self.read_ascii_string(small_len)
-            }
-        }
-    }
-    fn read_wz_string_at_offset(&self, offset: usize) -> Result<String, scroll::Error> {
-        self.save_pos();
-
-        self.set_pos(offset);
-        let string = self.read_wz_string();
-
-        self.restore_pos();
-        string
-    }
-    fn read_wz_string_block(&self, offset: usize) -> Result<String, scroll::Error> {
-        let string_type = self.read_u8()?;
-
-        match string_type {
-            0 | 0x73 => {
-                self.read_wz_string()
-            },
-            1 | 0x1B => {
-                let append_offset = self.read_i32()?;
-                self.read_wz_string_at_offset(offset + append_offset as usize)
-            },
-            _ => {
-                Ok(String::new())
-            }
-        }
-    }
-    fn read_wz_string_block_meta(&self, wz_img_offset: usize) -> Result<WzStringMeta, scroll::Error> {
-        let string_type = self.read_u8()?;
-        
-        match string_type {
-            0 | 0x73 => {
-                self.read_wz_string_meta()
-            },
-            1 | 0x1B => {
-                let append_offset = self.read_i32().unwrap();
-                self.read_wz_string_meta_at(wz_img_offset + append_offset as usize)
-            },
-            _ => {
-                Ok(WzStringMeta::empty())
-            }
         }
     }
     fn resolve_wz_string_meta(&self, meta_type: &WzStringType, offset: usize, length: usize) -> Result<String, scroll::Error> {
@@ -227,7 +55,7 @@ pub trait Reader<'a> {
                 let strvec: Vec<u16> = (0..len)
                     .map(|i| {
                         let c = self.read_u16_at(offset + i * 2).unwrap() as i32;
-                        (c ^ (mask+ i  as i32)) as u16
+                        (c ^ (mask + i  as i32)) as u16
                     })
                     .collect();
 
@@ -246,30 +74,6 @@ pub trait Reader<'a> {
             }
         }
     }
-    
-    fn read_wz_int(&self) -> Result<i32, scroll::Error> {
-        let small_len = self.read_i8()?;
-        
-        if small_len == i8::MIN {
-            return self.read_i32();
-        }
-
-        Ok(small_len as i32)
-    }
-    fn read_wz_int64(&self) -> Result<i64, scroll::Error> {
-        let small_len = self.read_i8()?;
-        
-        if small_len == i8::MIN {
-            return self.read_i64();
-        }
-
-        Ok(small_len as i64)
-    }
-    fn read_wz_long(&self) -> Result<i64, scroll::Error> {
-        self.read_wz_int64()
-    }
-
-    fn read_wz_offset(&self, offset: Option<usize>) -> Result<usize, scroll::Error>;
 
     fn read_unicode_str_len_at(&self, pos: usize, sl: i8) -> i32 {
         if sl == i8::MAX {
@@ -278,30 +82,6 @@ pub trait Reader<'a> {
             sl as i32
         }
     }
-    fn read_unicode_str_len(&self, sl: i8) -> i32 {
-        if sl == i8::MAX {
-            self.read_i32().unwrap()
-        } else {
-            sl as i32
-        }
-    }
-    fn read_unicode_string(&self, sl: i8) -> Result<String, scroll::Error> {
-        let mask: i32 = 0xAAAA;
-        let len = self.read_unicode_str_len(sl);
-
-        if len == 0 {
-            return Ok(String::new());
-        }
-
-        let strvec: Vec<u16> = (0..len)
-            .map(|i| {
-                let c = self.read_u16().unwrap() as i32;
-                (c ^ (mask + i)) as u16
-            })
-            .collect();
-
-        Ok(String::from_utf16_lossy(&strvec))
-    }
 
     fn read_ascii_str_len_at(&self, pos: usize, sl: i8) -> i32 {
         if sl == i8::MIN {
@@ -309,29 +89,6 @@ pub trait Reader<'a> {
         } else {
             (-sl).into()
         }
-    }
-    fn read_ascii_str_len(&self, sl: i8) -> i32 {
-        if sl == i8::MIN {
-            self.read_i32().unwrap()
-        } else {
-            (-sl).into()
-        }
-    }
-    fn read_ascii_string(&self, sl: i8) -> Result<String, scroll::Error> {
-        let mask = 0xAA;
-        let len: i32 = self.read_ascii_str_len(sl);
-        if len == 0 {
-            return Ok(String::new());
-        }
-
-        let strvec: Vec<u8> = (0..len)
-            .map(|i| {
-                let c = self.read_u8().unwrap() as i32;
-                (c ^ (mask + i)) as u8
-            })
-            .collect();
-
-        Ok(String::from_utf8_lossy(&strvec).to_string())
     }
 }
 
@@ -401,11 +158,266 @@ impl<'a> WzSliceReader<'a> {
         &self.buf[range]
     }
     pub fn get_slice_from_current(&self, len: usize) -> &[u8] {
-        &self.buf[self.get_pos()..self.get_pos() + len]
+        &self.buf[self.pos.get()..self.pos.get() + len]
+    }
+    pub fn is_valid_pos(&self, pos: usize) -> bool {
+        pos <= self.get_size()
+    }
+    pub fn available(&self) -> usize {
+        self.get_size() - self.pos.get()
+    }
+    pub fn seek(&self, pos: usize) {
+        self.pos.set(pos);
+    }
+    pub fn skip(&self, len: usize) {
+        self.pos.set(self.pos.get() + len);
+    }
+    pub fn save_pos(&self) {
+        self._save_pos.set(self.pos.get());
+    }
+    pub fn restore_pos(&self) {
+        self.pos.set(self._save_pos.get());
+    }
+    pub fn read_u8(&self) -> Result<u8, scroll::Error> {
+        let res = self.read_u8_at(self.pos.get());
+        self.pos.set(self.pos.get() + 1);
+        res
+    }
+    pub fn read_u16(&self) -> Result<u16, scroll::Error> {
+        let res = self.read_u16_at(self.pos.get());
+        self.pos.set(self.pos.get() + 2);
+        res
+    }
+    pub fn read_u32(&self) -> Result<u32, scroll::Error> {
+        let res = self.read_u32_at(self.pos.get());
+        self.pos.set(self.pos.get() + 4);
+        res
+    }
+    pub fn read_u64(&self) -> Result<u64, scroll::Error> {
+        let res = self.read_u64_at(self.pos.get());
+        self.pos.set(self.pos.get() + 8);
+        res
+    }
+    pub fn read_i8(&self) -> Result<i8, scroll::Error> {
+        let res = self.read_i8_at(self.pos.get());
+        self.pos.set(self.pos.get() + 1);
+        res
+    }
+    pub fn read_i16(&self) -> Result<i16, scroll::Error> {
+        let res = self.read_i16_at(self.pos.get());
+        self.pos.set(self.pos.get() + 2);
+        res
+    }
+    pub fn read_i32(&self) -> Result<i32, scroll::Error> {
+        let res = self.read_i32_at(self.pos.get());
+        self.pos.set(self.pos.get() + 4);
+        res
+    }
+    pub fn read_i64(&self) -> Result<i64, scroll::Error> {
+        let res = self.read_i64_at(self.pos.get());
+        self.pos.set(self.pos.get() + 8);
+        res
+    }
+    pub fn read_float(&self) -> Result<f32, scroll::Error> {
+        let res = self.read_float_at(self.pos.get());
+        self.pos.set(self.pos.get() + 4);
+        res
+    }
+    pub fn read_double(&self) -> Result<f64, scroll::Error> {
+        let res = self.read_double_at(self.pos.get());
+        self.pos.set(self.pos.get() + 8);
+        res
+    }
+    
+    pub fn read_unicode_str_len(&self, sl: i8) -> i32 {
+        if sl == i8::MAX {
+            self.read_i32().unwrap()
+        } else {
+            sl as i32
+        }
+    }
+    pub fn read_unicode_string(&self, sl: i8) -> Result<String, scroll::Error> {
+        let mask: i32 = 0xAAAA;
+        let len = self.read_unicode_str_len(sl);
+
+        if len == 0 {
+            return Ok(String::new());
+        }
+
+        let strvec: Vec<u16> = (0..len)
+            .map(|i| {
+                let c = self.read_u16().unwrap() as i32;
+                (c ^ (mask + i)) as u16
+            })
+            .collect();
+
+        Ok(String::from_utf16_lossy(&strvec))
+    }
+
+    pub fn read_ascii_str_len(&self, sl: i8) -> i32 {
+        if sl == i8::MIN {
+            self.read_i32().unwrap()
+        } else {
+            (-sl).into()
+        }
+    }
+    pub fn read_ascii_string(&self, sl: i8) -> Result<String, scroll::Error> {
+        let mask = 0xAA;
+        let len: i32 = self.read_ascii_str_len(sl);
+        if len == 0 {
+            return Ok(String::new());
+        }
+
+        let strvec: Vec<u8> = (0..len)
+            .map(|i| {
+                let c = self.read_u8().unwrap() as i32;
+                (c ^ (mask + i)) as u8
+            })
+            .collect();
+
+        Ok(String::from_utf8_lossy(&strvec).to_string())
+    }
+    
+    pub fn read_wz_string_meta_at(&self, offset: usize) -> Result<WzStringMeta, scroll::Error> {
+        self.save_pos();
+
+        self.pos.set(offset);
+        let meta = self.read_wz_string_meta();
+        
+        self.restore_pos();
+        meta
+    }
+    pub fn read_wz_string_meta(&self) -> Result<WzStringMeta, scroll::Error> {
+        let small_len = self.read_i8()?;
+
+        let string_type = self.get_wz_string_type(small_len);
+
+        match string_type {
+            WzStringType::Empty => {
+                Ok(WzStringMeta::empty())
+            },
+            WzStringType::Unicode => {
+                if small_len == i8::MAX {
+                    let length = self.read_i32()? as u32 * 2;
+                    /* remember skip char reading */
+                    let meta = WzStringMeta::new_unicode(self.pos.get(), length);
+                    self.skip(length as usize);
+                    Ok(meta)
+                } else {
+                    let length = small_len as u32 * 2;
+                    let meta = WzStringMeta::new_unicode(self.pos.get(), length);
+                    self.skip(length as usize);
+                    Ok(meta)
+                }
+            },
+            WzStringType::Ascii => {
+                if small_len == i8::MIN {
+                    let length = self.read_i32()?;
+                    let meta = WzStringMeta::new_ascii(self.pos.get(), length as u32);
+                    self.skip(length as usize);
+                    Ok(meta)
+                } else {
+                    let length = (-small_len) as u32;
+                    let meta = WzStringMeta::new_ascii(self.pos.get(), length);
+                    self.skip(length as usize);
+                    Ok(meta)
+                }
+            }
+        }
+    }
+
+    pub fn read_wz_string(&self) -> Result<String, scroll::Error> {
+
+        let small_len = self.read_i8()?;
+
+        match self.get_wz_string_type(small_len) {
+            WzStringType::Empty => Ok(String::new()),
+            WzStringType::Unicode => self.read_unicode_string(small_len),
+            WzStringType::Ascii => self.read_ascii_string(small_len)
+        }
+    }
+    pub fn read_wz_string_at_offset(&self, offset: usize) -> Result<String, scroll::Error> {
+        self.save_pos();
+
+        self.pos.set(offset);
+        let string = self.read_wz_string();
+
+        self.restore_pos();
+        string
+    }
+    pub fn read_wz_string_block(&self, offset: usize) -> Result<String, scroll::Error> {
+        let string_type = self.read_u8()?;
+
+        match string_type {
+            0 | 0x73 => {
+                self.read_wz_string()
+            },
+            1 | 0x1B => {
+                let append_offset = self.read_i32()?;
+                self.read_wz_string_at_offset(offset + append_offset as usize)
+            },
+            _ => {
+                Ok(String::new())
+            }
+        }
+    }
+    pub fn read_wz_string_block_meta(&self, wz_img_offset: usize) -> Result<WzStringMeta, scroll::Error> {
+        let string_type = self.read_u8()?;
+        
+        match string_type {
+            0 | 0x73 => {
+                self.read_wz_string_meta()
+            },
+            1 | 0x1B => {
+                let append_offset = self.read_i32().unwrap();
+                self.read_wz_string_meta_at(wz_img_offset + append_offset as usize)
+            },
+            _ => {
+                Ok(WzStringMeta::empty())
+            }
+        }
+    }
+    pub fn read_wz_int(&self) -> Result<i32, scroll::Error> {
+        let small_len = self.read_i8()?;
+        
+        if small_len == i8::MIN {
+            return self.read_i32();
+        }
+
+        Ok(small_len as i32)
+    }
+    pub fn read_wz_int64(&self) -> Result<i64, scroll::Error> {
+        let small_len = self.read_i8()?;
+        
+        if small_len == i8::MIN {
+            return self.read_i64();
+        }
+
+        Ok(small_len as i64)
+    }
+    pub fn read_wz_long(&self) -> Result<i64, scroll::Error> {
+        self.read_wz_int64()
+    }
+    pub fn read_wz_offset(&self, offset: Option<usize>) -> Result<usize, scroll::Error> {
+        // let offset: usize = self.pos.get();
+        let offset = offset.unwrap_or(self.pos.get());
+
+        let fstart = self.header.fstart;
+
+        let offset = (offset - fstart) ^ 0xFFFFFFFF;
+        let offset = (offset * self.hash) & 0xFFFFFFFF;
+        let offset = offset.overflowing_sub(WZ_OFFSET as usize).0;
+        let offset = (offset as i32).rotate_left((offset as u32) & 0x1F) as usize & 0xFFFFFFFF;
+        
+        let encrypted_offset = self.read_u32()? as usize;
+        let offset = (offset ^ encrypted_offset) & 0xFFFFFFFF;
+        let offset = (offset + fstart * 2) & 0xFFFFFFFF;
+    
+        Ok(offset)
     }
 }
 
-impl<'a> Reader<'a> for WzReader {
+impl<'a> Reader for WzReader {
     fn read_u8_at(&self, pos: usize) -> Result<u8, scroll::Error> {
         self.map.pread_with::<u8>(pos, LE)
     }
@@ -440,24 +452,12 @@ impl<'a> Reader<'a> for WzReader {
     fn get_size(&self) -> usize {
         self.map.len()
     }
-    fn get_pos(&self) -> usize {
-        0
-    }
-    fn set_pos(&self, _pos: usize) {
-        
-    }
-    fn get_save_pos(&self) -> usize {
-        0
-    }
-    fn set_save_pos(&self, _pos: usize) {
-        
-    }
-    fn read_wz_offset(&self, _offset: Option<usize>) -> Result<usize, scroll::Error> {
-        panic!("Don't use this on WzReader");
-    }
 }
 
-impl<'a> Reader<'a> for WzSliceReader<'a> {
+impl<'a> Reader for WzSliceReader<'a> {
+    fn get_size(&self) -> usize {
+        self.buf.len()
+    }
     fn read_u8_at(&self, pos: usize) -> Result<u8, scroll::Error> {
         self.buf.pread_with::<u8>(pos, LE)
     }
@@ -487,39 +487,6 @@ impl<'a> Reader<'a> for WzSliceReader<'a> {
     }
     fn read_double_at(&self, pos: usize) -> Result<f64, scroll::Error> {
         self.buf.pread_with::<f64>(pos, LE)
-    }
-
-    fn get_size(&self) -> usize {
-        self.buf.len()
-    }
-    fn get_pos(&self) -> usize {
-        self.pos.get()
-    }
-    fn set_pos(&self, pos: usize) {
-        self.pos.set(pos);
-    }
-    fn get_save_pos(&self) -> usize {
-        self._save_pos.get()
-    }
-    fn set_save_pos(&self, pos: usize) {
-        self._save_pos.set(pos);
-    }
-    fn read_wz_offset(&self, offset: Option<usize>) -> Result<usize, scroll::Error> {
-        // let offset: usize = self.get_pos();
-        let offset = offset.unwrap_or(self.get_pos());
-
-        let fstart = self.header.fstart;
-
-        let offset = (offset - fstart) ^ 0xFFFFFFFF;
-        let offset = (offset * self.hash) & 0xFFFFFFFF;
-        let offset = offset.overflowing_sub(WZ_OFFSET as usize).0;
-        let offset = (offset as i32).rotate_left((offset as u32) & 0x1F) as usize & 0xFFFFFFFF;
-        
-        let encrypted_offset = self.read_u32()? as usize;
-        let offset = (offset ^ encrypted_offset) & 0xFFFFFFFF;
-        let offset = (offset + fstart * 2) & 0xFFFFFFFF;
-    
-        Ok(offset)
     }
 }
 
@@ -675,4 +642,321 @@ pub fn read_ascii_string(buf: &[u8], sl: i8) -> Result<String, scroll::Error> {
         .collect();
 
     Ok(String::from_utf8_lossy(&strvec).to_string())
+}
+
+#[cfg(test)]
+mod test {
+    use std::fs::OpenOptions;
+    use tempfile;
+    use memmap2::MmapMut;
+    use super::*;
+
+    fn generate_ascii_string(len: i32) -> Vec<u8> {
+        let mut buf = Vec::new();
+        for i in 0..len {
+            buf.push(((0xAA + i) ^ 97) as u8);
+        }
+        buf
+    }
+    fn generate_unicode_string(len: i32) -> Vec<u8> {
+        let mut buf = Vec::new();
+        for i in 0..len {
+            let encrypt_str = ((0xAAAA + i) ^ 97) as u16;
+            buf.extend_from_slice(&encrypt_str.to_le_bytes());
+        }
+        buf
+    }
+
+    fn setup() -> Result<Mmap, std::io::Error> {
+        let dir = tempfile::tempdir()?;
+        let file_path = dir.path().join("test.wz");
+
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(file_path)?;
+
+        file.set_len(1024)?;
+
+        let mut map = unsafe { MmapMut::map_mut(&file)? };
+
+        let mock_wz_header = [
+            0x50, 0x4b, 0x47, 0x31, // PKG1
+            0x6c, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // fsize
+            0x3c, 0x00, 0x00, 0x00, // fstart
+            // copyright
+            0x50, 0x61, 0x63, 0x6b, 0x61, 0x67, 0x65, 0x20, 0x66, 0x69, 0x6c, 0x65, 0x20, 0x76, 0x31, 0x2e,
+            0x30, 0x20, 0x43, 0x6f, 0x70, 0x79, 0x72, 0x69, 0x67, 0x68, 0x74, 0x20, 0x32, 0x30, 0x30, 0x32,
+            0x20, 0x57, 0x69, 0x7a, 0x65, 0x74, 0x2c, 0x20, 0x5a, 0x4d, 0x53, 
+            // string end mark
+            0x00,
+        ];
+
+        let mock_data = [
+            // i8, i16, i32, i64
+            0x01, 0x02, 0x00, 0x03, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            // u8, u16, u32, u64
+            0x01, 0x02, 0x00, 0x03, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            // f32(1.1), f64(2.22)
+            0xcd, 0xcc, 0x8c, 0x3f, 0xc3, 0xf5, 0x28, 0x5c, 0x8f, 0xc2, 0x01, 0x40,
+            // wz_int without i32
+            0x01,
+            // wz_int with i32
+            0x80, 0x02, 0x00, 0x00, 0x00,
+            // wz_int64 without i64
+            0x01,
+            // wz_int64 with i64
+            0x80, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+        ];
+
+        let pos = 0;
+        let mut end = 60;
+
+        (&mut map[pos..end]).copy_from_slice(&mock_wz_header);
+        
+        let pos = end;
+        end += 58;
+        (&mut map[pos..end]).copy_from_slice(&mock_data);
+
+        
+        // empty string
+        let pos = end;
+        end += 1;
+        (&mut map[pos..end]).copy_from_slice(&[0x00]);
+
+        // len = 20 ascii
+        let pos = end;
+        end += 1;
+        (&mut map[pos..end]).copy_from_slice(&(-20_i8).to_le_bytes());
+        let pos = end;
+        end += 20;
+        (&mut map[pos..end]).copy_from_slice(&generate_ascii_string(20));
+
+        // len = 200 ascii
+        let pos = end;
+        end += 1;
+        (&mut map[pos..end]).copy_from_slice(&(i8::MIN).to_le_bytes());
+        let pos = end;
+        end += 4;
+        (&mut map[pos..end]).copy_from_slice(&200_i32.to_le_bytes());
+        let pos = end;
+        end += 200;
+        (&mut map[pos..end]).copy_from_slice(&generate_ascii_string(200));
+
+        // len = 20 unicode
+        let pos = end;
+        end += 1;
+        (&mut map[pos..end]).copy_from_slice(&(20_i8).to_le_bytes());
+        let pos = end;
+        end += 40;
+        (&mut map[pos..end]).copy_from_slice(&generate_unicode_string(20));
+
+        // len = 200 unicode
+        let pos = end;
+        end += 1;
+        (&mut map[pos..end]).copy_from_slice(&(i8::MAX).to_le_bytes());
+        let pos = end;
+        end += 4;
+        (&mut map[pos..end]).copy_from_slice(&200_i32.to_le_bytes());
+        let pos = end;
+        end += 400;
+        (&mut map[pos..end]).copy_from_slice(&generate_unicode_string(200));
+
+        Ok(map.make_read_only()?)
+    }
+
+    #[test]
+    fn test_wz_header() {
+        let reader = WzReader::new(setup().unwrap());
+
+        let wz_header = reader.create_header();
+        assert_eq!(wz_header.ident, "PKG1");
+        assert_eq!(wz_header.fsize, 364);
+        assert_eq!(wz_header.fstart, 60);
+        assert_eq!(wz_header.copyright, "Package file v1.0 Copyright");
+    }
+
+    #[test]
+    fn test_wz_signed() {
+        let reader = WzReader::new(setup().unwrap());
+        
+        assert_eq!(reader.read_i8_at(60).unwrap(), 1);
+        assert_eq!(reader.read_i16_at(61).unwrap(), 2);
+        assert_eq!(reader.read_i32_at(63).unwrap(), 3);
+        assert_eq!(reader.read_i64_at(67).unwrap(), 4);
+
+        let slice_reader = reader.create_slice_reader();
+
+        slice_reader.seek(60);
+
+
+        assert_eq!(slice_reader.read_i8().unwrap(), 1);
+        assert_eq!(slice_reader.read_i16().unwrap(), 2);
+        assert_eq!(slice_reader.read_i32().unwrap(), 3);
+        assert_eq!(slice_reader.read_i64().unwrap(), 4);
+    }
+
+    #[test]
+    fn test_wz_unsigned() {
+        let reader = WzReader::new(setup().unwrap());
+        
+        assert_eq!(reader.read_u8_at(75).unwrap(), 1);
+        assert_eq!(reader.read_u16_at(76).unwrap(), 2);
+        assert_eq!(reader.read_u32_at(78).unwrap(), 3);
+        assert_eq!(reader.read_u64_at(82).unwrap(), 4);
+
+        let slice_reader = reader.create_slice_reader();
+
+        slice_reader.seek(75);
+
+
+        assert_eq!(slice_reader.read_u8().unwrap(), 1);
+        assert_eq!(slice_reader.read_u16().unwrap(), 2);
+        assert_eq!(slice_reader.read_u32().unwrap(), 3);
+        assert_eq!(slice_reader.read_u64().unwrap(), 4);
+    }
+
+    #[test]
+    fn test_wz_float() {
+        let reader = WzReader::new(setup().unwrap());
+        
+        assert_eq!(reader.read_float_at(90).unwrap(), 1.1);
+        assert_eq!(reader.read_double_at(94).unwrap(), 2.22);
+
+        let slice_reader = reader.create_slice_reader();
+
+        slice_reader.seek(90);
+
+
+        assert_eq!(slice_reader.read_float().unwrap(), 1.1);
+        assert_eq!(slice_reader.read_double().unwrap(), 2.22);
+    }
+
+    #[test]
+    fn test_wz_int() {
+        let reader = WzReader::new(setup().unwrap());
+
+        let slice_reader = reader.create_slice_reader();
+
+        slice_reader.seek(102);
+
+        assert_eq!(slice_reader.read_wz_int().unwrap(), 1);
+        assert_eq!(slice_reader.read_wz_int().unwrap(), 2);
+    }
+
+    #[test]
+    fn test_wz_int64() {
+        let reader = WzReader::new(setup().unwrap());
+
+        let slice_reader = reader.create_slice_reader();
+
+        slice_reader.seek(108);
+
+        assert_eq!(slice_reader.read_wz_int64().unwrap(), 1);
+        assert_eq!(slice_reader.read_wz_int64().unwrap(), 2);
+    }
+
+    #[test]
+    fn test_wz_empty_string() {
+        let reader = WzReader::new(setup().unwrap());
+
+        let slice_reader = reader.create_slice_reader();
+
+        slice_reader.seek(118);
+
+        assert_eq!(slice_reader.read_wz_string().unwrap(), "");
+
+        let meta = slice_reader.read_wz_string_meta_at(114).unwrap();
+
+        assert_eq!(meta.length, 0);
+        assert_eq!(meta.offset, 0);
+        assert_eq!(meta.string_type, WzStringType::Empty);
+
+        assert_eq!(reader.resolve_wz_string_meta(&meta.string_type, meta.offset, meta.length as usize).unwrap(), "");
+    }
+
+    #[test]
+    fn test_wz_ascii_string() {
+        let reader = WzReader::new(setup().unwrap());
+
+        let slice_reader = reader.create_slice_reader();
+
+        slice_reader.seek(119);
+
+        let result_string = "a".repeat(20);
+
+        assert_eq!(slice_reader.read_wz_string().unwrap(), result_string);
+
+        let meta = slice_reader.read_wz_string_meta_at(119).unwrap();
+
+        assert_eq!(meta.length, 20);
+        assert_eq!(meta.offset, 120);
+        assert_eq!(meta.string_type, WzStringType::Ascii);
+
+        assert_eq!(reader.resolve_wz_string_meta(&meta.string_type, meta.offset, meta.length as usize).unwrap(), result_string);
+    }
+
+    #[test]
+    fn test_wz_ascii_string_gt_128() {
+        let reader = WzReader::new(setup().unwrap());
+
+        let slice_reader = reader.create_slice_reader();
+
+        slice_reader.seek(140);
+
+        let result_string = "a".repeat(200);
+
+        assert_eq!(slice_reader.read_wz_string().unwrap(), result_string);
+
+        let meta = slice_reader.read_wz_string_meta_at(140).unwrap();
+
+        assert_eq!(meta.length, 200);
+        assert_eq!(meta.offset, 145);
+        assert_eq!(meta.string_type, WzStringType::Ascii);
+
+        assert_eq!(reader.resolve_wz_string_meta(&meta.string_type, meta.offset, meta.length as usize).unwrap(), result_string);
+    }
+
+    #[test]
+    fn test_wz_unicode_string() {
+        let reader = WzReader::new(setup().unwrap());
+
+        let slice_reader = reader.create_slice_reader();
+
+        slice_reader.seek(345);
+
+        let result_string = "a".repeat(20);
+
+        assert_eq!(slice_reader.read_wz_string().unwrap(), result_string);
+
+        let meta = slice_reader.read_wz_string_meta_at(345).unwrap();
+
+        assert_eq!(meta.length, 40);
+        assert_eq!(meta.offset, 346);
+        assert_eq!(meta.string_type, WzStringType::Unicode);
+
+        assert_eq!(reader.resolve_wz_string_meta(&meta.string_type, meta.offset, meta.length as usize).unwrap(), result_string);
+    }
+
+    #[test]
+    fn test_wz_unicode_string_gt_128() {
+        let reader = WzReader::new(setup().unwrap());
+
+        let slice_reader = reader.create_slice_reader();
+
+        slice_reader.seek(386);
+
+        let result_string = "a".repeat(200);
+
+        assert_eq!(slice_reader.read_wz_string().unwrap(), result_string);
+
+        let meta = slice_reader.read_wz_string_meta_at(386).unwrap();
+
+        assert_eq!(meta.length, 400);
+        assert_eq!(meta.offset, 391);
+        assert_eq!(meta.string_type, WzStringType::Unicode);
+
+        assert_eq!(reader.resolve_wz_string_meta(&meta.string_type, meta.offset, meta.length as usize).unwrap(), result_string);
+    }
 }

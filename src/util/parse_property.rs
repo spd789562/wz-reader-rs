@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use crate::{property::{ get_sound_type_from_header, Vector2D }, Reader, WzNode, WzNodeArc, WzNodeArcVec, WzObjectType, WzReader, WzSliceReader};
+use crate::{property::{ get_sound_type_from_header, Vector2D }, WzNode, WzNodeArc, WzNodeArcVec, WzObjectType, WzReader, WzSliceReader};
 use crate::property::{WzSubProperty, WzValue, WzString, WzSound, WzPng, WzRawData};
 use thiserror::Error;
 
@@ -68,7 +68,7 @@ pub fn parse_property_node(name: String, property_type: u8, parent: &WzNodeArc, 
                     result = (name, node.into_lock());
                 },
                 _ => {
-                    let node = WzNode::new(name.clone(), WzObjectType::Value(WzValue::Float(0_f32)), Some(parent));
+                    let node = WzNode::new(name.clone(), WzObjectType::Value(WzValue::Float(float_type as f32)), Some(parent));
                     result = (name, node.into_lock());
                 }
             }
@@ -89,7 +89,7 @@ pub fn parse_property_node(name: String, property_type: u8, parent: &WzNodeArc, 
         },
         9 => {
             let block_size = reader.read_u32()?;
-            let next_pos = reader.get_pos() + block_size as usize;
+            let next_pos = reader.pos.get() + block_size as usize;
 
             let node = parse_extended_prop(parent, org_reader, reader, next_pos, origin_offset, name)?;
 
@@ -98,7 +98,7 @@ pub fn parse_property_node(name: String, property_type: u8, parent: &WzNodeArc, 
             reader.seek(next_pos);
         },
         _ => {
-            return Err(WzPropertyParseError::UnknownPropertyType(property_type, reader.get_pos()));
+            return Err(WzPropertyParseError::UnknownPropertyType(property_type, reader.pos.get()));
         }
     }
     Ok(result)
@@ -115,7 +115,7 @@ pub fn parse_extended_prop(parent: &WzNodeArc, org_reader: &Arc<WzReader>, reade
             parse_more(parent, org_reader, reader, end_of_block, origin_offset, property_name, String::from(""))
         },
         _ => {
-            Err(WzPropertyParseError::UnknownExtendedHeaderType(extended_type, reader.get_pos()))
+            Err(WzPropertyParseError::UnknownExtendedHeaderType(extended_type, reader.pos.get()))
         }
     }
 }
@@ -175,7 +175,7 @@ pub fn parse_more(parent: &WzNodeArc, org_reader: &Arc<WzReader>, reader: &WzSli
             reader.skip(4);
             let canvas_slice_size = (reader.read_i32()? - 1) as usize;
             reader.skip(1);
-            let canvas_offset = reader.get_pos();
+            let canvas_offset = reader.pos.get();
             let canvas_header = reader.read_u16()?;
             let wz_png = WzPng::new(org_reader, (width as u32, height as u32), (format1 as u32, format2 as u32), (canvas_offset, canvas_slice_size), canvas_header as i32);
 
@@ -216,12 +216,12 @@ pub fn parse_more(parent: &WzNodeArc, org_reader: &Arc<WzReader>, reader: &WzSli
         },
         "Sound_DX8" => {
             reader.skip(1);
-            let _sound_start_offset = reader.get_pos();
+            let _sound_start_offset = reader.pos.get();
             let sound_size = reader.read_wz_int()? as u32;
             let sound_duration = reader.read_wz_int()? as u32;
             let sound_offset = end_of_block - (sound_size as usize);
             
-            let header_offset: usize = reader.get_pos();
+            let header_offset: usize = reader.pos.get();
 
             
             let header_size = sound_offset - header_offset;
@@ -251,7 +251,7 @@ pub fn parse_more(parent: &WzNodeArc, org_reader: &Arc<WzReader>, reader: &WzSli
         "RawData" => {
             reader.skip(1);
             let raw_data_size = reader.read_i32()? as usize;
-            let raw_data_offset = reader.get_pos();
+            let raw_data_offset = reader.pos.get();
             let node = WzNode::new(
                 property_name.clone(),
                 WzObjectType::Value(WzValue::RawData(WzRawData::new(org_reader, raw_data_offset, raw_data_size))),
@@ -261,7 +261,7 @@ pub fn parse_more(parent: &WzNodeArc, org_reader: &Arc<WzReader>, reader: &WzSli
             Ok((property_name, node.into_lock()))
         },
         _ => {
-            Err(WzPropertyParseError::UnknownExtendedPropertyType(extend_property_type.clone(), reader.get_pos()))
+            Err(WzPropertyParseError::UnknownExtendedPropertyType(extend_property_type.clone(), reader.pos.get()))
         }
     }
 }
@@ -277,7 +277,7 @@ pub fn get_extend_property_type_name(reader: &WzSliceReader, origin_offset: usiz
             reader.read_wz_string().map_err(WzPropertyParseError::from)
         },
         _ => {
-            Err(WzPropertyParseError::UnknownExtendedHeaderType(extended_type, reader.get_pos()))
+            Err(WzPropertyParseError::UnknownExtendedHeaderType(extended_type, reader.pos.get()))
         }
     }
 }

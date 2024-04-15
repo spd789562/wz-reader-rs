@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use crate::{ property::{WzLua, WzValue}, util, Reader, WzNode, WzNodeArc, WzObjectType, WzReader };
+use crate::{ property::{WzLua, WzValue}, util, WzNode, WzNodeArc, WzObjectType, WzReader };
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -67,12 +67,12 @@ impl WzImage {
         let header_byte = reader.read_u8()?;
 
         if header_byte != WZ_IMAGE_HEADER_BYTE_WITHOUT_OFFSET {
-            return Err(WzImageParseError::UnknownImageHeader(header_byte, reader.get_pos()));
+            return Err(WzImageParseError::UnknownImageHeader(header_byte, reader.pos.get()));
         } else {
             let name = reader.read_wz_string()?;
             let value = reader.read_u16()?;
             if name != "Property" && value != 0 {
-                return Err(WzImageParseError::ParseError(reader.get_pos()));
+                return Err(WzImageParseError::ParseError(reader.pos.get()));
             }
         }
 
@@ -97,7 +97,7 @@ impl WzImage {
             0x1 => {
                 if self.name.ends_with(".lua") {
                     let len = reader.read_wz_int()?;
-                    let offset = reader.get_pos();
+                    let offset = reader.pos.get();
     
                     let name = String::from("Script");
 
@@ -122,11 +122,11 @@ impl WzImage {
                 let name = reader.read_wz_string()?;
                 let value = reader.read_u16()?;
                 if name != "Property" && value != 0 {
-                    return Err(WzImageParseError::ParseError(reader.get_pos()));
+                    return Err(WzImageParseError::ParseError(reader.pos.get()));
                 }
             },
             _ => {
-                return Err(WzImageParseError::UnknownImageHeader(header_byte, reader.get_pos()));
+                return Err(WzImageParseError::UnknownImageHeader(header_byte, reader.pos.get()));
             }
         }
 
