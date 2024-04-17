@@ -9,6 +9,8 @@ use thiserror::Error;
 pub enum WzFileParseError {
     #[error(transparent)]
     FileError(#[from] std::io::Error),
+    #[error("invald wz file")]
+    InvalidWzFile,
     #[error("Error with game version hash : The specified game version is incorrect and WzLib was unable to determine the version itself")]
     ErrorGameVerHash,
     #[error("Failed, in this case the causes are undetermined.")]
@@ -40,12 +42,12 @@ pub struct WzFile {
 impl WzFile {
     pub fn from_file(path: &str, wz_iv: [u8; 4], patch_version: Option<i32>) -> Result<WzFile, WzFileParseError> {
         let file: File = File::open(path)?;
-        let map = unsafe { Mmap::map(&file).unwrap() };
+        let map = unsafe { Mmap::map(&file)? };
 
         let block_size = map.len();
         let reader = WzReader::new(map).with_iv(wz_iv);
 
-        let offset = reader.get_wz_fstart().unwrap() + 2;
+        let offset = reader.get_wz_fstart().map_err(|_| WzFileParseError::InvalidWzFile)? + 2;
 
         let wz_file_meta = WzFileMeta {
             path: path.to_string(),

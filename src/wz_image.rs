@@ -46,7 +46,7 @@ impl WzImage {
     pub fn from_file(path: &str, wz_iv: [u8; 4]) -> Result<Self, WzImageParseError> {
         let name = std::path::Path::new(path).file_stem().unwrap().to_str().unwrap().to_string();
         let file = std::fs::File::open(path)?;
-        let map = unsafe { memmap2::Mmap::map(&file).unwrap() };
+        let map = unsafe { memmap2::Mmap::map(&file)? };
 
         let block_size = map.len();
         let reader = WzReader::new(map).with_iv(wz_iv);
