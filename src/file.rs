@@ -21,7 +21,7 @@ pub enum WzFileParseError {
     UnknownImageHeader(u8, String),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct WzFileMeta {
     pub path: String,
     pub patch_version: i32,

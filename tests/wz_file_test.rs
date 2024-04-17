@@ -1,5 +1,5 @@
 use wz_reader::property::{WzValue, WzSubProperty, Vector2D};
-use wz_reader::{WzNode, WzNodeArc, WzObjectType, NodeParseError, WzImageParseError};
+use wz_reader::{WzNode, WzNodeArc, WzObjectType, NodeParseError, WzImageParseError, WzNodeCast,resolve_inlink};
 use wz_reader::util;
 use wz_reader::version::WzMapleVersion;
 
@@ -108,45 +108,35 @@ fn check_sample_wz_img(wz_img: &WzNodeArc) {
         
         let int = int.unwrap();
         let int = int.read().unwrap();
-        if let WzObjectType::Value(WzValue::Int(num)) = &int.object_type {
-            assert_eq!(num, &1);
-        }
+        assert_eq!(int.try_as_int(), Some(&1));
 
         let short = first_folder.at("short");
         assert!(short.is_some());
         
         let short = short.unwrap();
         let short = short.read().unwrap();
-        if let WzObjectType::Value(WzValue::Short(num)) = &short.object_type {
-            assert_eq!(num, &2);
-        }
+        assert_eq!(short.try_as_short(), Some(&2));
 
         let long = first_folder.at("long");
         assert!(long.is_some());
         
         let long = long.unwrap();
         let long = long.read().unwrap();
-        if let WzObjectType::Value(WzValue::Long(num)) = &long.object_type {
-            assert_eq!(num, &3);
-        }
+        assert_eq!(long.try_as_long(), Some(&3));
 
         let float = first_folder.at("float");
         assert!(float.is_some());
         
         let float = float.unwrap();
         let float = float.read().unwrap();
-        if let WzObjectType::Value(WzValue::Float(num)) = &float.object_type {
-            assert_eq!(num, &4.1);
-        }
+        assert_eq!(float.try_as_float(), Some(&4.1));
 
         let double = first_folder.at("double");
         assert!(double.is_some());
         
         let double = double.unwrap();
         let double = double.read().unwrap();
-        if let WzObjectType::Value(WzValue::Double(num)) = &double.object_type {
-            assert_eq!(num, &4.2);
-        }
+        assert_eq!(double.try_as_double(), Some(&4.2));
     }
 
     if let Some(second_folder) = wz_img_read.at("2") {
@@ -166,7 +156,8 @@ fn check_sample_wz_img(wz_img: &WzNodeArc) {
         
         let string = string.unwrap();
         let string = string.read().unwrap();
-        if let WzObjectType::Value(WzValue::String(string)) = &string.object_type {
+        let string = string.try_as_string();
+        if let Some(string) = string {
             let s = string.get_string();
             assert!(s.is_ok());
             assert_eq!(&s.unwrap(), "foo");
@@ -285,8 +276,16 @@ fn should_success_using_wz_node_methods_on_childs() {
     let inlink = png_node.read().unwrap().at("_inlink");
     assert!(inlink.is_some());
     let inlink = inlink.unwrap();
+    let inlink_read = inlink.read().unwrap();
+    let inlink_string = inlink_read.try_as_string();
 
-    let inlink_target = inlink.read().unwrap().resolve_inlink(&inlink);
+    assert!(inlink_string.is_some());
+    let inlink_string = inlink_string.unwrap().get_string();
+
+    assert!(inlink_string.is_ok());
+    
+    let inlink_string = inlink_string.unwrap();
+    let inlink_target = resolve_inlink(&inlink_string, &inlink);
     assert!(inlink_target.is_none());
 
     let parent_img = png_node.read().unwrap().get_parent_wz_image();
@@ -308,7 +307,6 @@ fn should_success_using_wz_node_methods_on_childs() {
     if let WzObjectType::Image(wz_image) = &parent_img_read.object_type {
         let direct_access_not_exist = wz_image.at_path("2/not_exist", &parent_img);
 
-        println!("{:?}", direct_access_not_exist);
         assert!(matches!(direct_access_not_exist, Err(WzImageParseError::ParsePropertyListError(util::WzPropertyParseError::NodeNotFound))));
 
         let direct_access_nil = wz_image.at_path("2/nil", &parent_img);
