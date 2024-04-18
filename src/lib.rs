@@ -6,6 +6,7 @@ mod wz_image;
 mod file;
 pub mod property;
 mod node;
+mod node_cast;
 pub mod util;
 pub mod version;
 
@@ -16,3 +17,4 @@ pub use wz_image::*;
 pub use directory::*;
 pub use file::*;
 pub use node::*;
+pub use node_cast::*;
