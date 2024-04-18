@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use crate::{WzReader, Reader};
+use crate::{WzReader, Reader, WzNodeArc, WzNodeCast};
 use thiserror::Error;
 
 
@@ -81,4 +81,10 @@ impl WzString {
     pub fn get_string(&self) -> Result<String, WzStringParseError> {
         self.reader.resolve_wz_string_meta(&self.string_type, self.offset, self.length as usize).map_err(WzStringParseError::from)
     }
+}
+
+pub fn resolve_string_from_node(node: &WzNodeArc) -> Result<String, WzStringParseError> {
+    node.read().unwrap().try_as_string()
+        .ok_or(WzStringParseError::NotStringProperty)
+        .and_then(|string| string.get_string())
 }

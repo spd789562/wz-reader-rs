@@ -3,7 +3,8 @@ use flate2::{Decompress, FlushDecompress};
 use image::{DynamicImage, ImageError, ImageBuffer, Rgb, Rgba};
 use thiserror::Error;
 use rayon::prelude::*;
-use crate::{reader, WzNodeArc, WzObjectType, property::WzSubProperty, WzNodeCast, resolve_inlink, resolve_outlink};
+use crate::{reader, WzNodeArc, WzObjectType, property::WzSubProperty, resolve_inlink, resolve_outlink};
+use crate::property::string::resolve_string_from_node;
 use crate::util::color::{SimpleColor, SimpleColorAlpha};
 
 #[derive(Debug, Error)]
@@ -38,10 +39,7 @@ pub fn get_image(node: &WzNodeArc) -> Result<DynamicImage, WzPngParseError> {
     match &node_read.object_type {
         WzObjectType::Property(WzSubProperty::PNG(png)) => {
             let inlink_target = node_read.at("_inlink")
-                .and_then(|node| 
-                    node.read().unwrap().try_as_string()
-                        .and_then(|string| string.get_string().ok())
-                )
+                .and_then(|node| resolve_string_from_node(&node).ok())
                 .and_then(|inlink| resolve_inlink(&inlink, node));
             
             if let Some(target) = inlink_target {
@@ -49,10 +47,7 @@ pub fn get_image(node: &WzNodeArc) -> Result<DynamicImage, WzPngParseError> {
             }
 
             let outlink_target = node_read.at("_outlink")
-                .and_then(|node| 
-                    node.read().unwrap().try_as_string()
-                        .and_then(|string| string.get_string().ok())
-                )
+                .and_then(|node| resolve_string_from_node(&node).ok())
                 .and_then(|outlink| resolve_outlink(&outlink, node, true));
 
             if let Some(target) = outlink_target {
