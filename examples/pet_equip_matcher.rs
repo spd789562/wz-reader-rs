@@ -20,13 +20,6 @@ fn main() {
     let pet_equip_read = pet_equip.read().unwrap();
 
     let pet_equip_items = pet_equip_read.children.values().collect::<Vec<_>>();
-
-    pet_equip_items
-        .par_iter()
-        .try_for_each(|node| {
-            node.write().unwrap().parse(&node)
-        })
-        .unwrap();
     
     let result_items: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
@@ -34,21 +27,20 @@ fn main() {
         .par_iter()
         .for_each(|node| {
             let node = node.read().unwrap();
-            if node.at(target_pet_id).is_some() {
-                let name = node.name.clone().replace(".img", "");
+            if let Some(image) = node.try_as_image() {
+                if image.at_path(target_pet_id).is_ok() {
+                    let name = node.name.clone().replace(".img", "");
 
-                if &name == "01802000" {
-                    return;
+                    if &name == "01802000" {
+                        return;
+                    }
+
+                    let mut result_items = result_items.lock().unwrap();
+
+                    let striped_name = name.strip_prefix('0').map(|striped| striped.to_string());
+
+                    result_items.push(striped_name.unwrap_or(name));
                 }
-
-                let mut result_items = result_items.lock().unwrap();
-
-                if let Some(striped) = name.strip_prefix('0') {
-                    result_items.push(striped.to_string());
-                } else {
-                    result_items.push(name);
-                }
-
             }
         });
 
@@ -62,7 +54,7 @@ fn main() {
 
     let string_img_node = string_node_read.try_as_image().expect("string node is not wz image");
 
-    let pet_equip_node = string_img_node.at_path("Eqp/PetEquip", &string_node).expect("pet equip node not found");
+    let pet_equip_node = string_img_node.at_path("Eqp/PetEquip").expect("pet equip node not found");
 
     let names: Vec<_> = ids.par_iter()
         .map(|id| {
