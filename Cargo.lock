@@ -1276,8 +1276,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "wz-reader"
-version = "0.1.0"
+name = "wz_reader"
+version = "0.5.0"
 dependencies = [
  "aes",
  "ecb",

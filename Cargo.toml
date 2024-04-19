@@ -1,7 +1,13 @@
 [package]
-name = "wz-reader"
-version = "0.1.0"
+name = "wz_reader"
+description = "A wz file reader to resolve wz file and thread safe"
+readme = "README.md"
+homepage = "https://github.com/spd789562/wz-reader-rs"
+repository = "https://github.com/spd789562/wz-reader-rs"
+documentation = "https://docs.rs/wz_reader"
+version = "0.5.0"
 edition = "2021"
+license-file = "LICENSE.txt"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
