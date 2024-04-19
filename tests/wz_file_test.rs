@@ -305,19 +305,16 @@ fn should_success_using_wz_node_methods_on_childs() {
 
     let parent_img_read = parent_img.read().unwrap();
     if let WzObjectType::Image(wz_image) = &parent_img_read.object_type {
-        let direct_access_not_exist = wz_image.at_path("2/not_exist", &parent_img);
+        let direct_access_not_exist = wz_image.at_path("2/not_exist");
 
         assert!(matches!(direct_access_not_exist, Err(WzImageParseError::ParsePropertyListError(util::WzPropertyParseError::NodeNotFound))));
 
-        let direct_access_nil = wz_image.at_path("2/nil", &parent_img);
+        let direct_access_nil = wz_image.at_path("2/nil");
         assert!(direct_access_nil.is_ok());
 
         let nil = direct_access_nil.unwrap();
         let nil = nil.read().unwrap();
         assert!(matches!(nil.object_type, WzObjectType::Value(WzValue::Null)));
-
-        /* direct access's parent should be WzImage */
-        assert_eq!(nil.parent.upgrade().unwrap().read().unwrap().get_full_path(), parent_img_read.get_full_path());
     }
 }
 

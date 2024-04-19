@@ -29,34 +29,34 @@ pub fn parse_property_list(parent: &WzNodeArc, org_reader: &Arc<WzReader>, reade
     for _ in 0..entry_count {
         let name = reader.read_wz_string_block(origin_offset)?;
         let property_type = reader.read_u8()?;
-        let parsed_node = parse_property_node(name, property_type, parent, org_reader, reader, origin_offset)?;
+        let parsed_node = parse_property_node(name, property_type, Some(parent), org_reader, reader, origin_offset)?;
         childs.push(parsed_node);
     }
 
     Ok(childs)
 }
 
-pub fn parse_property_node(name: String, property_type: u8, parent: &WzNodeArc, org_reader: &Arc<WzReader> , reader: &WzSliceReader, origin_offset: usize) -> Result<(String, WzNodeArc), WzPropertyParseError> {
+pub fn parse_property_node(name: String, property_type: u8, parent: Option<&WzNodeArc>, org_reader: &Arc<WzReader> , reader: &WzSliceReader, origin_offset: usize) -> Result<(String, WzNodeArc), WzPropertyParseError> {
     let result: (String, WzNodeArc);
 
     match property_type {
         0 => {
-            let node = WzNode::new(name.clone(), WzObjectType::Value(WzValue::Null), Some(parent));
+            let node = WzNode::new(name.clone(), WzObjectType::Value(WzValue::Null), parent);
             result = (name, node.into_lock());
         },
         2 | 11 => {
             let num = reader.read_i16()?;
-            let node = WzNode::new(name.clone(), WzObjectType::Value(WzValue::Short(num)), Some(parent));
+            let node = WzNode::new(name.clone(), WzObjectType::Value(WzValue::Short(num)), parent);
             result = (name, node.into_lock());
         },
         3 | 19 => {
             let num = reader.read_wz_int()?;
-            let node = WzNode::new(name.clone(), WzObjectType::Value(WzValue::Int(num)), Some(parent));
+            let node = WzNode::new(name.clone(), WzObjectType::Value(WzValue::Int(num)), parent);
             result = (name, node.into_lock());
         },
         20 => {
             let num = reader.read_wz_int64()?;
-            let node = WzNode::new(name.clone(), WzObjectType::Value(WzValue::Long(num)), Some(parent));
+            let node = WzNode::new(name.clone(), WzObjectType::Value(WzValue::Long(num)), parent);
             result = (name, node.into_lock());
         },
         4 => {
@@ -64,18 +64,18 @@ pub fn parse_property_node(name: String, property_type: u8, parent: &WzNodeArc, 
             match float_type {
                 0x80 => {
                     let num = reader.read_float()?;
-                    let node = WzNode::new(name.clone(), WzObjectType::Value(WzValue::Float(num)), Some(parent));
+                    let node = WzNode::new(name.clone(), WzObjectType::Value(WzValue::Float(num)), parent);
                     result = (name, node.into_lock());
                 },
                 _ => {
-                    let node = WzNode::new(name.clone(), WzObjectType::Value(WzValue::Float(float_type as f32)), Some(parent));
+                    let node = WzNode::new(name.clone(), WzObjectType::Value(WzValue::Float(float_type as f32)), parent);
                     result = (name, node.into_lock());
                 }
             }
         },
         5 => {
             let num = reader.read_double()?;
-            let node = WzNode::new(name.clone(), WzObjectType::Value(WzValue::Double(num)), Some(parent));
+            let node = WzNode::new(name.clone(), WzObjectType::Value(WzValue::Double(num)), parent);
             result = (name, node.into_lock());
         },
         8 => {
@@ -83,7 +83,7 @@ pub fn parse_property_node(name: String, property_type: u8, parent: &WzNodeArc, 
             let node = WzNode::new(
                 name.clone(),
                 WzObjectType::Value(WzValue::String(WzString::from_meta(str_meta, org_reader))),
-                Some(parent)
+                parent
             );
             result = (name, node.into_lock());
         },
@@ -104,7 +104,7 @@ pub fn parse_property_node(name: String, property_type: u8, parent: &WzNodeArc, 
     Ok(result)
 }
 
-pub fn parse_extended_prop(parent: &WzNodeArc, org_reader: &Arc<WzReader>, reader: &WzSliceReader, end_of_block: usize, origin_offset: usize, property_name: String) -> Result<(String, WzNodeArc), WzPropertyParseError> {
+pub fn parse_extended_prop(parent: Option<&WzNodeArc>, org_reader: &Arc<WzReader>, reader: &WzSliceReader, end_of_block: usize, origin_offset: usize, property_name: String) -> Result<(String, WzNodeArc), WzPropertyParseError> {
     let extended_type = reader.read_u8()?;
     match extended_type {
         0x01 | crate::wz_image::WZ_IMAGE_HEADER_BYTE_WITH_OFFSET => {
@@ -120,7 +120,7 @@ pub fn parse_extended_prop(parent: &WzNodeArc, org_reader: &Arc<WzReader>, reade
     }
 }
 
-pub fn parse_more(parent: &WzNodeArc, org_reader: &Arc<WzReader>, reader: &WzSliceReader, end_of_block: usize, origin_offset: usize, property_name: String, extend_property_type: String) -> Result<(String, WzNodeArc), WzPropertyParseError> {
+pub fn parse_more(parent: Option<&WzNodeArc>, org_reader: &Arc<WzReader>, reader: &WzSliceReader, end_of_block: usize, origin_offset: usize, property_name: String, extend_property_type: String) -> Result<(String, WzNodeArc), WzPropertyParseError> {
     let extend_property_type = {
         if extend_property_type.is_empty() {
             reader.read_wz_string()?
@@ -134,7 +134,7 @@ pub fn parse_more(parent: &WzNodeArc, org_reader: &Arc<WzReader>, reader: &WzSli
             let node = WzNode::new(
                 property_name.clone(),
                 WzObjectType::Property(WzSubProperty::Property),
-                Some(parent)
+                parent
             ).into_lock();
 
             reader.skip(2);
@@ -156,7 +156,7 @@ pub fn parse_more(parent: &WzNodeArc, org_reader: &Arc<WzReader>, reader: &WzSli
             let node = WzNode::new(
                 property_name.clone(),
                 WzObjectType::Property(WzSubProperty::Property),
-                Some(parent)
+                parent
             ).into_lock();
 
             if has_child {
@@ -189,7 +189,7 @@ pub fn parse_more(parent: &WzNodeArc, org_reader: &Arc<WzReader>, reader: &WzSli
             let node = WzNode::new(
                 property_name.clone(),
                 WzObjectType::Property(WzSubProperty::Convex),
-                Some(parent)
+                parent
             ).into_lock();
 
             let entry_count = reader.read_wz_int()?;
@@ -197,7 +197,7 @@ pub fn parse_more(parent: &WzNodeArc, org_reader: &Arc<WzReader>, reader: &WzSli
             {
                 let mut node_write = node.write().unwrap();
                 for _ in 0..entry_count {
-                    let parsed_node = parse_extended_prop(&node, org_reader, reader, end_of_block, origin_offset, property_name.clone())?;
+                    let parsed_node = parse_extended_prop(Some(&node), org_reader, reader, end_of_block, origin_offset, property_name.clone())?;
     
                     node_write.children.insert(parsed_node.0, parsed_node.1);
                 }
@@ -210,7 +210,7 @@ pub fn parse_more(parent: &WzNodeArc, org_reader: &Arc<WzReader>, reader: &WzSli
                 reader.read_wz_int()?,
                 reader.read_wz_int()?
             );
-            let node = WzNode::new(property_name.clone(), WzObjectType::Value(WzValue::Vector(vec2)), Some(parent));
+            let node = WzNode::new(property_name.clone(), WzObjectType::Value(WzValue::Vector(vec2)), parent);
 
             Ok((property_name, node.into_lock()))
         },
@@ -232,7 +232,7 @@ pub fn parse_more(parent: &WzNodeArc, org_reader: &Arc<WzReader>, reader: &WzSli
             let node = WzNode::new(
                 property_name.clone(),
                 WzObjectType::Property(WzSubProperty::Sound(Box::new(sound))),
-                Some(parent)
+                parent
             );
 
             Ok((property_name, node.into_lock()))
@@ -243,7 +243,7 @@ pub fn parse_more(parent: &WzNodeArc, org_reader: &Arc<WzReader>, reader: &WzSli
             let node = WzNode::new(
                 property_name.clone(),
                 WzObjectType::Value(WzValue::UOL(WzString::from_meta(str_meta, org_reader))),
-                Some(parent)
+                parent
             );
 
             Ok((property_name, node.into_lock()))
@@ -255,7 +255,7 @@ pub fn parse_more(parent: &WzNodeArc, org_reader: &Arc<WzReader>, reader: &WzSli
             let node = WzNode::new(
                 property_name.clone(),
                 WzObjectType::Value(WzValue::RawData(WzRawData::new(org_reader, raw_data_offset, raw_data_size))),
-                Some(parent)
+                parent
             );
 
             Ok((property_name, node.into_lock()))
@@ -282,7 +282,7 @@ pub fn get_extend_property_type_name(reader: &WzSliceReader, origin_offset: usiz
     }
 }
 
-pub fn get_node(path: &str, parent: &WzNodeArc, org_reader: &Arc<WzReader>, reader: &WzSliceReader, origin_offset: usize) -> Result<(String, WzNodeArc), WzPropertyParseError> {
+pub fn get_node(path: &str, org_reader: &Arc<WzReader>, reader: &WzSliceReader, origin_offset: usize) -> Result<(String, WzNodeArc), WzPropertyParseError> {
     if path.is_empty() {
         return Err(WzPropertyParseError::NodeNotFound);
     }
@@ -298,7 +298,7 @@ pub fn get_node(path: &str, parent: &WzNodeArc, org_reader: &Arc<WzReader>, read
             let property_type = reader.read_u8()?;
             
             if name == current_name && next_path.is_none() {
-                return parse_property_node(name, property_type, parent, org_reader, reader, origin_offset);
+                return parse_property_node(name, property_type, None, org_reader, reader, origin_offset);
             }
 
             if property_type == 9 {
@@ -314,7 +314,7 @@ pub fn get_node(path: &str, parent: &WzNodeArc, org_reader: &Arc<WzReader>, read
                     reader.skip(block_size as usize);
                 }
             } else {
-                parse_property_node(name, property_type, parent, org_reader, reader, origin_offset)?;
+                parse_property_node(name, property_type, None, org_reader, reader, origin_offset)?;
             }
         }
 

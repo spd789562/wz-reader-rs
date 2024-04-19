@@ -60,7 +60,7 @@ impl WzImage {
         })
     }
 
-    pub fn at_path(&self, path: &str, parent: &WzNodeArc) -> Result<WzNodeArc, WzImageParseError> {
+    pub fn at_path(&self, path: &str) -> Result<WzNodeArc, WzImageParseError> {
         let reader = self.reader.create_slice_reader_without_hash();
 
         reader.seek(self.offset);
@@ -76,7 +76,7 @@ impl WzImage {
             }
         }
 
-        let result = util::get_node(path, parent, &self.reader, &reader, self.offset);
+        let result = util::get_node(path, &self.reader, &reader, self.offset);
 
         match result {
             Ok(node) => Ok(node.1),
