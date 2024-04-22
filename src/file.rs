@@ -187,7 +187,7 @@ impl WzFile {
 
     fn update_wz_file_meta(&mut self, wz_file_meta: WzFileMeta) {
         self.wz_file_meta = WzFileMeta {
-            path: self.wz_file_meta.path.clone(),
+            path: std::mem::take(&mut self.wz_file_meta.path),
             ..wz_file_meta
         };
     }

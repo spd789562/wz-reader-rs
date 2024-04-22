@@ -34,10 +34,10 @@ pub struct WzImage {
 }
 
 impl WzImage {
-    pub fn new(name: String, offset: usize, block_size: usize, reader: &Arc<WzReader>) -> Self {
+    pub fn new(name: &str, offset: usize, block_size: usize, reader: &Arc<WzReader>) -> Self {
         Self {
             reader: Arc::clone(reader),
-            name,
+            name: name.to_string(),
             offset,
             block_size,
             is_parsed: false,
@@ -108,7 +108,7 @@ impl WzImage {
                     );
 
                     let lua_node = WzNode::new(
-                        name.clone(), 
+                        &name, 
                         WzObjectType::Value(WzValue::Lua(wz_lua)),
                         Some(parent)
                     );

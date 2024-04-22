@@ -8,7 +8,8 @@ use wz_reader::version::WzMapleVersion;
  *   test
  *     - wz_img.img
  *       - conv
- *         - conv
+ *         - 0(vec)
+ *         - 1(png)
  *           - origin
  *           - _inlink
  *       - 1
@@ -180,7 +181,16 @@ fn check_sample_wz_img(wz_img: &WzNodeArc) {
 
         assert!(matches!(convex_folder.object_type, WzObjectType::Property(WzSubProperty::Convex)));
 
-        let png = convex_folder.at("conv");
+        let vector = convex_folder.at("0");
+        assert!(vector.is_some());
+        
+        let vector = vector.unwrap();
+        let vector = vector.read().unwrap();
+        if let WzObjectType::Value(WzValue::Vector(vec)) = &vector.object_type {
+            assert_eq!(vec, &Vector2D(1, 1));
+        }
+
+        let png = convex_folder.at("1");
         assert!(png.is_some());
         
         let png = png.unwrap();
@@ -265,10 +275,15 @@ fn should_success_using_wz_node_methods_on_childs() {
     assert!(nil_parent.is_some());
     assert_eq!(nil_parent.unwrap().read().unwrap().get_full_path(), "test/wz_img.img/2");
 
-    let png_node = nil_read.at_path_relative("../../conv/conv");
+    let vec_node = nil_read.at_path_relative("../../conv/0");
+    assert!(vec_node.is_some());
+    let vec_node = vec_node.unwrap();
+    assert_eq!(vec_node.read().unwrap().get_full_path(), "test/wz_img.img/conv/0");
+
+    let png_node = nil_read.at_path_relative("../../conv/1");
     assert!(png_node.is_some());
     let png_node = png_node.unwrap();
-    assert_eq!(png_node.read().unwrap().get_full_path(), "test/wz_img.img/conv/conv");
+    assert_eq!(png_node.read().unwrap().get_full_path(), "test/wz_img.img/conv/1");
 
     let wz_node_not_exist = nil_read.at_path_relative("../../not_exist");
     assert!(wz_node_not_exist.is_none());
@@ -329,9 +344,10 @@ fn should_success_walk_thorugh() {
         "test",
         "test/wz_img.img",
         "test/wz_img.img/conv",
-        "test/wz_img.img/conv/conv",
-        "test/wz_img.img/conv/conv/_inlink",
-        "test/wz_img.img/conv/conv/origin",
+        "test/wz_img.img/conv/0",
+        "test/wz_img.img/conv/1",
+        "test/wz_img.img/conv/1/_inlink",
+        "test/wz_img.img/conv/1/origin",
         "test/wz_img.img/1",
         "test/wz_img.img/1/float",
         "test/wz_img.img/1/double",
@@ -349,6 +365,7 @@ fn should_success_walk_thorugh() {
 
     util::walk_node(&wz_file, true, &|node| {
         let node_read = node.read().unwrap();
+        println!("{}", node_read.get_full_path());
         assert!(pathes.contains(node_read.get_full_path().as_str()));
     });
 }

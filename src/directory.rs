@@ -132,7 +132,7 @@ impl WzDirectory {
                         .with_hash(self.hash);
 
                     let obj_node = WzNode::new(
-                        fname.clone(),
+                        &fname,
                         WzObjectType::Directory(Box::new(node)),
                         Some(parent)
                     );
@@ -141,14 +141,14 @@ impl WzDirectory {
                 }
                 WzDirectoryType::WzImage => {
                     let node = WzImage::new(
-                        fname.clone(),
+                        &fname,
                         offset,
                         fsize as usize,
                         &self.reader
                     );
 
                     let obj_node = WzNode::new(
-                        fname.clone(),
+                        &fname,
                         WzObjectType::Image(Box::new(node)),
                         Some(parent)
                     );

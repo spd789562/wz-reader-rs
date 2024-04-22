@@ -417,7 +417,7 @@ impl<'a> WzSliceReader<'a> {
     }
 }
 
-impl<'a> Reader for WzReader {
+impl Reader for WzReader {
     fn read_u8_at(&self, pos: usize) -> Result<u8, scroll::Error> {
         self.map.pread_with::<u8>(pos, LE)
     }

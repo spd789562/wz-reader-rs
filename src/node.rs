@@ -40,16 +40,16 @@ impl From<WzNode> for WzNodeArc {
 }
 
 impl WzNode {
-    pub fn new(name: String, object_type: WzObjectType, parent: Option<&WzNodeArc>) -> Self {
+    pub fn new(name: &str, object_type: WzObjectType, parent: Option<&WzNodeArc>) -> Self {
         Self {
-            name,
+            name: name.to_string(),
             object_type,
             parent: parent.map(Arc::downgrade).unwrap_or_default(),
             children: HashMap::new(),
         }
     }
     pub fn from_wz_file(path: &str, version: Option<version::WzMapleVersion>, patch_version: Option<i32>, parent: Option<&WzNodeArc>) -> Result<Self, NodeParseError> {
-        let name = Path::new(path).file_stem().unwrap().to_str().unwrap().to_string();
+        let name = Path::new(path).file_stem().unwrap().to_str().unwrap();
         let version = version.unwrap_or(version::WzMapleVersion::EMS);
         let wz_file = WzFile::from_file(path, version::get_iv_by_maple_version(version), patch_version)?;
         Ok(WzNode::new(
@@ -59,7 +59,7 @@ impl WzNode {
         ))
     }
     pub fn from_img_file(path: &str, version: Option<version::WzMapleVersion>, parent: Option<&WzNodeArc>) -> Result<Self, NodeParseError> {
-        let name = Path::new(path).file_stem().unwrap().to_str().unwrap().to_string();
+        let name = Path::new(path).file_stem().unwrap().to_str().unwrap();
         let version = version.unwrap_or(version::WzMapleVersion::EMS);
         let wz_image = WzImage::from_file(path, version::get_iv_by_maple_version(version))?;
         Ok(WzNode::new(
@@ -133,7 +133,8 @@ impl WzNode {
     }
 
     pub fn at(&self, name: &str) -> Option<WzNodeArc> {
-        self.children.get(name).cloned()
+        // println!("at: {}", name);
+        self.children.get(name).map(Arc::clone)
     }
     pub fn at_relative(&self, path: &str) -> Option<WzNodeArc> {
         if path == ".." {
@@ -209,15 +210,15 @@ impl WzNode {
 pub fn resolve_inlink(path: &str, node: &WzNodeArc) -> Option<WzNodeArc> {
     let parent_wz_image = node.read().unwrap().get_parent_wz_image()?;
     let parent_wz_image = parent_wz_image.read().unwrap();
-    parent_wz_image.at_path(&path)
+    parent_wz_image.at_path(path)
 }
 
 pub fn resolve_outlink(path: &str, node: &WzNodeArc, force_parse: bool) -> Option<WzNodeArc> {
     let parent_wz_base = node.read().unwrap().get_base_wz_file()?;
 
     if force_parse {
-        parent_wz_base.write().unwrap().at_path_parsed(&path).ok()
+        parent_wz_base.write().unwrap().at_path_parsed(path).ok()
     } else {
-        parent_wz_base.read().unwrap().at_path(&path)
+        parent_wz_base.read().unwrap().at_path(path)
     }
 }
