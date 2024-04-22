@@ -6,7 +6,7 @@ fn main() {
     let save_sound_fn = |node: &WzNodeArc| {
         let node_read = node.read().unwrap();
         if let WzObjectType::Property(WzSubProperty::Sound(wz_png)) = &node_read.object_type {
-            let path = std::path::Path::new("./sounds").join(&node_read.name);
+            let path = std::path::Path::new("./sounds").join(node_read.name.as_str());
             if wz_png.extract_sound(path).is_err() {
                 println!("failed to extract sound: {}", node_read.get_full_path());
             }

@@ -27,16 +27,16 @@ mod test {
     use crate::{WzObjectType, WzNode, property::{WzValue, WzSubProperty}};
 
     fn generate_mock_node() -> WzNodeArc {
-        let root = WzNode::new("root", WzObjectType::Property(WzSubProperty::Property), None).into_lock();
+        let root = WzNode::from_str("root", WzObjectType::Property(WzSubProperty::Property), None).into_lock();
 
-        let child1 = WzNode::new("child1", WzObjectType::Value(WzValue::Int(1)), Some(&root)).into_lock();
-        let child2 = WzNode::new("child2", WzObjectType::Value(WzValue::Int(2)), Some(&root)).into_lock();
+        let child1 = WzNode::from_str("child1", WzObjectType::Value(WzValue::Int(1)), Some(&root)).into_lock();
+        let child2 = WzNode::from_str("child2", WzObjectType::Value(WzValue::Int(2)), Some(&root)).into_lock();
 
-        WzNode::new("child11", WzObjectType::Value(WzValue::Int(11)), Some(&child1)).into_lock();
-        WzNode::new("child12", WzObjectType::Value(WzValue::Int(12)), Some(&child1)).into_lock();
+        WzNode::from_str("child11", WzObjectType::Value(WzValue::Int(11)), Some(&child1)).into_lock();
+        WzNode::from_str("child12", WzObjectType::Value(WzValue::Int(12)), Some(&child1)).into_lock();
 
-        WzNode::new("child21", WzObjectType::Value(WzValue::Int(21)), Some(&child2)).into_lock();
-        WzNode::new("child22", WzObjectType::Value(WzValue::Int(22)), Some(&child2)).into_lock();
+        WzNode::from_str("child21", WzObjectType::Value(WzValue::Int(21)), Some(&child2)).into_lock();
+        WzNode::from_str("child22", WzObjectType::Value(WzValue::Int(22)), Some(&child2)).into_lock();
 
         root
     }

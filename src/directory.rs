@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use crate::{ WzImage, WzNode, WzNodeArc, WzObjectType, WzReader };
+use crate::{ WzImage, WzNode, WzNodeArc, WzNodeArcVec, WzObjectType, WzReader, WzNodeName };
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -61,7 +61,7 @@ impl WzDirectory {
         self
     }
 
-    pub fn resolve_children(&self, parent: &WzNodeArc) -> Result<Vec<(String, WzNodeArc)>, WzDirectoryParseError> {
+    pub fn resolve_children(&self, parent: &WzNodeArc) -> Result<WzNodeArcVec, WzDirectoryParseError> {
         let reader = self.reader.create_slice_reader_with_hash(self.hash);
 
         reader.seek(self.offset);
@@ -72,13 +72,13 @@ impl WzDirectory {
             return Err(WzDirectoryParseError::InvalidEntryCount);
         }
 
-        let mut nodes: Vec<(String, WzNodeArc)> = Vec::new();
+        let mut nodes: WzNodeArcVec = Vec::new();
 
         for _ in 0..entry_count {
             let dir_byte = reader.read_u8()?;
             let mut dir_type = get_wz_directory_type_from_byte(dir_byte);
     
-            let fname: String;
+            let fname: WzNodeName;
     
             match dir_type {
                 WzDirectoryType::UnknownType => {
@@ -96,13 +96,13 @@ impl WzDirectory {
                     reader.seek(offset);
     
                     dir_type = get_wz_directory_type_from_byte(reader.read_u8().unwrap());
-                    fname = reader.read_wz_string()?;
+                    fname = reader.read_wz_string()?.into();
     
                     reader.seek(pos);
                 }
                 WzDirectoryType::WzDirectory |
                 WzDirectoryType::WzImage => {
-                    fname = reader.read_wz_string()?;
+                    fname = reader.read_wz_string()?.into();
                 }
                 WzDirectoryType::NewUnknownType => {
                     println!("NewUnknownType: {}", dir_byte);

@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use crate::{ property::{WzLua, WzValue}, util, WzNode, WzNodeArc, WzObjectType, WzReader };
+use crate::{ property::{WzLua, WzValue}, util, WzNode, WzNodeArc, WzNodeArcVec, WzNodeName, WzObjectType, WzReader };
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -27,17 +27,17 @@ pub const WZ_IMAGE_HEADER_BYTE_WITH_OFFSET: u8 = 0x1B;
 #[derive(Debug, Clone)]
 pub struct WzImage {
     pub reader: Arc<WzReader>,
-    pub name: String,
+    pub name: WzNodeName,
     pub offset: usize,
     pub block_size: usize,
     pub is_parsed: bool,
 }
 
 impl WzImage {
-    pub fn new(name: &str, offset: usize, block_size: usize, reader: &Arc<WzReader>) -> Self {
+    pub fn new(name: &WzNodeName, offset: usize, block_size: usize, reader: &Arc<WzReader>) -> Self {
         Self {
             reader: Arc::clone(reader),
-            name: name.to_string(),
+            name: name.clone(),
             offset,
             block_size,
             is_parsed: false,
@@ -53,7 +53,7 @@ impl WzImage {
 
         Ok(WzImage {
             reader: Arc::new(reader),
-            name,
+            name: name.into(),
             offset: 0,
             block_size,
             is_parsed: false
@@ -84,14 +84,14 @@ impl WzImage {
         }
     }
 
-    pub fn resolve_children(&self, parent: &WzNodeArc) -> Result<Vec<(String, WzNodeArc)>, WzImageParseError> {
+    pub fn resolve_children(&self, parent: &WzNodeArc) -> Result<WzNodeArcVec, WzImageParseError> {
         let reader = self.reader.create_slice_reader_without_hash();
 
         reader.seek(self.offset);
 
         let header_byte = reader.read_u8()?;
 
-        let mut childrens: Vec<(String, WzNodeArc)> = Vec::new();
+        let mut childrens: WzNodeArcVec = Vec::new();
 
         match header_byte {
             0x1 => {
@@ -99,7 +99,7 @@ impl WzImage {
                     let len = reader.read_wz_int()?;
                     let offset = reader.pos.get();
     
-                    let name = String::from("Script");
+                    let name: WzNodeName = String::from("Script").into();
 
                     let wz_lua = WzLua::new(
                         &self.reader,
@@ -114,6 +114,7 @@ impl WzImage {
                     );
 
                     childrens.push((name, lua_node.into_lock()));
+
                     return Ok(childrens);
                 }
                 return Err(WzImageParseError::LuaParseError)

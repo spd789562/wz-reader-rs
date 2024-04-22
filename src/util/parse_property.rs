@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use crate::{property::{ get_sound_type_from_header, Vector2D }, WzNode, WzNodeArc, WzNodeArcVec, WzObjectType, WzReader, WzSliceReader};
+use crate::{property::{ get_sound_type_from_header, Vector2D }, WzNode, WzNodeArc, WzNodeArcVec, WzNodeName, WzObjectType, WzReader, WzSliceReader};
 use crate::property::{WzSubProperty, WzValue, WzString, WzSound, WzPng, WzRawData};
 use thiserror::Error;
 
@@ -24,10 +24,10 @@ pub enum WzPropertyParseError {
 pub fn parse_property_list(parent: &WzNodeArc, org_reader: &Arc<WzReader>, reader: &WzSliceReader, origin_offset: usize) -> Result<WzNodeArcVec, WzPropertyParseError> {
     let entry_count = reader.read_wz_int()?;
 
-    let mut childs: Vec<(String, WzNodeArc)> = Vec::with_capacity(entry_count as usize);
+    let mut childs: WzNodeArcVec = Vec::with_capacity(entry_count as usize);
 
     for _ in 0..entry_count {
-        let name = reader.read_wz_string_block(origin_offset)?;
+        let name: WzNodeName = reader.read_wz_string_block(origin_offset)?.into();
         let property_type = reader.read_u8()?;
         let parsed_node = parse_property_node(name, property_type, Some(parent), org_reader, reader, origin_offset)?;
         childs.push(parsed_node);
@@ -36,8 +36,8 @@ pub fn parse_property_list(parent: &WzNodeArc, org_reader: &Arc<WzReader>, reade
     Ok(childs)
 }
 
-pub fn parse_property_node(name: String, property_type: u8, parent: Option<&WzNodeArc>, org_reader: &Arc<WzReader> , reader: &WzSliceReader, origin_offset: usize) -> Result<(String, WzNodeArc), WzPropertyParseError> {
-    let result: (String, WzNodeArc);
+pub fn parse_property_node(name: WzNodeName, property_type: u8, parent: Option<&WzNodeArc>, org_reader: &Arc<WzReader> , reader: &WzSliceReader, origin_offset: usize) -> Result<(WzNodeName, WzNodeArc), WzPropertyParseError> {
+    let result: (WzNodeName, WzNodeArc);
 
     match property_type {
         0 => {
@@ -91,7 +91,7 @@ pub fn parse_property_node(name: String, property_type: u8, parent: Option<&WzNo
             let block_size = reader.read_u32()?;
             let next_pos = reader.pos.get() + block_size as usize;
 
-            let node = parse_extended_prop(parent, org_reader, reader, next_pos, origin_offset, &name)?;
+            let node = parse_extended_prop(parent, org_reader, reader, next_pos, origin_offset, name)?;
 
             result = node;
 
@@ -104,7 +104,7 @@ pub fn parse_property_node(name: String, property_type: u8, parent: Option<&WzNo
     Ok(result)
 }
 
-pub fn parse_extended_prop(parent: Option<&WzNodeArc>, org_reader: &Arc<WzReader>, reader: &WzSliceReader, end_of_block: usize, origin_offset: usize, property_name: &str) -> Result<(String, WzNodeArc), WzPropertyParseError> {
+pub fn parse_extended_prop(parent: Option<&WzNodeArc>, org_reader: &Arc<WzReader>, reader: &WzSliceReader, end_of_block: usize, origin_offset: usize, property_name: WzNodeName) -> Result<(WzNodeName, WzNodeArc), WzPropertyParseError> {
     let extended_type = reader.read_u8()?;
     match extended_type {
         0x01 | crate::wz_image::WZ_IMAGE_HEADER_BYTE_WITH_OFFSET => {
@@ -120,16 +120,12 @@ pub fn parse_extended_prop(parent: Option<&WzNodeArc>, org_reader: &Arc<WzReader
     }
 }
 
-pub fn parse_more(parent: Option<&WzNodeArc>, org_reader: &Arc<WzReader>, reader: &WzSliceReader, end_of_block: usize, origin_offset: usize, property_name: &str, extend_property_type: &str) -> Result<(String, WzNodeArc), WzPropertyParseError> {
-    let extend_property_type = {
-        if extend_property_type.is_empty() {
-            reader.read_wz_string()?
-        } else {
-            extend_property_type.to_string()
-        }
+pub fn parse_more(parent: Option<&WzNodeArc>, org_reader: &Arc<WzReader>, reader: &WzSliceReader, end_of_block: usize, origin_offset: usize, property_name: WzNodeName, extend_property_type: &str) -> Result<(WzNodeName, WzNodeArc), WzPropertyParseError> {
+    let extend_property_type = if extend_property_type.is_empty() {
+        reader.read_wz_string()?
+    } else {
+        extend_property_type.to_string()
     };
-
-    let property_name = property_name.to_string();
 
     match extend_property_type.as_str() {
         "Property" => {
@@ -199,8 +195,8 @@ pub fn parse_more(parent: Option<&WzNodeArc>, org_reader: &Arc<WzReader>, reader
             {
                 let mut node_write = node.write().unwrap();
                 for i in 0..entry_count {
-                    let name = i.to_string();
-                    let parsed_node = parse_extended_prop(Some(&node), org_reader, reader, end_of_block, origin_offset, &name)?;
+                    let name: WzNodeName = i.to_string().into();
+                    let parsed_node = parse_extended_prop(Some(&node), org_reader, reader, end_of_block, origin_offset, name)?;
     
                     node_write.children.insert(parsed_node.0, parsed_node.1);
                 }
@@ -285,7 +281,7 @@ pub fn get_extend_property_type_name(reader: &WzSliceReader, origin_offset: usiz
     }
 }
 
-pub fn get_node(path: &str, org_reader: &Arc<WzReader>, reader: &WzSliceReader, origin_offset: usize) -> Result<(String, WzNodeArc), WzPropertyParseError> {
+pub fn get_node(path: &str, org_reader: &Arc<WzReader>, reader: &WzSliceReader, origin_offset: usize) -> Result<(WzNodeName, WzNodeArc), WzPropertyParseError> {
     if path.is_empty() {
         return Err(WzPropertyParseError::NodeNotFound);
     }
@@ -301,7 +297,7 @@ pub fn get_node(path: &str, org_reader: &Arc<WzReader>, reader: &WzSliceReader, 
             let property_type = reader.read_u8()?;
             
             if name == current_name && next_path.is_none() {
-                return parse_property_node(name, property_type, None, org_reader, reader, origin_offset);
+                return parse_property_node(name.into(), property_type, None, org_reader, reader, origin_offset);
             }
 
             if property_type == 9 {
@@ -317,7 +313,7 @@ pub fn get_node(path: &str, org_reader: &Arc<WzReader>, reader: &WzSliceReader, 
                     reader.skip(block_size as usize);
                 }
             } else {
-                parse_property_node(name, property_type, None, org_reader, reader, origin_offset)?;
+                parse_property_node(name.into(), property_type, None, org_reader, reader, origin_offset)?;
             }
         }
 

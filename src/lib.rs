@@ -7,6 +7,7 @@ mod file;
 pub mod property;
 mod node;
 mod node_cast;
+mod node_name;
 pub mod util;
 pub mod version;
 
@@ -18,3 +19,4 @@ pub use directory::*;
 pub use file::*;
 pub use node::*;
 pub use node_cast::*;
+pub use node_name::*;

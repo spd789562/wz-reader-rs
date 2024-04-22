@@ -35,7 +35,7 @@ pub fn resolve_root_wz_file_dir(dir: &str, version: Option<WzMapleVersion>, patc
                     let dir_node = resolve_root_wz_file_dir(&file_path, version, patch_version, Some(&root_node))?;
                     
                     /* replace the original one */
-                    root_node_write.children.insert(name.to_str().unwrap().to_string(), dir_node);
+                    root_node_write.children.insert(name.to_str().unwrap().into(), dir_node);
                 }
             } else if file_type.is_file() {
                 //  check is XXX_nnn.wz
@@ -102,7 +102,7 @@ pub fn resolve_base(path: &str, version: Option<WzMapleVersion>) -> Result<WzNod
                     let dir_node = resolve_root_wz_file_dir(&file_path, version, Some(patch_version), Some(&base_node))?;
 
                     /* replace the original one */
-                    base_write.children.insert(file_name.to_str().unwrap().to_string(), dir_node);
+                    base_write.children.insert(file_name.to_str().unwrap().into(), dir_node);
                 }
             }
         }

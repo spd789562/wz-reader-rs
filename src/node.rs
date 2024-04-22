@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::sync::{Arc, Weak, RwLock};
 use hashbrown::HashMap;
-use crate::{ version, WzDirectoryParseError, WzFile, WzFileParseError, WzImage, WzImageParseError, WzObjectType};
+use crate::{ version, WzDirectoryParseError, WzFile, WzFileParseError, WzImage, WzImageParseError, WzObjectType, WzNodeName};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -24,14 +24,14 @@ pub enum NodeParseError {
 
 #[derive(Debug)]
 pub struct WzNode {
-    pub name: String,
+    pub name: WzNodeName,
     pub object_type: WzObjectType,
     pub parent: Weak<RwLock<WzNode>>,
-    pub children: HashMap<String, Arc<RwLock<WzNode>>>,
+    pub children: HashMap<WzNodeName, Arc<RwLock<WzNode>>>,
 }
 
 pub type WzNodeArc = Arc<RwLock<WzNode>>;
-pub type WzNodeArcVec = Vec<(String, WzNodeArc)>;
+pub type WzNodeArcVec = Vec<(WzNodeName, WzNodeArc)>;
 
 impl From<WzNode> for WzNodeArc {
     fn from(node: WzNode) -> Self {
@@ -40,20 +40,23 @@ impl From<WzNode> for WzNodeArc {
 }
 
 impl WzNode {
-    pub fn new(name: &str, object_type: WzObjectType, parent: Option<&WzNodeArc>) -> Self {
+    pub fn new(name: &WzNodeName, object_type: WzObjectType, parent: Option<&WzNodeArc>) -> Self {
         Self {
-            name: name.to_string(),
+            name: name.clone(),
             object_type,
             parent: parent.map(Arc::downgrade).unwrap_or_default(),
             children: HashMap::new(),
         }
+    }
+    pub fn from_str(name: &str, object_type: WzObjectType, parent: Option<&WzNodeArc>) -> Self {
+        Self::new(&name.into(), object_type, parent)
     }
     pub fn from_wz_file(path: &str, version: Option<version::WzMapleVersion>, patch_version: Option<i32>, parent: Option<&WzNodeArc>) -> Result<Self, NodeParseError> {
         let name = Path::new(path).file_stem().unwrap().to_str().unwrap();
         let version = version.unwrap_or(version::WzMapleVersion::EMS);
         let wz_file = WzFile::from_file(path, version::get_iv_by_maple_version(version), patch_version)?;
         Ok(WzNode::new(
-            name, 
+            &name.into(), 
             WzObjectType::File(Box::new(wz_file)), 
             parent
         ))
@@ -63,7 +66,7 @@ impl WzNode {
         let version = version.unwrap_or(version::WzMapleVersion::EMS);
         let wz_image = WzImage::from_file(path, version::get_iv_by_maple_version(version))?;
         Ok(WzNode::new(
-            name, 
+            &name.into(), 
             WzObjectType::Image(Box::new(wz_image)), 
             parent
         ))
@@ -122,18 +125,17 @@ impl WzNode {
     }
 
     pub fn get_full_path(&self) -> String {
-        let mut path = self.name.clone();
+        let mut path = self.name.to_string();
         let mut parent = self.parent.upgrade();
         while let Some(parent_inner) = parent {
             let read = parent_inner.read().unwrap();
-            path = format!("{}/{}", read.name, path);
+            path = format!("{}/{}", &read.name, path);
             parent = read.parent.upgrade();
         }
         path
     }
 
     pub fn at(&self, name: &str) -> Option<WzNodeArc> {
-        // println!("at: {}", name);
         self.children.get(name).map(Arc::clone)
     }
     pub fn at_relative(&self, path: &str) -> Option<WzNodeArc> {
