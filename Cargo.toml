@@ -1,6 +1,6 @@
 [package]
 name = "wz_reader"
-description = "A wz file reader to resolve wz file and thread safe"
+description = "A wz file reader to resolve wz file with thread safe"
 readme = "README.md"
 homepage = "https://github.com/spd789562/wz-reader-rs"
 repository = "https://github.com/spd789562/wz-reader-rs"
