@@ -123,7 +123,7 @@ impl WzDirectory {
 
             match dir_type {
                 WzDirectoryType::WzDirectory => {
-                    let node = WzDirectory::new(
+                    let wz_dir = WzDirectory::new(
                             offset,
                             fsize as usize,
                             &self.reader,
@@ -133,14 +133,14 @@ impl WzDirectory {
 
                     let obj_node = WzNode::new(
                         &fname,
-                        WzObjectType::Directory(Box::new(node)),
+                        wz_dir,
                         Some(parent)
                     );
 
                     nodes.push((fname, obj_node.into_lock()));
                 }
                 WzDirectoryType::WzImage => {
-                    let node = WzImage::new(
+                    let wz_image = WzImage::new(
                         &fname,
                         offset,
                         fsize as usize,
@@ -149,7 +149,7 @@ impl WzDirectory {
 
                     let obj_node = WzNode::new(
                         &fname,
-                        WzObjectType::Image(Box::new(node)),
+                        wz_image,
                         Some(parent)
                     );
 

@@ -40,15 +40,15 @@ impl From<WzNode> for WzNodeArc {
 }
 
 impl WzNode {
-    pub fn new(name: &WzNodeName, object_type: WzObjectType, parent: Option<&WzNodeArc>) -> Self {
+    pub fn new<T: Into<WzObjectType>>(name: &WzNodeName, object_type: T, parent: Option<&WzNodeArc>) -> Self {
         Self {
             name: name.clone(),
-            object_type,
+            object_type: object_type.into(),
             parent: parent.map(Arc::downgrade).unwrap_or_default(),
             children: HashMap::new(),
         }
     }
-    pub fn from_str(name: &str, object_type: WzObjectType, parent: Option<&WzNodeArc>) -> Self {
+    pub fn from_str<T: Into<WzObjectType>>(name: &str, object_type: T, parent: Option<&WzNodeArc>) -> Self {
         Self::new(&name.into(), object_type, parent)
     }
     pub fn from_wz_file(path: &str, version: Option<version::WzMapleVersion>, patch_version: Option<i32>, parent: Option<&WzNodeArc>) -> Result<Self, NodeParseError> {

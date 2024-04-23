@@ -3,7 +3,7 @@ use wz_reader::{WzObjectType, WzNode, WzNodeArc, property::{WzValue, WzSubProper
 use std::sync::Arc;
 
 fn create_int_node(num: i32, parent: &WzNodeArc) -> WzNodeArc {
-    WzNode::new(&format!("{}", num).into(), WzObjectType::Value(WzValue::Int(num)), Some(parent)).into_lock()
+    WzNode::new(&format!("{}", num).into(), num, Some(parent)).into_lock()
 }
 
 fn thin_setup() -> (WzNodeArc, String) {
@@ -26,7 +26,7 @@ fn fat_setup() -> (WzNodeArc, String) {
     let (_, mut path) = (0..=500).fold((Arc::clone(&root), String::from("")), |node, _| {
         let first = create_int_node(0, &node.0);
         node.0.write().unwrap().children.insert("0".into(), Arc::clone(&first));
-        
+
         let last = (1..=500).fold(first, |_, num| {
             let child = create_int_node(num, &node.0);
             node.0.write().unwrap().children.insert(num.to_string().into(), Arc::clone(&child));

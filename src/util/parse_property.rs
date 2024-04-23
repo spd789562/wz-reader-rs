@@ -46,17 +46,17 @@ pub fn parse_property_node(name: WzNodeName, property_type: u8, parent: Option<&
         },
         2 | 11 => {
             let num = reader.read_i16()?;
-            let node = WzNode::new(&name, WzObjectType::Value(WzValue::Short(num)), parent);
+            let node = WzNode::new(&name, num, parent);
             result = (name, node.into_lock());
         },
         3 | 19 => {
             let num = reader.read_wz_int()?;
-            let node = WzNode::new(&name, WzObjectType::Value(WzValue::Int(num)), parent);
+            let node = WzNode::new(&name, num, parent);
             result = (name, node.into_lock());
         },
         20 => {
             let num = reader.read_wz_int64()?;
-            let node = WzNode::new(&name, WzObjectType::Value(WzValue::Long(num)), parent);
+            let node = WzNode::new(&name, num, parent);
             result = (name, node.into_lock());
         },
         4 => {
@@ -64,25 +64,25 @@ pub fn parse_property_node(name: WzNodeName, property_type: u8, parent: Option<&
             match float_type {
                 0x80 => {
                     let num = reader.read_float()?;
-                    let node = WzNode::new(&name, WzObjectType::Value(WzValue::Float(num)), parent);
+                    let node = WzNode::new(&name, num, parent);
                     result = (name, node.into_lock());
                 },
                 _ => {
-                    let node = WzNode::new(&name, WzObjectType::Value(WzValue::Float(float_type as f32)), parent);
+                    let node = WzNode::new(&name, float_type as f32, parent);
                     result = (name, node.into_lock());
                 }
             }
         },
         5 => {
             let num = reader.read_double()?;
-            let node = WzNode::new(&name, WzObjectType::Value(WzValue::Double(num)), parent);
+            let node = WzNode::new(&name, num, parent);
             result = (name, node.into_lock());
         },
         8 => {
             let str_meta = reader.read_wz_string_block_meta(origin_offset)?;
             let node = WzNode::new(
                 &name,
-                WzObjectType::Value(WzValue::String(WzString::from_meta(str_meta, org_reader))),
+                WzString::from_meta(str_meta, org_reader),
                 parent
             );
             result = (name, node.into_lock());
@@ -178,7 +178,7 @@ pub fn parse_more(parent: Option<&WzNodeArc>, org_reader: &Arc<WzReader>, reader
             let wz_png = WzPng::new(org_reader, (width as u32, height as u32), (format1 as u32, format2 as u32), (canvas_offset, canvas_slice_size), canvas_header as i32);
 
             if let Ok(mut node) = node.write() {
-                node.object_type = WzObjectType::Property(WzSubProperty::PNG(Box::new(wz_png)));
+                node.object_type = wz_png.into();
             }
 
             Ok((property_name, node))
@@ -209,7 +209,7 @@ pub fn parse_more(parent: Option<&WzNodeArc>, org_reader: &Arc<WzReader>, reader
                 reader.read_wz_int()?,
                 reader.read_wz_int()?
             );
-            let node = WzNode::new(&property_name, WzObjectType::Value(WzValue::Vector(vec2)), parent);
+            let node = WzNode::new(&property_name, vec2, parent);
 
             Ok((property_name, node.into_lock()))
         },
@@ -230,7 +230,7 @@ pub fn parse_more(parent: Option<&WzNodeArc>, org_reader: &Arc<WzReader>, reader
 
             let node = WzNode::new(
                 &property_name,
-                WzObjectType::Property(WzSubProperty::Sound(Box::new(sound))),
+                sound,
                 parent
             );
 
@@ -253,7 +253,7 @@ pub fn parse_more(parent: Option<&WzNodeArc>, org_reader: &Arc<WzReader>, reader
             let raw_data_offset = reader.pos.get();
             let node = WzNode::new(
                 &property_name,
-                WzObjectType::Value(WzValue::RawData(WzRawData::new(org_reader, raw_data_offset, raw_data_size))),
+                WzRawData::new(org_reader, raw_data_offset, raw_data_size),
                 parent
             );
 

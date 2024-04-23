@@ -24,19 +24,19 @@ pub fn walk_node(node: &WzNodeArc, force_parse: bool, f: &dyn Fn(&WzNodeArc)) {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{WzObjectType, WzNode, property::{WzValue, WzSubProperty}};
+    use crate::{WzObjectType, WzNode, property::WzSubProperty};
 
     fn generate_mock_node() -> WzNodeArc {
         let root = WzNode::from_str("root", WzObjectType::Property(WzSubProperty::Property), None).into_lock();
 
-        let child1 = WzNode::from_str("child1", WzObjectType::Value(WzValue::Int(1)), Some(&root)).into_lock();
-        let child2 = WzNode::from_str("child2", WzObjectType::Value(WzValue::Int(2)), Some(&root)).into_lock();
+        let child1 = WzNode::from_str("child1", 1, Some(&root)).into_lock();
+        let child2 = WzNode::from_str("child2", 2, Some(&root)).into_lock();
 
-        WzNode::from_str("child11", WzObjectType::Value(WzValue::Int(11)), Some(&child1)).into_lock();
-        WzNode::from_str("child12", WzObjectType::Value(WzValue::Int(12)), Some(&child1)).into_lock();
+        WzNode::from_str("child11", 11, Some(&child1)).into_lock();
+        WzNode::from_str("child12", 12, Some(&child1)).into_lock();
 
-        WzNode::from_str("child21", WzObjectType::Value(WzValue::Int(21)), Some(&child2)).into_lock();
-        WzNode::from_str("child22", WzObjectType::Value(WzValue::Int(22)), Some(&child2)).into_lock();
+        WzNode::from_str("child21", 21, Some(&child2)).into_lock();
+        WzNode::from_str("child22", 22, Some(&child2)).into_lock();
 
         root
     }

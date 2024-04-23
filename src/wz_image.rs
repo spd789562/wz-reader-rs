@@ -1,5 +1,6 @@
 use std::sync::Arc;
-use crate::{ property::{WzLua, WzValue}, util, WzNode, WzNodeArc, WzNodeArcVec, WzNodeName, WzObjectType, WzReader };
+use crate::{ util, WzNode, WzNodeArc, WzNodeArcVec, WzNodeName, WzReader };
+use crate::property::WzLua;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -109,7 +110,7 @@ impl WzImage {
 
                     let lua_node = WzNode::new(
                         &name, 
-                        WzObjectType::Value(WzValue::Lua(wz_lua)),
+                        wz_lua,
                         Some(parent)
                     );
 

@@ -121,7 +121,7 @@ mod test {
             reader: Arc::new(reader),
             wz_file_meta: Default::default(),
         };
-        let node = WzNode::from_str("test", WzObjectType::File(Box::new(file)), None);
+        let node = WzNode::from_str("test", file, None);
 
         assert!(node.try_as_file().is_some());
         assert!(node.try_as_directory().is_none());
@@ -131,7 +131,7 @@ mod test {
     fn try_as_directory() {
         let reader = Arc::new(setup_wz_reader().unwrap());
         let wzdir = WzDirectory::new(0, 0, &reader, false);
-        let node = WzNode::from_str("test", WzObjectType::Directory(Box::new(wzdir)), None);
+        let node = WzNode::from_str("test", wzdir, None);
 
         assert!(node.try_as_directory().is_some());
         assert!(node.try_as_file().is_none());
@@ -141,7 +141,7 @@ mod test {
     fn try_as_image() {
         let reader = Arc::new(setup_wz_reader().unwrap());
         let wzimage = WzImage::new(&"test".into(), 0, 0, &reader);
-        let node = WzNode::from_str("test", WzObjectType::Image(Box::new(wzimage)), None);
+        let node = WzNode::from_str("test", wzimage, None);
 
         assert!(node.try_as_image().is_some());
         assert!(node.try_as_file().is_none());
@@ -166,7 +166,7 @@ mod test {
     fn try_as_png() {
         let reader = Arc::new(setup_wz_reader().unwrap());
         let png = WzPng::new(&reader, (1, 1), (1, 1), (0, 1), 0);
-        let node = WzNode::from_str("test", WzObjectType::Property(WzSubProperty::PNG(Box::new(png))), None);
+        let node = WzNode::from_str("test", png, None);
 
         assert!(node.try_as_png().is_some());
         assert!(node.try_as_file().is_none());
@@ -174,8 +174,8 @@ mod test {
     #[test]
     fn try_as_sound() {
         let reader = Arc::new(setup_wz_reader().unwrap());
-        let png = WzSound::new(&reader, 0, 0, 0, 0, 0, WzSoundType::Mp3);
-        let node = WzNode::from_str("test", WzObjectType::Property(WzSubProperty::Sound(Box::new(png))), None);
+        let sound = WzSound::new(&reader, 0, 0, 0, 0, 0, WzSoundType::Mp3);
+        let node = WzNode::from_str("test", sound, None);
 
         assert!(node.try_as_sound().is_some());
         assert!(node.try_as_file().is_none());
@@ -184,7 +184,7 @@ mod test {
     fn try_as_string() {
         let reader = Arc::new(setup_wz_reader().unwrap());
         let string = WzString::from_meta(WzStringMeta::empty(), &reader);
-        let node = WzNode::from_str("test", WzObjectType::Value(WzValue::String(string)), None);
+        let node = WzNode::from_str("test", string, None);
 
         assert!(node.try_as_string().is_some());
         assert!(node.try_as_file().is_none());
@@ -203,7 +203,7 @@ mod test {
     fn try_as_lua() {
         let reader = Arc::new(setup_wz_reader().unwrap());
         let lua = WzLua::new(&reader, 0, 0);
-        let node = WzNode::from_str("test", WzObjectType::Value(WzValue::Lua(lua)), None);
+        let node = WzNode::from_str("test", lua, None);
 
         assert!(node.try_as_lua().is_some());
         assert!(node.try_as_file().is_none());
@@ -212,7 +212,7 @@ mod test {
     fn try_as_raw_data() {
         let reader = Arc::new(setup_wz_reader().unwrap());
         let raw_data = WzRawData::new(&reader, 0, 0);
-        let node = WzNode::from_str("test", WzObjectType::Value(WzValue::RawData(raw_data)), None);
+        let node = WzNode::from_str("test", raw_data, None);
 
         assert!(node.try_as_raw_data().is_some());
         assert!(node.try_as_file().is_none());
@@ -221,42 +221,42 @@ mod test {
     #[test]
     fn try_as_vector2d() {
         let vec2 = Vector2D::new(2, 3);
-        let node = WzNode::from_str("test", WzObjectType::Value(WzValue::Vector(vec2)), None);
+        let node = WzNode::from_str("test", vec2, None);
 
         assert!(node.try_as_file().is_none());
         assert_eq!(node.try_as_vector2d(), Some(&Vector2D::new(2, 3)));
     }
     #[test]
     fn try_as_short() {
-        let node = WzNode::from_str("test", WzObjectType::Value(WzValue::Short(1)), None);
+        let node = WzNode::from_str("test", 1_i16, None);
 
         assert!(node.try_as_file().is_none());
         assert_eq!(node.try_as_short(), Some(&1));
     }
     #[test]
     fn try_as_int() {
-        let node = WzNode::from_str("test", WzObjectType::Value(WzValue::Int(1)), None);
+        let node = WzNode::from_str("test", 1, None);
 
         assert!(node.try_as_file().is_none());
         assert_eq!(node.try_as_int(), Some(&1));
     }
     #[test]
     fn try_as_long() {
-        let node = WzNode::from_str("test", WzObjectType::Value(WzValue::Long(1)), None);
+        let node = WzNode::from_str("test", 1_i64, None);
 
         assert!(node.try_as_file().is_none());
         assert_eq!(node.try_as_long(), Some(&1));
     }
     #[test]
     fn try_as_float() {
-        let node = WzNode::from_str("test", WzObjectType::Value(WzValue::Float(1.0)), None);
+        let node = WzNode::from_str("test", 1.0_f32, None);
 
         assert!(node.try_as_file().is_none());
         assert_eq!(node.try_as_float(), Some(&1.0));
     }
     #[test]
     fn try_as_double() {
-        let node = WzNode::from_str("test", WzObjectType::Value(WzValue::Double(1.0)), None);
+        let node = WzNode::from_str("test", 1.0_f64, None);
 
         assert!(node.try_as_file().is_none());
         assert_eq!(node.try_as_double(), Some(&1.0));
