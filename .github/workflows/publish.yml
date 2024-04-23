@@ -37,4 +37,4 @@ jobs:
               run: cargo login ${{ secrets.CRATES_IO_API_TOKEN }}
 
             - name: 'Publish'
-              run: cargo release
+              run: cargo release --execute --no-confirm --no-verify
