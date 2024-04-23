@@ -46,8 +46,8 @@ fn main() {
 }
 ```
 
-You can find more example usage in the [examples] folder.
+You can find more example usage in the [examples](./examples) folder.
 
 ## License
 
-This project is licensed under the [MIT license][license].
+This project is licensed under the [MIT license](./LICENSE.txt).

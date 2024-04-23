@@ -34,7 +34,8 @@ pub use raw_data::*;
 //   RawData,
 // }
 
-/* has subproperties */
+
+/// A WzProperty potentially contains childrens.
 #[derive(Debug, Clone)]
 
 pub enum WzSubProperty {

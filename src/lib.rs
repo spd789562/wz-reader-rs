@@ -1,4 +1,4 @@
-mod reader;
+pub mod reader;
 mod object;
 mod header;
 mod directory;
@@ -11,7 +11,7 @@ mod node_name;
 pub mod util;
 pub mod version;
 
-pub use reader::*;
+pub use reader::{Reader, WzReader, WzSliceReader};
 pub use object::*;
 pub use header::*;
 pub use wz_image::*;

@@ -1,11 +1,12 @@
+use std::ops::Range;
 use std::sync::Arc;
 use crate::WzReader;
 
 #[derive(Debug, Clone)]
 pub struct WzRawData {
     pub reader: Arc<WzReader>,
-    pub offset: usize,
-    pub length: usize,
+    offset: usize,
+    length: usize,
 }
 
 impl WzRawData {
@@ -15,5 +16,12 @@ impl WzRawData {
             offset,
             length,
         }
+    }
+    fn get_buffer_range(&self) -> Range<usize> {
+        self.offset..self.offset + self.length as usize
+    }
+    pub fn get_buffer(&self) -> &[u8] {
+        let range = self.get_buffer_range();
+        self.reader.get_slice(range)
     }
 }

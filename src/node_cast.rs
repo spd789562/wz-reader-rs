@@ -1,6 +1,17 @@
 use crate::property::{WzValue, WzSubProperty, WzSound, WzPng, WzString, WzLua, WzRawData, Vector2D};
 use crate::{ WzDirectory, WzNode, WzFile, WzImage, WzObjectType};
 
+/// Trait for casting WzNode to its inner type.
+/// 
+/// # Example
+/// 
+/// ```
+/// # use wz_reader::{WzNode, WzNodeCast};
+/// let wz_int = WzNode::from_str("test", 1, None);
+/// 
+/// assert!(wz_int.try_as_int().is_some());
+/// assert!(wz_int.try_as_file().is_none());
+/// ```
 pub trait WzNodeCast {
     fn try_as_file(&self) -> Option<&WzFile>;
     fn try_as_directory(&self) -> Option<&WzDirectory>;

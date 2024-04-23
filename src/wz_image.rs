@@ -61,6 +61,9 @@ impl WzImage {
         })
     }
 
+    /// Direct get child node inside WzImage without parsing the whole WzImage. Sometimes
+    /// we just need a single node in WzImage, but don't want to parse it and
+    /// unparse later, it waste time and memory.
     pub fn at_path(&self, path: &str) -> Result<WzNodeArc, WzImageParseError> {
         let reader = self.reader.create_slice_reader_without_hash();
 

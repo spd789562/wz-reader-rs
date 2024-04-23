@@ -8,7 +8,7 @@ use crate::reader::{read_i32_at, WzReader};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
-pub enum WzSoundParseError {
+pub enum WzSoundError {
     #[error("Unsupported sound format")]
     UnsupportedFormat,
 
@@ -29,10 +29,10 @@ pub enum WzSoundType {
 #[derive(Debug, Clone)]
 pub struct WzSound {
     reader: Arc<WzReader>,
-    pub offset: usize,
-    pub length: u32,
-    pub header_offset: usize,
-    pub header_size: usize,
+    offset: usize,
+    length: u32,
+    header_offset: usize,
+    header_size: usize,
     pub duration: u32,
     pub sound_type: WzSoundType,
 }
@@ -83,10 +83,10 @@ impl WzSound {
             sound_type,
         }
     }
-    pub fn get_buffer_range(&self) -> Range<usize> {
+    fn get_buffer_range(&self) -> Range<usize> {
         self.offset..self.offset + self.length as usize
     }
-    pub fn get_header_range(&self) -> Range<usize> {
+    fn get_header_range(&self) -> Range<usize> {
         self.header_offset..self.header_offset + self.header_size
     }
     pub fn get_wav_header(&self) -> Vec<u8> {
@@ -117,7 +117,7 @@ impl WzSound {
             }
         }
     }
-    pub fn extract_sound(&self, path: PathBuf) -> Result<(), WzSoundParseError> {
+    pub fn extract_sound(&self, path: PathBuf) -> Result<(), WzSoundError> {
         let buffer = self.reader.get_slice(self.get_buffer_range());
 
         match self.sound_type {

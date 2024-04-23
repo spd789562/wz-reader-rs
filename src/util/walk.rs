@@ -1,4 +1,3 @@
-
 use crate::{WzNodeArc, WzObjectType};
 
 pub fn walk_node(node: &WzNodeArc, force_parse: bool, f: &dyn Fn(&WzNodeArc)) {

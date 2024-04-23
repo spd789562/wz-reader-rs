@@ -22,6 +22,7 @@ pub enum NodeParseError {
     NodeNotFound,
 }
 
+/// A basic unit of wz_reader
 #[derive(Debug)]
 pub struct WzNode {
     pub name: WzNodeName,
@@ -40,7 +41,7 @@ impl From<WzNode> for WzNodeArc {
 }
 
 impl WzNode {
-    pub fn new<T: Into<WzObjectType>>(name: &WzNodeName, object_type: T, parent: Option<&WzNodeArc>) -> Self {
+    pub fn new(name: &WzNodeName, object_type: impl Into<WzObjectType>, parent: Option<&WzNodeArc>) -> Self {
         Self {
             name: name.clone(),
             object_type: object_type.into(),
@@ -48,9 +49,10 @@ impl WzNode {
             children: HashMap::new(),
         }
     }
-    pub fn from_str<T: Into<WzObjectType>>(name: &str, object_type: T, parent: Option<&WzNodeArc>) -> Self {
+    pub fn from_str(name: &str, object_type: impl Into<WzObjectType>, parent: Option<&WzNodeArc>) -> Self {
         Self::new(&name.into(), object_type, parent)
     }
+    /// Create a WzNode from a any `.wz` file.
     pub fn from_wz_file(path: &str, version: Option<version::WzMapleVersion>, patch_version: Option<i32>, parent: Option<&WzNodeArc>) -> Result<Self, NodeParseError> {
         let name = Path::new(path).file_stem().unwrap().to_str().unwrap();
         let version = version.unwrap_or(version::WzMapleVersion::EMS);
@@ -61,6 +63,7 @@ impl WzNode {
             parent
         ))
     }
+    /// Create a WzNode from a any `.img` file.
     pub fn from_img_file(path: &str, version: Option<version::WzMapleVersion>, parent: Option<&WzNodeArc>) -> Result<Self, NodeParseError> {
         let name = Path::new(path).file_stem().unwrap().to_str().unwrap();
         let version = version.unwrap_or(version::WzMapleVersion::EMS);
@@ -72,10 +75,12 @@ impl WzNode {
         ))
     }
 
+    /// A quicker way to turn `WzNode`` to `WzNodeArc``.
     pub fn into_lock(self) -> WzNodeArc {
         Arc::new(RwLock::new(self))
     }
 
+    /// Parse the node base on the object type.
     pub fn parse(&mut self, parent: &WzNodeArc) -> Result<(), NodeParseError> {
         let childs: WzNodeArcVec = match self.object_type {
             WzObjectType::Directory(ref mut directory) => {
@@ -105,6 +110,8 @@ impl WzNode {
 
         Ok(())
     }
+
+    /// Clear the node childrens and set the node to unparsed.
     pub fn unparse(&mut self) -> Result<(), NodeParseError> {
         match &mut self.object_type {
             WzObjectType::Directory(directory) => {
@@ -124,6 +131,23 @@ impl WzNode {
         Ok(())
     }
 
+    pub fn add(&mut self, node: &WzNodeArc) {
+        self.children.insert(node.read().unwrap().name.clone(), Arc::clone(node));
+    }
+
+    /// Returns the full path of the WzNode.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use wz_reader::{WzObjectType, WzNode};
+    /// # use wz_reader::property::WzValue;
+    /// let root = WzNode::from_str("root", 1, None).into_lock();
+    /// let child = WzNode::from_str("1", 1, Some(&root)).into_lock();
+    /// let grandchild = WzNode::from_str("2", 1, Some(&child)).into_lock();
+    /// 
+    /// assert_eq!(grandchild.read().unwrap().get_full_path(), "root/1/2");
+    /// ```
     pub fn get_full_path(&self) -> String {
         let mut path = self.name.to_string();
         let mut parent = self.parent.upgrade();
@@ -134,10 +158,47 @@ impl WzNode {
         }
         path
     }
-
+    /// A alias to get child.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use wz_reader::{WzObjectType, WzNode};
+    /// # use wz_reader::property::WzValue;
+    /// let root = WzNode::from_str("root", 1, None).into_lock();
+    /// let child1 = WzNode::from_str("1", 1, Some(&root)).into_lock();
+    /// let child2 = WzNode::from_str("2", 1, Some(&root)).into_lock();
+    /// 
+    /// let mut root =  root.write().unwrap();
+    /// root.add(&child1);
+    /// root.add(&child2);
+    /// 
+    /// assert!(root.at("1").is_some());
+    /// assert!(root.at("3").is_none());
+    /// ```
     pub fn at(&self, name: &str) -> Option<WzNodeArc> {
         self.children.get(name).map(Arc::clone)
     }
+
+    /// A relative path version of `at` able to use `..` to get parent node.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use wz_reader::{WzObjectType, WzNode};
+    /// # use wz_reader::property::WzValue;
+    /// # use std::sync::Arc;
+    /// let root = WzNode::from_str("root", 1, None).into_lock();
+    /// let child1 = WzNode::from_str("1", 1, Some(&root)).into_lock();
+    /// let child2 = WzNode::from_str("2", 1, Some(&root)).into_lock();
+    /// 
+    /// let mut root =  root.write().unwrap();
+    /// root.add(&child1);
+    /// root.add(&child2);
+    /// 
+    /// assert!(child1.read().unwrap().at_relative("..").is_some());
+    /// assert!(root.at_relative("..").is_none());
+    /// ```
     pub fn at_relative(&self, path: &str) -> Option<WzNodeArc> {
         if path == ".." {
             self.parent.upgrade()
@@ -145,6 +206,23 @@ impl WzNode {
             self.at(path)
         }
     }
+    /// Get node by path like `a/b/c`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use wz_reader::{WzObjectType, WzNode};
+    /// # use wz_reader::property::WzValue;
+    /// let root = WzNode::from_str("root", 1, None).into_lock();
+    /// let child1 = WzNode::from_str("1", 1, Some(&root)).into_lock();
+    /// let child2 = WzNode::from_str("2", 1, Some(&child1)).into_lock();
+    /// 
+    /// root.write().unwrap().add(&child1);
+    /// child1.write().unwrap().add(&child2);
+    /// 
+    /// assert!(root.read().unwrap().at_path("1/2").is_some());
+    /// assert!(root.read().unwrap().at_path("1/3").is_none());
+    /// ```
     pub fn at_path(&self, path: &str) -> Option<WzNodeArc> {
         let mut pathes = path.split('/');
         let first = self.at(pathes.next().unwrap());
@@ -154,6 +232,7 @@ impl WzNode {
             None
         }
     }
+    /// Get node by path like `a/b/c` and parse all nodes in the path.
     pub fn at_path_parsed(&self, path: &str) -> Result<WzNodeArc, NodeParseError> {
         let mut pathes = path.split('/');
         
@@ -168,6 +247,23 @@ impl WzNode {
             Err(NodeParseError::NodeNotFound)
         }
     }
+    /// Get node by path that include relative path like `../../b/c`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use wz_reader::{WzObjectType, WzNode};
+    /// # use wz_reader::property::WzValue;
+    /// let root = WzNode::from_str("root", 1, None).into_lock();
+    /// let child1 = WzNode::from_str("1", 1, Some(&root)).into_lock();
+    /// let child2 = WzNode::from_str("2", 1, Some(&child1)).into_lock();
+    /// 
+    /// root.write().unwrap().add(&child1);
+    /// child1.write().unwrap().add(&child2);
+    /// 
+    /// assert!(child2.read().unwrap().at_path_relative("../..").is_some());
+    /// assert!(child2.read().unwrap().at_path_relative("../3").is_none());
+    /// ```
     pub fn at_path_relative(&self, path: &str) -> Option<WzNodeArc> {
         let mut pathes = path.split('/');
         let first = self.at_relative(pathes.next().unwrap());
@@ -177,6 +273,24 @@ impl WzNode {
             None
         }
     }
+    
+    /// Get parent node by filter.
+    /// 
+    /// # Examples
+    /// 
+    /// ```
+    /// # use wz_reader::{WzObjectType, WzNode};
+    /// # use wz_reader::property::WzValue;
+    /// let root = WzNode::from_str("root", 1, None).into_lock();
+    /// let child1 = WzNode::from_str("1", 1, Some(&root)).into_lock();
+    /// let child2 = WzNode::from_str("2", 1, Some(&child1)).into_lock();
+    /// 
+    /// root.write().unwrap().add(&child1);
+    /// child1.write().unwrap().add(&child2);
+    /// 
+    /// let target = child2.read().unwrap().filter_parent(|node| node.name.as_str() == "root");
+    /// assert!(target.is_some());
+    /// ```
     pub fn filter_parent<F>(&self, cb: F) -> Option<WzNodeArc> 
         where F: Fn(&WzNode) -> bool
     {
@@ -194,13 +308,16 @@ impl WzNode {
             }
         }
     }
+
     pub fn get_parent_wz_image(&self) -> Option<WzNodeArc> {
         self.filter_parent(|node| matches!(node.object_type, WzObjectType::Image(_)))
     }
+    
     pub fn get_base_wz_file(&self) -> Option<WzNodeArc> {
         self.filter_parent(|node| matches!(node.object_type, WzObjectType::File(_)) && node.name.as_str() == "Base")
     }
 
+    /// Transfer all children to another node.
     pub fn transfer_childs(&mut self, to: &WzNodeArc) {
         let mut write = to.write().unwrap();
         for (name, child) in self.children.drain() {
@@ -209,12 +326,18 @@ impl WzNode {
     }
 }
 
+pub fn parse_node(node: &WzNodeArc) -> Result<(), NodeParseError> {
+    node.write().unwrap().parse(node)
+}
+
+/// Resolve a `_inlink` path, a `_inlink` path always start from a `WzImage`.
 pub fn resolve_inlink(path: &str, node: &WzNodeArc) -> Option<WzNodeArc> {
     let parent_wz_image = node.read().unwrap().get_parent_wz_image()?;
     let parent_wz_image = parent_wz_image.read().unwrap();
     parent_wz_image.at_path(path)
 }
 
+/// Resolve a `_outlink` path, a `_outlink` path always start from Wz's data root(a.k.a `Base.wz`).
 pub fn resolve_outlink(path: &str, node: &WzNodeArc, force_parse: bool) -> Option<WzNodeArc> {
     let parent_wz_base = node.read().unwrap().get_base_wz_file()?;
 

@@ -313,7 +313,38 @@ pub fn get_node(path: &str, org_reader: &Arc<WzReader>, reader: &WzSliceReader, 
                     reader.skip(block_size as usize);
                 }
             } else {
-                parse_property_node(name.into(), property_type, None, org_reader, reader, origin_offset)?;
+                match property_type {
+                    0 => { /* do nothing */ },
+                    2 | 11 => {
+                        reader.skip(2);
+                    },
+                    3 | 19 => {
+                        reader.read_wz_int()?;
+                    },
+                    20 => {
+                        reader.read_wz_int64()?;
+                    },
+                    4 => {
+                        let float_type: u8 = reader.read_u8()?;
+
+                        if float_type == 0x80 {
+                            reader.skip(4);
+                        }
+                    },
+                    5 => {
+                        reader.skip(8);
+                    },
+                    8 => {
+                        reader.read_wz_string_block_meta(origin_offset)?;
+                    },
+                    9 => {
+                        let block_size = reader.read_u32()?;
+                        reader.skip(block_size as usize);
+                    },
+                    _ => {
+                        return Err(WzPropertyParseError::UnknownPropertyType(property_type, reader.pos.get()));
+                    }
+                }
             }
         }
 

@@ -3,6 +3,7 @@ use std::fs::DirEntry;
 use std::path::Path;
 use crate::{WzNode, WzNodeArc, WzObjectType, version::WzMapleVersion};
 
+/// Get a wz file path by directory, like `Map` -> `Map/Map.wz`.
 pub fn get_root_wz_file_path(dir: &DirEntry) -> Option<String> {
     let dir_name = dir.file_name();
     let mut inner_wz_name = dir_name.to_str().unwrap().to_string();
@@ -16,6 +17,7 @@ pub fn get_root_wz_file_path(dir: &DirEntry) -> Option<String> {
     None
 }
 
+/// Resolve series of wz files in a directory, and merge *_nnn.wz files into one WzFile.
 pub fn resolve_root_wz_file_dir(dir: &str, version: Option<WzMapleVersion>, patch_version: Option<i32>, parent: Option<&WzNodeArc>) -> Result<WzNodeArc, io::Error> {
     let root_node: WzNodeArc = WzNode::from_wz_file(dir, version, patch_version, parent).unwrap().into();
     let wz_dir = Path::new(dir).parent().unwrap();
@@ -68,6 +70,7 @@ pub fn resolve_root_wz_file_dir(dir: &str, version: Option<WzMapleVersion>, patc
     Ok(root_node)
 }
 
+/// Construct `WzNode` tree from `Base.wz`
 pub fn resolve_base(path: &str, version: Option<WzMapleVersion>) -> Result<WzNodeArc, io::Error> {
     if !path.ends_with("Base.wz") {
         return Err(io::Error::new(io::ErrorKind::InvalidInput, "not a Base.wz"));
@@ -92,7 +95,6 @@ pub fn resolve_base(path: &str, version: Option<WzMapleVersion>) -> Result<WzNod
             let dir = item?;
             let file_name = dir.file_name();
     
-            /* we need aquire wirte lock to "add_node_child" so need release read lock here */
             let has_dir = base_write.at(file_name.to_str().unwrap()).is_some();
     
             if has_dir {

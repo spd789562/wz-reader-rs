@@ -32,9 +32,9 @@ pub struct WzStringMeta {
 pub struct WzString {
     reader: Arc<WzReader>,
     /// string start offset
-    pub offset: usize,
+    offset: usize,
     /// string length
-    pub length: u32,
+    length: u32,
     pub string_type: WzStringType,
 }
 

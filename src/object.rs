@@ -1,6 +1,19 @@
 use crate::{WzFile, WzDirectory, WzImage};
 use crate::property::{WzSubProperty, WzValue, WzPng, WzSound, WzString, WzLua, WzRawData, Vector2D};
 
+/// All variants of WzObjectType.
+/// 
+/// WzObjectType implement most of the From trait for the types that can be converted to it.
+/// 
+/// # Example
+/// 
+/// ```
+/// # use wz_reader::WzObjectType;
+/// # use wz_reader::property::WzValue;
+/// let wz_int: WzObjectType = 1.into();
+/// 
+/// assert!(matches!(wz_int, WzObjectType::Value(WzValue::Int(1))));
+/// ```
 #[derive(Debug, Clone)]
 pub enum WzObjectType {
     File(Box<WzFile>),

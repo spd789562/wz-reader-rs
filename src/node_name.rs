@@ -3,6 +3,7 @@ use std::ops::Deref;
 use std::fmt::Display;
 use hashbrown::Equivalent;
 
+/// A wrapper around `Arc<str>` use for WzNode's name and hashmap key.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct WzNodeName(Arc<str>);
 

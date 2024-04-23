@@ -65,12 +65,12 @@ pub fn get_image(node: &WzNodeArc) -> Result<DynamicImage, WzPngParseError> {
 #[derive(Debug, Clone)]
 pub struct WzPng {
     reader: Arc<reader::WzReader>,
-    pub offset: usize,
-    pub block_size: usize,
+    offset: usize,
+    block_size: usize,
     pub width: u32,
     pub height: u32,
-    pub format1: u32,
-    pub format2: u32,
+    format1: u32,
+    format2: u32,
     pub header: i32,
 }
 

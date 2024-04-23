@@ -43,6 +43,9 @@ impl WzMutableKey {
     pub fn try_at(&self, index: usize) -> Option<&u8> {
         self.keys.get(index)
     }
+    pub fn get_range(&self, range: std::ops::Range<usize>) -> &[u8] {
+        &self.keys[range]
+    }
     pub fn is_enough(&self, size: usize) -> bool {
         self.keys.len() >= size
     }

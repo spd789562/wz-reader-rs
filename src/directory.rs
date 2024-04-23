@@ -19,7 +19,7 @@ pub enum WzDirectoryParseError {
 }
 
 #[derive(Debug)]
-pub enum WzDirectoryType {
+enum WzDirectoryType {
     UnknownType,
     RetrieveStringFromOffset,
     WzDirectory,
@@ -27,13 +27,13 @@ pub enum WzDirectoryType {
     NewUnknownType,
 }
 
-pub fn get_wz_directory_type_from_byte(byte: u8) -> WzDirectoryType {
+fn get_wz_directory_type_from_byte(byte: u8) -> WzDirectoryType {
     match byte {
         1 => WzDirectoryType::UnknownType,
         2 => WzDirectoryType::RetrieveStringFromOffset,
         3 => WzDirectoryType::WzDirectory,
         4 => WzDirectoryType::WzImage,
-        _ => WzDirectoryType::UnknownType,
+        _ => WzDirectoryType::NewUnknownType,
     }
 }
 

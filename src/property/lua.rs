@@ -16,8 +16,8 @@ pub enum WzLuaParseError {
 #[derive(Debug, Clone)]
 pub struct WzLua {
     reader: Arc<WzReader>,
-    pub offset: usize,
-    pub length: usize,
+    offset: usize,
+    length: usize,
 }
 
 impl WzLua {
