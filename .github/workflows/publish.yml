@@ -1,0 +1,38 @@
+on:
+    push:
+        tags:
+            - 'v*'
+
+name: Publish
+
+jobs:
+    test_linux:
+        name: Test on Linux
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - uses: dtolnay/rust-toolchain@stable
+            - name: 'Build and test'
+              run: cargo test
+    publish:
+        name: Publish to crates.io
+        needs: test_linux
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - uses: dtolnay/rust-toolchain@stable
+
+            - name: cargo-release Cache
+              id: cargo_release_cache
+              uses: actions/cache@v3
+              with:
+                  path: ~/.cargo/bin/cargo-release
+                  key: ${{ runner.os }}-cargo-release
+            - run: cargo install cargo-release
+              if: steps.cargo_release_cache.outputs.cache-hit != 'true'
+    
+            - name: cargo login
+              run: cargo login ${{ secrets.CRATES_IO_API_TOKEN }}
+
+            - name: 'Publish'
+              run: cargo release
