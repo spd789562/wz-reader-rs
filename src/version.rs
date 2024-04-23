@@ -8,6 +8,7 @@ pub fn get_iv_by_maple_version(version: WzMapleVersion) -> [u8; 4] {
     }
 }
 
+/// MapleStory version, use to determine the IV for decryption
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WzMapleVersion {
     /// Global MapleStory (old)
