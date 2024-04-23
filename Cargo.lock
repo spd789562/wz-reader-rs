@@ -1560,7 +1560,7 @@ dependencies = [
 
 [[package]]
 name = "wz_reader"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "aes",
  "criterion",
