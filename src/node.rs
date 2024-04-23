@@ -49,6 +49,7 @@ impl WzNode {
             children: HashMap::new(),
         }
     }
+    /// Create a WzNode use &str as name.
     pub fn from_str(name: &str, object_type: impl Into<WzObjectType>, parent: Option<&WzNodeArc>) -> Self {
         Self::new(&name.into(), object_type, parent)
     }
