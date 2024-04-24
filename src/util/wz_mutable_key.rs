@@ -54,11 +54,11 @@ impl WzMutableKey {
     pub fn is_enough(&self, size: usize) -> bool {
         self.keys.len() >= size
     }
-    pub fn decrypt_slice<'a, 'b: 'a>(&'b self, data: &'a [u8]) -> impl Iterator<Item = u8> + 'a {
+    pub fn decrypt_slice(&self, data: &mut [u8]) {
         let keys = &self.keys[0..data.len()];
-        data.iter().zip(keys).map(|(byte, key)| {
-            byte ^ key
-        })
+        data.iter_mut().zip(keys).for_each(|(byte, key)| {
+            *byte ^= key
+        });
     }
     pub fn ensure_key_size(&mut self, size: usize) -> Result<(), String> {
         if self.is_enough(size) || self.without_decrypt {

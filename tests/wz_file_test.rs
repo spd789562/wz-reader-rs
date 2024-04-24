@@ -365,6 +365,42 @@ fn should_success_walk_thorugh() {
 
     util::walk_node(&wz_file, true, &|node| {
         let node_read = node.read().unwrap();
+        assert!(pathes.contains(node_read.get_full_path().as_str()));
+    });
+}
+
+#[test]
+fn should_success_walk_thorugh_with_iv() {
+    let wz_file = WzNode::from_wz_file(r"tests/test_need_iv.wz", Some(WzMapleVersion::EMS), Some(123), None);
+    assert!(wz_file.is_ok());
+
+    let wz_file = wz_file.unwrap().into_lock();
+    
+    let pathes = std::collections::HashSet::from([
+        "test_need_iv",
+        "test_need_iv/wz_img.img",
+        "test_need_iv/wz_img.img/conv",
+        "test_need_iv/wz_img.img/conv/0",
+        "test_need_iv/wz_img.img/conv/1",
+        "test_need_iv/wz_img.img/conv/1/_inlink",
+        "test_need_iv/wz_img.img/conv/1/origin",
+        "test_need_iv/wz_img.img/1",
+        "test_need_iv/wz_img.img/1/float",
+        "test_need_iv/wz_img.img/1/double",
+        "test_need_iv/wz_img.img/1/long",
+        "test_need_iv/wz_img.img/1/short",
+        "test_need_iv/wz_img.img/1/int",
+        "test_need_iv/wz_img.img/2",
+        "test_need_iv/wz_img.img/2/nil",
+        "test_need_iv/wz_img.img/2/string",
+        "test_need_iv/wz_img.img/2/uol",
+        "test_need_iv/wz_dir",
+        "test_need_iv/wz_dir/wz_img_under_dir.img",
+        "test_need_iv/wz_dir/wz_img_under_dir.img/hi",
+    ]);
+
+    util::walk_node(&wz_file, true, &|node| {
+        let node_read = node.read().unwrap();
         println!("{}", node_read.get_full_path());
         assert!(pathes.contains(node_read.get_full_path().as_str()));
     });

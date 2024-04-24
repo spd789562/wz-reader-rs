@@ -27,6 +27,7 @@ static WZ_OFFSET: i32 = 0x581C3F6D;
 
 pub trait Reader {
     fn get_size(&self) -> usize;
+    fn get_decrypt_slice(&self, range: std::ops::Range<usize>) -> Vec<u8>;
     fn read_u8_at(&self, pos: usize) -> Result<u8, scroll::Error>;
     fn read_u16_at(&self, pos: usize) -> Result<u16, scroll::Error>;
     fn read_u32_at(&self, pos: usize) -> Result<u32, scroll::Error>;
@@ -51,27 +52,25 @@ pub trait Reader {
                 Ok(String::new())
             },
             WzStringType::Unicode => {
-                let mask: i32 = 0xAAAA;
-                let len = length / 2;
-                let strvec: Vec<u16> = (0..len)
-                    .map(|i| {
-                        let c = self.read_u16_at(offset + i * 2).unwrap() as i32;
-                        (c ^ (mask + i  as i32)) as u16
-                    })
-                    .collect();
+                let decrypted = self.get_decrypt_slice(offset..(offset + length));
+                let mut strvec = Vec::with_capacity(length / 2);
+        
+                for (i, chunk) in decrypted.chunks(2).enumerate() {
+                    let c = u16::from_le_bytes([chunk[0], chunk[1]]);
+                    strvec.push(resolve_unicode_char(c, i as i32));
+                }
 
                 Ok(String::from_utf16_lossy(&strvec))
             },
             WzStringType::Ascii => {
-                let mask: i32 = 0xAA;
-                let strvec: Vec<u8> = (0..length)
-                    .map(|i| {
-                        let c = self.read_u8_at(offset + i).unwrap() as i32;
-                        (c ^ (mask + i as i32)) as u8
-                    })
-                    .collect();
+                let mut decrypted = self.get_decrypt_slice(offset..(offset + length));
 
-                Ok(String::from_utf8_lossy(&strvec).to_string())
+                decrypted.iter_mut().enumerate()
+                    .for_each(|(i, byte)| {
+                        *byte = resolve_ascii_char(*byte, i as i32);
+                    });
+
+                Ok(String::from_utf8_lossy(&decrypted).to_string())
             }
         }
     }
@@ -165,32 +164,6 @@ impl<'a> WzSliceReader<'a> {
     pub fn get_slice_from_current(&self, len: usize) -> &[u8] {
         &self.buf[self.pos.get()..self.pos.get() + len]
     }
-    pub fn ensure_key_size(&self, size: usize) -> Result<(), String> {
-        let is_need_mut = {
-            let read = self.keys.read().unwrap();
-            !read.is_enough(size) && !read.without_decrypt
-        };
-
-        if is_need_mut {
-            let mut key = self.keys.write().unwrap();
-            key.ensure_key_size(size)?;
-        }
-
-        Ok(())
-    }
-    pub fn get_decrypt_slice(&self, len: usize) -> Vec<u8> {
-        self.ensure_key_size(len).unwrap();
-
-        let keys = self.keys.read().unwrap();
-
-        let original = self.get_slice_from_current(len);
-
-        if keys.without_decrypt {
-            original.to_vec()
-        } else {
-            keys.decrypt_slice(original).collect()
-        }
-    }
     pub fn is_valid_pos(&self, pos: usize) -> bool {
         pos <= self.get_size()
     }
@@ -268,7 +241,6 @@ impl<'a> WzSliceReader<'a> {
         }
     }
     pub fn read_unicode_string(&self, sl: i8) -> Result<String, scroll::Error> {
-        let mask: i32 = 0xAAAA;
         let len = self.read_unicode_str_len(sl);
 
         if len == 0 {
@@ -277,16 +249,11 @@ impl<'a> WzSliceReader<'a> {
 
         let unicode_u8_len = (len * 2) as usize;
 
-        let decrypted = self.get_decrypt_slice(unicode_u8_len);
-
-        let strvec: Vec<_> = decrypted.chunks(2).enumerate().map(|(i, chunk)| {
-            let c = u16::from_le_bytes([chunk[0], chunk[1]]) as i32;
-            (c ^ (mask + i as i32)) as u16
-        }).collect();
+        let string = self.resolve_wz_string_meta(&WzStringType::Unicode, self.pos.get(), unicode_u8_len)?;
 
         self.skip(unicode_u8_len);
 
-        Ok(String::from_utf16_lossy(&strvec))
+        Ok(string)
     }
 
     pub fn read_ascii_str_len(&self, sl: i8) -> i32 {
@@ -297,25 +264,16 @@ impl<'a> WzSliceReader<'a> {
         }
     }
     pub fn read_ascii_string(&self, sl: i8) -> Result<String, scroll::Error> {
-        let mask: i32 = 0xAA;
-        let len: i32 = self.read_ascii_str_len(sl);
+        let len = self.read_ascii_str_len(sl) as usize;
         if len == 0 {
             return Ok(String::new());
         }
 
-        let decrypted = self.get_decrypt_slice(len as usize);
+        let string = self.resolve_wz_string_meta(&WzStringType::Ascii, self.pos.get(), len)?;
 
-        let strvec: Vec<u8> = 
-            decrypted.iter().enumerate()
-                .map(|(i, byte)| {
-                    let c = *byte as i32;
-                    (c ^ (mask + i as i32)) as u8
-                })
-                .collect();
+        self.skip(len);
 
-        self.skip(len as usize);
-
-        Ok(String::from_utf8_lossy(&strvec).to_string())
+        Ok(string)
     }
     
     pub fn read_wz_string_meta_at(&self, offset: usize) -> Result<WzStringMeta, scroll::Error> {
@@ -492,6 +450,10 @@ impl Reader for WzReader {
     fn get_size(&self) -> usize {
         self.map.len()
     }
+    fn get_decrypt_slice(&self, range: std::ops::Range<usize>) -> Vec<u8> {
+        let len = range.len();
+        get_decrypt_slice(&self.map[range], len, &self.keys)
+    }
 }
 
 impl<'a> Reader for WzSliceReader<'a> {
@@ -527,6 +489,10 @@ impl<'a> Reader for WzSliceReader<'a> {
     }
     fn read_double_at(&self, pos: usize) -> Result<f64, scroll::Error> {
         self.buf.pread_with::<f64>(pos, LE)
+    }
+    fn get_decrypt_slice(&self, range: std::ops::Range<usize>) -> Vec<u8> {
+        let len = range.len();
+        get_decrypt_slice(&self.buf[range], len, &self.keys)
     }
 }
 
@@ -631,7 +597,6 @@ pub fn read_wz_offset(buf: &[u8], encrypted_offset: usize, fstart: usize, offset
 }
 
 pub fn read_unicode_string(buf: &[u8], sl: i8) -> Result<String, scroll::Error> {
-    let mask: i32 = 0xAAAA;
     let len;
     let mut offset: i32 = 0;
 
@@ -646,19 +611,16 @@ pub fn read_unicode_string(buf: &[u8], sl: i8) -> Result<String, scroll::Error> 
         return Ok(String::new());
     }
 
-    let strvec: Vec<u8> = (0..len)
+    let strvec: Vec<u16> = (0..len)
         .map(|i| {
-            let c = read_u16_at(buf, (i * 2 + offset) as usize).unwrap() as i32;
-            (c ^ (mask + i)) as u8
+            resolve_unicode_char(read_u16_at(buf, (i * 2 + offset) as usize).unwrap(), i)
         })
         .collect();
 
-    Ok(String::from_utf8_lossy(&strvec).to_string())
+    Ok(String::from_utf16_lossy(&strvec).to_string())
 }
 
 pub fn read_ascii_string(buf: &[u8], sl: i8) -> Result<String, scroll::Error> {
-
-    let mask: i32 = 0xAA;
     let len: i32;
     let mut offset: i32 = 0;
 
@@ -675,13 +637,41 @@ pub fn read_ascii_string(buf: &[u8], sl: i8) -> Result<String, scroll::Error> {
 
     let strvec: Vec<u8> = (0..len)
         .map(|i| {
-            let mut c = read_u8_at(buf, (i + offset) as usize).unwrap() as i32;
-            c ^= mask + i;
-            c as u8
+            resolve_ascii_char(read_u8_at(buf, (i + offset) as usize).unwrap(), i)
         })
         .collect();
 
     Ok(String::from_utf8_lossy(&strvec).to_string())
+}
+
+fn resolve_ascii_char(c: u8, i: i32) -> u8 {
+    (c as i32 ^ (0xAA + i)) as u8
+}
+fn resolve_unicode_char(c: u16, i: i32) -> u16 {
+    (c as i32 ^ (0xAAAA + i)) as u16
+}
+
+pub fn get_decrypt_slice(buf: &[u8], len: usize, keys: &Arc<RwLock<WzMutableKey>>) -> Vec<u8> {
+    
+    let is_need_mut = {
+        let read = keys.read().unwrap();
+        !read.is_enough(len) && !read.without_decrypt
+    };
+
+    if is_need_mut {
+        let mut key = keys.write().unwrap();
+        key.ensure_key_size(len).unwrap();
+    }
+
+    let keys = keys.read().unwrap();
+
+    let mut original = buf.to_vec();
+
+    if !keys.without_decrypt {
+        keys.decrypt_slice(&mut original);
+    }
+
+    original
 }
 
 #[cfg(test)]
@@ -690,6 +680,8 @@ mod test {
     use tempfile;
     use memmap2::MmapMut;
     use super::*;
+    use crate::util::WzMutableKey;
+    use crate::util::maple_crypto_constants::{WZ_GMSIV, WZ_MSEAIV};
 
     fn generate_ascii_string(len: i32) -> Vec<u8> {
         let mut buf = Vec::new();
@@ -704,6 +696,35 @@ mod test {
             let encrypt_str = ((0xAAAA + i) ^ 97) as u16;
             buf.extend_from_slice(&encrypt_str.to_le_bytes());
         }
+        buf
+    }
+    fn generate_encrypted_ascii_string(len: i32, iv: [u8; 4]) -> Vec<u8> {
+        let mut key = WzMutableKey::from_iv(iv);
+
+        key.ensure_key_size(len as usize).unwrap();
+
+        let mut buf = Vec::new();
+        for i in 0..len {
+            let key: i32 = *(key.try_at(i as usize).unwrap_or(&0)) as i32;
+            buf.push(((0xAA + i) ^ 97 ^ key) as u8);
+        }
+
+        buf
+    }
+    fn generate_encrypted_unicode_string(len: i32, iv: [u8; 4]) -> Vec<u8> {
+        let mut key = WzMutableKey::from_iv(iv);
+
+        key.ensure_key_size(len as usize).unwrap();
+
+        let mut buf = Vec::new();
+        for i in 0..len {
+            let key1 = *(key.try_at((i * 2) as usize).unwrap_or(&0)) as i32;
+            let key2 = *(key.try_at((i * 2) as usize + 1).unwrap_or(&0)) as i32;
+            let key = (key2 << 8) + key1;
+            let encrypt_str = ((0xAAAA + i) ^ 97 ^ key) as u16;
+            buf.extend_from_slice(&encrypt_str.to_le_bytes());
+        }
+
         buf
     }
 
@@ -802,6 +823,38 @@ mod test {
         let pos = end;
         end += 400;
         (&mut map[pos..end]).copy_from_slice(&generate_unicode_string(200));
+
+        // len = 20 encrypted(GMS_OLD) ascii
+        let pos = end;
+        end += 1;
+        (&mut map[pos..end]).copy_from_slice(&(-20_i8).to_le_bytes());
+        let pos = end;
+        end += 20;
+        (&mut map[pos..end]).copy_from_slice(&generate_encrypted_ascii_string(20, WZ_GMSIV));
+
+        // len = 20 encrypted(GMS_OLD) unicode
+        let pos = end;
+        end += 1;
+        (&mut map[pos..end]).copy_from_slice(&(20_i8).to_le_bytes());
+        let pos = end;
+        end += 40;
+        (&mut map[pos..end]).copy_from_slice(&generate_encrypted_unicode_string(20, WZ_GMSIV));
+
+        // len = 20 encrypted(MSEA) ascii
+        let pos = end;
+        end += 1;
+        (&mut map[pos..end]).copy_from_slice(&(-20_i8).to_le_bytes());
+        let pos = end;
+        end += 20;
+        (&mut map[pos..end]).copy_from_slice(&generate_encrypted_ascii_string(20, WZ_MSEAIV));
+
+        // len = 20 encrypted(MSEA) unicode
+        let pos = end;
+        end += 1;
+        (&mut map[pos..end]).copy_from_slice(&(20_i8).to_le_bytes());
+        let pos = end;
+        end += 40;
+        (&mut map[pos..end]).copy_from_slice(&generate_encrypted_unicode_string(20, WZ_MSEAIV));
 
         Ok(map.make_read_only()?)
     }
@@ -995,6 +1048,90 @@ mod test {
 
         assert_eq!(meta.length, 400);
         assert_eq!(meta.offset, 391);
+        assert_eq!(meta.string_type, WzStringType::Unicode);
+
+        assert_eq!(reader.resolve_wz_string_meta(&meta.string_type, meta.offset, meta.length as usize).unwrap(), result_string);
+    }
+
+    #[test]
+    fn test_wz_encrypted_gms_ascii_string() {
+        let reader = WzReader::new(setup().unwrap()).with_iv(WZ_GMSIV);
+
+        let slice_reader = reader.create_slice_reader();
+
+        slice_reader.seek(791);
+
+        let result_string = "a".repeat(20);
+
+        assert_eq!(slice_reader.read_wz_string().unwrap(), result_string);
+
+        let meta = slice_reader.read_wz_string_meta_at(791).unwrap();
+
+        assert_eq!(meta.length, 20);
+        assert_eq!(meta.offset, 792);
+        assert_eq!(meta.string_type, WzStringType::Ascii);
+
+        assert_eq!(reader.resolve_wz_string_meta(&meta.string_type, meta.offset, meta.length as usize).unwrap(), result_string);
+    }
+
+    #[test]
+    fn test_wz_encrypted_gms_unicode_string() {
+        let reader = WzReader::new(setup().unwrap()).with_iv(WZ_GMSIV);
+
+        let slice_reader = reader.create_slice_reader();
+
+        slice_reader.seek(812);
+
+        let result_string = "a".repeat(20);
+
+        assert_eq!(slice_reader.read_wz_string().unwrap(), result_string);
+
+        let meta = slice_reader.read_wz_string_meta_at(812).unwrap();
+
+        assert_eq!(meta.length, 40);
+        assert_eq!(meta.offset, 813);
+        assert_eq!(meta.string_type, WzStringType::Unicode);
+
+        assert_eq!(reader.resolve_wz_string_meta(&meta.string_type, meta.offset, meta.length as usize).unwrap(), result_string);
+    }
+
+    #[test]
+    fn test_wz_encrypted_msea_ascii_string() {
+        let reader = WzReader::new(setup().unwrap()).with_iv(WZ_MSEAIV);
+
+        let slice_reader = reader.create_slice_reader();
+
+        slice_reader.seek(853);
+
+        let result_string = "a".repeat(20);
+
+        assert_eq!(slice_reader.read_wz_string().unwrap(), result_string);
+
+        let meta = slice_reader.read_wz_string_meta_at(853).unwrap();
+
+        assert_eq!(meta.length, 20);
+        assert_eq!(meta.offset, 854);
+        assert_eq!(meta.string_type, WzStringType::Ascii);
+
+        assert_eq!(reader.resolve_wz_string_meta(&meta.string_type, meta.offset, meta.length as usize).unwrap(), result_string);
+    }
+
+    #[test]
+    fn test_wz_encrypted_msea_unicode_string() {
+        let reader = WzReader::new(setup().unwrap()).with_iv(WZ_MSEAIV);
+
+        let slice_reader = reader.create_slice_reader();
+
+        slice_reader.seek(874);
+
+        let result_string = "a".repeat(20);
+
+        assert_eq!(slice_reader.read_wz_string().unwrap(), result_string);
+
+        let meta = slice_reader.read_wz_string_meta_at(874).unwrap();
+
+        assert_eq!(meta.length, 40);
+        assert_eq!(meta.offset, 875);
         assert_eq!(meta.string_type, WzStringType::Unicode);
 
         assert_eq!(reader.resolve_wz_string_meta(&meta.string_type, meta.offset, meta.length as usize).unwrap(), result_string);
