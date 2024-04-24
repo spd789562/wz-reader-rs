@@ -1,6 +1,6 @@
 use scroll::{Pread, LE};
 use std::cell::Cell;
-use std::sync::RwLock;
+use std::sync::{RwLock, Arc};
 use memmap2::Mmap;
 
 use crate::WzHeader;
@@ -11,7 +11,7 @@ use crate::property::{WzStringMeta, WzStringType};
 pub struct WzReader {
     pub map: Mmap,
     pub wz_iv: [u8; 4],
-    pub keys: RwLock<WzMutableKey>
+    pub keys: Arc<RwLock<WzMutableKey>>,
 }
 #[derive(Debug, Clone)]
 pub struct WzSliceReader<'a> {
@@ -20,6 +20,7 @@ pub struct WzSliceReader<'a> {
     _save_pos: Cell<usize>,
     pub header: WzHeader<'a>,
     pub hash: usize,
+    pub keys: Arc<RwLock<WzMutableKey>>,
 }
 
 static WZ_OFFSET: i32 = 0x581C3F6D;
@@ -96,14 +97,14 @@ impl WzReader {
     pub fn new(map: Mmap) -> Self {
         WzReader {
             map,
-            keys: RwLock::new(WzMutableKey::new([0; 4], [0; 32])),
+            keys: Arc::new(RwLock::new(WzMutableKey::new([0; 4], [0; 32]))),
             wz_iv: [0; 4]
         }
     }
     pub fn with_iv(self, iv: [u8; 4]) -> Self {
         WzReader {
             wz_iv: iv,
-            keys: RwLock::new(WzMutableKey::from_iv(iv)),
+            keys: Arc::new(RwLock::new(WzMutableKey::from_iv(iv))),
             ..self
         }
     }
@@ -124,34 +125,38 @@ impl WzReader {
         WzHeader::get_wz_fsize(&self.map)
     }
     pub fn create_slice_reader_without_hash(&self) -> WzSliceReader {
-        WzSliceReader::new_with_existing_header(&self.map, WzHeader::default(), None)
+        WzSliceReader::new(&self.map, &self.keys).with_header(WzHeader::default())
     }
     pub fn create_slice_reader_with_hash(&self, hash: usize) -> WzSliceReader {
-        WzSliceReader::new_with_existing_header(&self.map, self.create_header(), Some(hash))
+        WzSliceReader::new(&self.map, &self.keys).with_header(self.create_header()).with_hash(hash)
     }
     pub fn create_slice_reader(&self) -> WzSliceReader {
-        WzSliceReader::new_with_existing_header(&self.map, self.create_header(), None)
+        WzSliceReader::new(&self.map, &self.keys).with_header(self.create_header())
     }
 }
 
 impl<'a> WzSliceReader<'a> {
-    pub fn new(buf: &'a [u8]) -> Self {
+    pub fn new(buf: &'a [u8], key: &Arc<RwLock<WzMutableKey>>) -> Self {
         let header = buf.pread::<WzHeader>(0).unwrap();
         WzSliceReader {
             buf,
             pos: Cell::new(0),
             _save_pos: Cell::new(0),
             header,
-            hash: 0
+            hash: 0,
+            keys: Arc::clone(key)
         }
     }
-    pub fn new_with_existing_header(buf: &'a [u8], header: WzHeader<'a>, hash: Option<usize>) -> Self {
+    pub fn with_hash(self, hash: usize) -> Self {
         WzSliceReader {
-            buf,
-            pos: Cell::new(0),
-            _save_pos: Cell::new(0),
-            header: header.to_owned(),
-            hash: hash.unwrap_or(0)
+            hash,
+            ..self
+        }
+    }
+    pub fn with_header(self, header: WzHeader<'a>) -> Self {
+        WzSliceReader {
+            header,
+            ..self
         }
     }
     pub fn get_slice(&self, range: std::ops::Range<usize>) -> &[u8] {
@@ -159,6 +164,32 @@ impl<'a> WzSliceReader<'a> {
     }
     pub fn get_slice_from_current(&self, len: usize) -> &[u8] {
         &self.buf[self.pos.get()..self.pos.get() + len]
+    }
+    pub fn ensure_key_size(&self, size: usize) -> Result<(), String> {
+        let is_need_mut = {
+            let read = self.keys.read().unwrap();
+            !read.is_enough(size) && !read.without_decrypt
+        };
+
+        if is_need_mut {
+            let mut key = self.keys.write().unwrap();
+            key.ensure_key_size(size)?;
+        }
+
+        Ok(())
+    }
+    pub fn get_decrypt_slice(&self, len: usize) -> Vec<u8> {
+        self.ensure_key_size(len).unwrap();
+
+        let keys = self.keys.read().unwrap();
+
+        let original = self.get_slice_from_current(len);
+
+        if keys.without_decrypt {
+            original.to_vec()
+        } else {
+            keys.decrypt_slice(original).collect()
+        }
     }
     pub fn is_valid_pos(&self, pos: usize) -> bool {
         pos <= self.get_size()
@@ -244,12 +275,16 @@ impl<'a> WzSliceReader<'a> {
             return Ok(String::new());
         }
 
-        let strvec: Vec<u16> = (0..len)
-            .map(|i| {
-                let c = self.read_u16().unwrap() as i32;
-                (c ^ (mask + i)) as u16
-            })
-            .collect();
+        let unicode_u8_len = (len * 2) as usize;
+
+        let decrypted = self.get_decrypt_slice(unicode_u8_len);
+
+        let strvec: Vec<_> = decrypted.chunks(2).enumerate().map(|(i, chunk)| {
+            let c = u16::from_le_bytes([chunk[0], chunk[1]]) as i32;
+            (c ^ (mask + i as i32)) as u16
+        }).collect();
+
+        self.skip(unicode_u8_len);
 
         Ok(String::from_utf16_lossy(&strvec))
     }
@@ -262,18 +297,23 @@ impl<'a> WzSliceReader<'a> {
         }
     }
     pub fn read_ascii_string(&self, sl: i8) -> Result<String, scroll::Error> {
-        let mask = 0xAA;
+        let mask: i32 = 0xAA;
         let len: i32 = self.read_ascii_str_len(sl);
         if len == 0 {
             return Ok(String::new());
         }
 
-        let strvec: Vec<u8> = (0..len)
-            .map(|i| {
-                let c = self.read_u8().unwrap() as i32;
-                (c ^ (mask + i)) as u8
-            })
-            .collect();
+        let decrypted = self.get_decrypt_slice(len as usize);
+
+        let strvec: Vec<u8> = 
+            decrypted.iter().enumerate()
+                .map(|(i, byte)| {
+                    let c = *byte as i32;
+                    (c ^ (mask + i as i32)) as u8
+                })
+                .collect();
+
+        self.skip(len as usize);
 
         Ok(String::from_utf8_lossy(&strvec).to_string())
     }

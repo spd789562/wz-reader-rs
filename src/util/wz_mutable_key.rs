@@ -10,6 +10,8 @@ pub struct WzMutableKey {
     iv: [u8; 4],
     keys: Vec<u8>,
     aes_key: [u8; 32],
+    /// iv == 0, without decrypt
+    pub without_decrypt: bool,
 }
 
 impl WzMutableKey {
@@ -18,6 +20,7 @@ impl WzMutableKey {
             iv,
             keys: vec![],
             aes_key,
+            without_decrypt: read_i32_at(&iv, 0).unwrap_or(0) == 0,
         }
     }
     pub fn new_lua() -> Self {
@@ -25,6 +28,7 @@ impl WzMutableKey {
             iv: WZ_MSEAIV,
             keys: vec![],
             aes_key: get_trimmed_user_key(&MAPLESTORY_USERKEY_DEFAULT),
+            without_decrypt: false,
         }
     }
     pub fn from_iv(iv: [u8; 4]) -> Self {
@@ -32,6 +36,7 @@ impl WzMutableKey {
             iv,
             keys: vec![],
             aes_key: get_trimmed_user_key(&MAPLESTORY_USERKEY_DEFAULT),
+            without_decrypt: read_i32_at(&iv, 0).unwrap_or(0) == 0,
         }
     }
     pub fn at(&mut self, index: usize) -> &u8 {
@@ -49,19 +54,18 @@ impl WzMutableKey {
     pub fn is_enough(&self, size: usize) -> bool {
         self.keys.len() >= size
     }
+    pub fn decrypt_slice<'a, 'b: 'a>(&'b self, data: &'a [u8]) -> impl Iterator<Item = u8> + 'a {
+        let keys = &self.keys[0..data.len()];
+        data.iter().zip(keys).map(|(byte, key)| {
+            byte ^ key
+        })
+    }
     pub fn ensure_key_size(&mut self, size: usize) -> Result<(), String> {
-        if self.is_enough(size) {
+        if self.is_enough(size) || self.without_decrypt {
             return Ok(());
         }
 
         let size = (((size as f64) / BATCH_SIZE).ceil() * BATCH_SIZE) as usize;
-
-        let tmp = read_i32_at(&self.iv, 0).unwrap_or(0);
-
-        if tmp == 0 {
-            // self.keys = new_keys;
-            return Ok(());
-        }
 
         if self.keys.capacity() < size {
             self.keys.reserve(size - self.keys.capacity());

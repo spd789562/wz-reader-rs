@@ -56,7 +56,7 @@ impl WzNode {
     /// Create a WzNode from a any `.wz` file.
     pub fn from_wz_file(path: &str, version: Option<version::WzMapleVersion>, patch_version: Option<i32>, parent: Option<&WzNodeArc>) -> Result<Self, NodeParseError> {
         let name = Path::new(path).file_stem().unwrap().to_str().unwrap();
-        let version = version.unwrap_or(version::WzMapleVersion::EMS);
+        let version = version.unwrap_or(version::WzMapleVersion::BMS);
         let wz_file = WzFile::from_file(path, version::get_iv_by_maple_version(version), patch_version)?;
         Ok(WzNode::new(
             &name.into(), 
@@ -67,7 +67,7 @@ impl WzNode {
     /// Create a WzNode from a any `.img` file.
     pub fn from_img_file(path: &str, version: Option<version::WzMapleVersion>, parent: Option<&WzNodeArc>) -> Result<Self, NodeParseError> {
         let name = Path::new(path).file_stem().unwrap().to_str().unwrap();
-        let version = version.unwrap_or(version::WzMapleVersion::EMS);
+        let version = version.unwrap_or(version::WzMapleVersion::BMS);
         let wz_image = WzImage::from_file(path, version::get_iv_by_maple_version(version))?;
         Ok(WzNode::new(
             &name.into(), 

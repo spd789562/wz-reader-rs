@@ -109,7 +109,7 @@ impl WzDirectory {
                     return Err(WzDirectoryParseError::UnknownWzDirectoryType(dir_byte, reader.pos.get()))
                 }
             }
-            
+
             let fsize = reader.read_wz_int()?;
             let _checksum = reader.read_wz_int()?;
             let offset = reader.read_wz_offset(None)?;
