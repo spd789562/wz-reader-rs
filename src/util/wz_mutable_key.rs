@@ -5,6 +5,7 @@ use super::maple_crypto_constants::{MAPLESTORY_USERKEY_DEFAULT, WZ_MSEAIV, get_t
 
 const BATCH_SIZE: f64 = 4096_f64;
 
+/// A string decryption util.
 #[derive(Debug)]
 pub struct WzMutableKey {
     iv: [u8; 4],
@@ -39,12 +40,14 @@ impl WzMutableKey {
             without_decrypt: read_i32_at(&iv, 0).unwrap_or(0) == 0,
         }
     }
+    /// force get key at index, will expand key size if not enough.
     pub fn at(&mut self, index: usize) -> &u8 {
         if self.keys.len() <= index {
             self.ensure_key_size(index + 1).unwrap();
         }
         &self.keys[index]
     }
+    /// get key at index, return `None` if doesn't exist.
     pub fn try_at(&self, index: usize) -> Option<&u8> {
         self.keys.get(index)
     }
@@ -54,12 +57,17 @@ impl WzMutableKey {
     pub fn is_enough(&self, size: usize) -> bool {
         self.keys.len() >= size
     }
+    /// decrypt data in place, make sure has enough key size.
     pub fn decrypt_slice(&self, data: &mut [u8]) {
+        if self.without_decrypt {
+            return;
+        }
         let keys = &self.keys[0..data.len()];
         data.iter_mut().zip(keys).for_each(|(byte, key)| {
             *byte ^= key
         });
     }
+    /// ensure keys has enough size to do decryption
     pub fn ensure_key_size(&mut self, size: usize) -> Result<(), String> {
         if self.is_enough(size) || self.without_decrypt {
             return Ok(());
