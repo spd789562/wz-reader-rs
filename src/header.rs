@@ -1,9 +1,11 @@
 use scroll::{ctx, Endian, Pread, LE};
 
+/// Wz file's header.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct WzHeader<'a> {
     pub ident: &'a str,
     pub fsize: u64,
+    /// when wz file's content actually start
     pub fstart: usize,
     pub copyright: &'a str,
 }

@@ -105,29 +105,12 @@ pub fn parse_property_node(name: WzNodeName, property_type: u8, parent: Option<&
 }
 
 pub fn parse_extended_prop(parent: Option<&WzNodeArc>, org_reader: &Arc<WzReader>, reader: &WzSliceReader, end_of_block: usize, origin_offset: usize, property_name: WzNodeName) -> Result<(WzNodeName, WzNodeArc), WzPropertyParseError> {
-    let extended_type = reader.read_u8()?;
-    match extended_type {
-        0x01 | crate::wz_image::WZ_IMAGE_HEADER_BYTE_WITH_OFFSET => {
-            let name_offset = reader.read_i32()? as usize;
-            parse_more(parent, org_reader, reader, end_of_block, origin_offset, property_name, &reader.read_wz_string_at_offset(name_offset + origin_offset)?)
-        },
-        0x00 | crate::wz_image::WZ_IMAGE_HEADER_BYTE_WITHOUT_OFFSET => {
-            parse_more(parent, org_reader, reader, end_of_block, origin_offset, property_name, "")
-        },
-        _ => {
-            Err(WzPropertyParseError::UnknownExtendedHeaderType(extended_type, reader.pos.get()))
-        }
-    }
+    let extend_property_type = get_extend_property_type_name(reader, origin_offset)?;
+    parse_more(parent, org_reader, reader, end_of_block, origin_offset, property_name, &extend_property_type)
 }
 
 pub fn parse_more(parent: Option<&WzNodeArc>, org_reader: &Arc<WzReader>, reader: &WzSliceReader, end_of_block: usize, origin_offset: usize, property_name: WzNodeName, extend_property_type: &str) -> Result<(WzNodeName, WzNodeArc), WzPropertyParseError> {
-    let extend_property_type = if extend_property_type.is_empty() {
-        reader.read_wz_string()?
-    } else {
-        extend_property_type.to_string()
-    };
-
-    match extend_property_type.as_str() {
+    match extend_property_type {
         "Property" => {
             let node = WzNode::new(
                 &property_name,
@@ -260,7 +243,7 @@ pub fn parse_more(parent: Option<&WzNodeArc>, org_reader: &Arc<WzReader>, reader
             Ok((property_name, node.into_lock()))
         },
         _ => {
-            Err(WzPropertyParseError::UnknownExtendedPropertyType(extend_property_type.clone(), reader.pos.get()))
+            Err(WzPropertyParseError::UnknownExtendedPropertyType(extend_property_type.to_string(), reader.pos.get()))
         }
     }
 }
@@ -281,6 +264,7 @@ pub fn get_extend_property_type_name(reader: &WzSliceReader, origin_offset: usiz
     }
 }
 
+/// Direct get node from path with providing reader. see [`crate::WzImage::at_path`].
 pub fn get_node(path: &str, org_reader: &Arc<WzReader>, reader: &WzSliceReader, origin_offset: usize) -> Result<(WzNodeName, WzNodeArc), WzPropertyParseError> {
     if path.is_empty() {
         return Err(WzPropertyParseError::NodeNotFound);
@@ -335,7 +319,17 @@ pub fn get_node(path: &str, org_reader: &Arc<WzReader>, reader: &WzSliceReader, 
                         reader.skip(8);
                     },
                     8 => {
-                        reader.read_wz_string_block_meta(origin_offset)?;
+                        let string_type = reader.read_u8()?;
+        
+                        match string_type {
+                            0 | 0x73 => {
+                                reader.read_wz_string_meta()?;
+                            },
+                            1 | 0x1B => {
+                                reader.skip(4);
+                            },
+                            _ => {}
+                        }
                     },
                     9 => {
                         let block_size = reader.read_u32()?;

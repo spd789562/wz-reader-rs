@@ -1,5 +1,8 @@
 use crate::{WzNodeArc, WzObjectType};
 
+/// recursively walk a wz node, passing `&WzNodeArc` to `f`.
+/// with `force_parse` it will parse every node along the way,
+/// and only unparse `WzImage` after `f` is called to release memory.
 pub fn walk_node(node: &WzNodeArc, force_parse: bool, f: &dyn Fn(&WzNodeArc)) {
     if force_parse {
         node.write().unwrap().parse(node).unwrap();

@@ -28,6 +28,7 @@ pub struct WzStringMeta {
     pub string_type: WzStringType,
 }
 
+/// `WzString` only hold the string information.
 #[derive(Debug, Clone)]
 pub struct WzString {
     reader: Arc<WzReader>,
@@ -78,11 +79,13 @@ impl WzString {
             string_type: meta.string_type,
         }
     }
+    /// Decode string from wz file.
     pub fn get_string(&self) -> Result<String, WzStringParseError> {
         self.reader.resolve_wz_string_meta(&self.string_type, self.offset, self.length as usize).map_err(WzStringParseError::from)
     }
 }
 
+/// A helper function to resolve string from `WzNodeArc`.
 pub fn resolve_string_from_node(node: &WzNodeArc) -> Result<String, WzStringParseError> {
     node.read().unwrap().try_as_string()
         .ok_or(WzStringParseError::NotStringProperty)

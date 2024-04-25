@@ -1,7 +1,7 @@
 use crate::property::{WzValue, WzSubProperty, WzSound, WzPng, WzString, WzLua, WzRawData, Vector2D};
 use crate::{ WzDirectory, WzNode, WzFile, WzImage, WzObjectType};
 
-/// Trait for casting WzNode to its inner type.
+/// Trait for casting `WzNode` to its inner type.
 /// 
 /// # Example
 /// 

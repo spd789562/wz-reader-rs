@@ -1,9 +1,9 @@
 use crate::{WzFile, WzDirectory, WzImage};
 use crate::property::{WzSubProperty, WzValue, WzPng, WzSound, WzString, WzLua, WzRawData, Vector2D};
 
-/// All variants of WzObjectType.
+/// All variants of `WzObjectType`.
 /// 
-/// WzObjectType implement most of the From trait for the types that can be converted to it.
+/// `WzObjectType` implement most of the From trait for the types that can be converted to it.
 /// 
 /// # Example
 /// 

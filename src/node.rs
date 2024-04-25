@@ -49,11 +49,11 @@ impl WzNode {
             children: HashMap::new(),
         }
     }
-    /// Create a WzNode use &str as name.
+    /// Create a `WzNode` use &str as name.
     pub fn from_str(name: &str, object_type: impl Into<WzObjectType>, parent: Option<&WzNodeArc>) -> Self {
         Self::new(&name.into(), object_type, parent)
     }
-    /// Create a WzNode from a any `.wz` file.
+    /// Create a `WzNode` from a any `.wz` file.
     pub fn from_wz_file(path: &str, version: Option<version::WzMapleVersion>, patch_version: Option<i32>, parent: Option<&WzNodeArc>) -> Result<Self, NodeParseError> {
         let name = Path::new(path).file_stem().unwrap().to_str().unwrap();
         let version = version.unwrap_or(version::WzMapleVersion::BMS);
@@ -64,7 +64,7 @@ impl WzNode {
             parent
         ))
     }
-    /// Create a WzNode from a any `.img` file.
+    /// Create a `WzNode` from a any `.img` file.
     pub fn from_img_file(path: &str, version: Option<version::WzMapleVersion>, parent: Option<&WzNodeArc>) -> Result<Self, NodeParseError> {
         let name = Path::new(path).file_stem().unwrap().to_str().unwrap();
         let version = version.unwrap_or(version::WzMapleVersion::BMS);
@@ -76,7 +76,7 @@ impl WzNode {
         ))
     }
 
-    /// A quicker way to turn `WzNode`` to `WzNodeArc``.
+    /// A quicker way to turn `WzNode` to `WzNodeArc`.
     pub fn into_lock(self) -> WzNodeArc {
         Arc::new(RwLock::new(self))
     }
@@ -327,6 +327,7 @@ impl WzNode {
     }
 }
 
+/// Just wrap around of `node.write().unwrap().parse(&node)`
 pub fn parse_node(node: &WzNodeArc) -> Result<(), NodeParseError> {
     node.write().unwrap().parse(node)
 }

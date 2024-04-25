@@ -34,6 +34,7 @@ pub enum WzPngParseError {
 type ImageBufferRgbaChunk = ImageBuffer<Rgba<u8>, Vec<u8>>;
 type ImageBufferRgbChunk = ImageBuffer<Rgb<u8>, Vec<u8>>;
 
+/// A helper get image from `WzNodeArc`, will also resolve `_inlink` or `_outlink`
 pub fn get_image(node: &WzNodeArc) -> Result<DynamicImage, WzPngParseError> {
     let node_read = node.read().unwrap();
     match &node_read.object_type {
@@ -90,7 +91,7 @@ impl WzPng {
     pub fn format(&self) -> u32 {
         self.format1 + self.format2
     }
-    pub fn list_wz_used(&self) -> bool {
+    fn list_wz_used(&self) -> bool {
         self.header != 0x9C78 && self.header != 0xDA78 && self.header != 0x0178 && self.header != 0x5E78
     }
     pub fn extract_png(&self) -> Result<DynamicImage, WzPngParseError> {

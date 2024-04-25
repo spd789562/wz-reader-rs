@@ -21,6 +21,7 @@ pub enum WzDirectoryParseError {
 #[derive(Debug)]
 enum WzDirectoryType {
     UnknownType,
+    /// directory type and name maybe at some where alse
     RetrieveStringFromOffset,
     WzDirectory,
     WzImage,

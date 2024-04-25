@@ -50,7 +50,7 @@ const WAV_HEADER: [u8; 44] = [
     0,0,0,0 //chunk2Size
 ];
 
-pub fn get_frequency_header(header: &[u8]) -> u32 {
+fn get_frequency_header(header: &[u8]) -> u32 {
     if header.len() <= 0x3c {
         0
     } else {

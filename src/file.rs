@@ -23,13 +23,19 @@ pub enum WzFileParseError {
 
 #[derive(Debug, Clone, Default)]
 pub struct WzFileMeta {
+    /// path of wz file
     pub path: String,
+    /// the wz file's version
     pub patch_version: i32,
+    /// a.k.a encver
     pub wz_version_header: i32,
+    /// a wz file is cantain wz_version_header(encver) in header
     pub wz_with_encrypt_version_header: bool,
+    /// the hash use to calculate img offset
     pub hash: usize
 }
 
+/// Root of the `WzNode`, represents the Wz file itself and contains `WzFileMeta`
 #[derive(Debug, Clone)]
 pub struct WzFile {
     pub reader: Arc<WzReader>,
@@ -160,11 +166,7 @@ impl WzFile {
                 return Err(WzFileParseError::ErrorGameVerHash);
             };
 
-            let check_byte = if let Ok(b) = reader.read_u8_at(offset) {
-                b
-            } else {
-                return Err(WzFileParseError::ErrorGameVerHash);
-            };
+            let check_byte = reader.read_u8_at(offset).map_err(|_| WzFileParseError::ErrorGameVerHash)?;
 
             match check_byte {
                 0x73 | 0x1b | 0x01 => {

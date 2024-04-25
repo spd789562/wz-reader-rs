@@ -7,15 +7,20 @@ use crate::WzHeader;
 use crate::util::WzMutableKey;
 use crate::property::{WzStringMeta, WzStringType};
 
+/// A basic reader for reading data, it store original data(Mmap), and can't not 
+/// read data without provide offset of the data.
 #[derive(Debug)]
 pub struct WzReader {
     pub map: Mmap,
     pub wz_iv: [u8; 4],
     pub keys: Arc<RwLock<WzMutableKey>>,
 }
+
+/// A reader that only hold part of the original data, and it hold a position of current reading.
 #[derive(Debug, Clone)]
 pub struct WzSliceReader<'a> {
     pub buf: &'a [u8],
+    /// current reading position
     pub pos: Cell<usize>,
     _save_pos: Cell<usize>,
     pub header: WzHeader<'a>,
