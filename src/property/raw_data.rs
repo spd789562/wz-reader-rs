@@ -2,7 +2,7 @@ use std::ops::Range;
 use std::sync::Arc;
 use crate::WzReader;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct WzRawData {
     pub reader: Arc<WzReader>,
     offset: usize,

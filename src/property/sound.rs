@@ -5,6 +5,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use crate::reader::{read_i32_at, WzReader};
 
+#[cfg(feature = "serde")]
+use serde::{Serialize, Deserialize};
+
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -19,6 +22,7 @@ pub enum WzSoundError {
     NotSoundProperty,
 }
 
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, PartialEq)]
 pub enum WzSoundType {
     Mp3,
@@ -26,12 +30,24 @@ pub enum WzSoundType {
     Binary,
 }
 
-#[derive(Debug, Clone)]
+impl Default for WzSoundType {
+    fn default() -> Self {
+        WzSoundType::Binary
+    }
+}
+
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, Default)]
 pub struct WzSound {
+    #[cfg_attr(feature = "serde", serde(skip))]
     reader: Arc<WzReader>,
+    #[cfg_attr(feature = "serde", serde(skip))]
     offset: usize,
+    #[cfg_attr(feature = "serde", serde(skip))]
     length: u32,
+    #[cfg_attr(feature = "serde", serde(skip))]
     header_offset: usize,
+    #[cfg_attr(feature = "serde", serde(skip))]
     header_size: usize,
     pub duration: u32,
     pub sound_type: WzSoundType,
