@@ -2,6 +2,9 @@ use std::sync::Arc;
 use crate::{WzReader, Reader, WzNodeArc, WzNodeCast};
 use thiserror::Error;
 
+#[cfg(feature = "serde")]
+use serde::{Serialize, Deserialize};
+
 
 #[derive(Debug, Error)]
 pub enum WzStringParseError {
@@ -12,11 +15,18 @@ pub enum WzStringParseError {
     NotStringProperty,
 }
 
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, PartialEq)]
 pub enum WzStringType {
     Ascii,
     Unicode,
     Empty,
+}
+
+impl Default for WzStringType {
+    fn default() -> Self {
+        Self::Ascii
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -29,7 +39,7 @@ pub struct WzStringMeta {
 }
 
 /// `WzString` only hold the string information.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct WzString {
     reader: Arc<WzReader>,
     /// string start offset
@@ -79,6 +89,34 @@ impl WzString {
             string_type: meta.string_type,
         }
     }
+    /// Create a new `WzString` it will encrypt the string with the given iv.
+    pub fn from_str(str: &str, iv: [u8; 4]) -> Self {
+        let reader = WzReader::default().with_iv(iv);
+
+        let len;
+
+        let meta_type = if str.is_empty() {
+            len = 0;
+            WzStringType::Empty
+        } else if str.chars().all(|c| c.is_ascii()) {
+            len = str.len();
+            WzStringType::Ascii
+        } else {
+            len = str.chars().count() * 2;
+            WzStringType::Unicode
+        };
+
+        let encrypted = reader.encrypt_str(str, &meta_type);
+
+        let reader = WzReader::from_buff(&encrypted).with_iv(iv);
+
+        WzString {
+            reader: Arc::new(reader),
+            offset: 0,
+            length: len as u32,
+            string_type: meta_type,
+        }
+    }
     /// Decode string from wz file.
     pub fn get_string(&self) -> Result<String, WzStringParseError> {
         self.reader.resolve_wz_string_meta(&self.string_type, self.offset, self.length as usize).map_err(WzStringParseError::from)
@@ -90,4 +128,90 @@ pub fn resolve_string_from_node(node: &WzNodeArc) -> Result<String, WzStringPars
     node.read().unwrap().try_as_string()
         .ok_or(WzStringParseError::NotStringProperty)
         .and_then(|string| string.get_string())
+}
+
+
+#[cfg(feature = "serde")]
+impl Serialize for WzString {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let str = self.get_string().unwrap_or_default();
+
+        serializer.serialize_str(&str)
+    }
+}
+#[cfg(feature = "serde")]
+use serde::de::{self, Visitor, Deserializer};
+#[cfg(feature = "serde")]
+impl<'de> Deserialize<'de> for WzString {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        use std::fmt;
+        struct StringVisitor;
+        impl<'de> Visitor<'de> for StringVisitor {
+            type Value = WzString;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a string to deserialize into WzString")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<WzString, E>
+            where
+                E: de::Error,
+            {
+                Ok(WzString::from_str(value, Default::default()))
+            }
+        }
+
+
+        deserializer.deserialize_str(StringVisitor)
+    }
+}
+
+#[cfg(feature = "serde")]
+#[cfg(test)]
+mod test {
+    use super::*;
+    #[cfg(feature = "serde")]
+    use serde_json;
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn test_wz_string_serde_ascii() {
+        let encrypter_reader = WzReader::default();
+        let encrypted = encrypter_reader.encrypt_str("test", &WzStringType::Ascii);
+
+        let reader = WzReader::from_buff(&encrypted);
+        
+        let string = WzString::from_meta(WzStringMeta::new_ascii(0, 4), &Arc::new(reader));
+
+        let json = serde_json::to_string(&string).unwrap();
+        assert_eq!(json, r#""test""#);
+
+        let string: WzString = serde_json::from_str(r#""test""#).unwrap();
+        assert_eq!(string.string_type, WzStringType::Ascii);
+        assert_eq!(string.get_string().unwrap(), "test");
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn test_wz_string_serde_unicode() {
+        let encrypter_reader = WzReader::default();
+        let encrypted = encrypter_reader.encrypt_str("測試", &WzStringType::Unicode);
+
+        let reader = WzReader::from_buff(&encrypted);
+        
+        let string = WzString::from_meta(WzStringMeta::new_unicode(0, 4), &Arc::new(reader));
+
+        let json = serde_json::to_string(&string).unwrap();
+        assert_eq!(json, r#""測試""#);
+
+        let string: WzString = serde_json::from_str(r#""測試""#).unwrap();
+        assert_eq!(string.string_type, WzStringType::Unicode);
+        assert_eq!(string.get_string().unwrap(), "測試");
+    }
 }
