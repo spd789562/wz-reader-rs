@@ -123,6 +123,15 @@ impl WzReader {
             ..self
         }
     }
+    pub fn from_buff(buff: &[u8]) -> Self {
+        let mut memmap = memmap2::MmapMut::map_anon(buff.len()).unwrap();
+        (&mut memmap).copy_from_slice(buff);
+        WzReader {
+            map: memmap.make_read_only().unwrap(),
+            keys: Arc::new(RwLock::new(WzMutableKey::new([0; 4], [0; 32]))),
+            wz_iv: [0; 4]
+        }
+    }
     
     pub fn create_header(&self) -> WzHeader {
         self.map.pread::<WzHeader>(0).unwrap_or(WzHeader::default())
@@ -783,14 +792,6 @@ mod test {
         buf
     }
 
-    fn create_map_from_bytes(bytes: &[u8]) -> Mmap {
-        let mut memmut = memmap2::MmapMut::map_anon(bytes.len()).unwrap();
-
-        (&mut memmut[..]).copy_from_slice(bytes);
-
-        memmut.make_read_only().unwrap()
-    }
-
     fn setup() -> Result<Mmap, std::io::Error> {
         let dir = tempfile::tempdir()?;
         let file_path = dir.path().join("test.wz");
@@ -939,7 +940,7 @@ mod test {
         let test1 = "test1";
         let encrypted = reader.encrypt_str(test1, &WzStringType::Ascii);
 
-        let reader = WzReader::new(create_map_from_bytes(&encrypted));
+        let reader = WzReader::from_buff(&encrypted);
 
         assert_eq!(reader.resolve_wz_string_meta(&WzStringType::Ascii, 0, 5).unwrap(), test1.to_string());
     }
@@ -950,7 +951,7 @@ mod test {
         let test1 = "測試";
         let encrypted = reader.encrypt_str(test1, &WzStringType::Unicode);
 
-        let reader = WzReader::new(create_map_from_bytes(&encrypted));
+        let reader = WzReader::from_buff(&encrypted);
 
         assert_eq!(reader.resolve_wz_string_meta(&WzStringType::Unicode, 0, 4).unwrap(), test1.to_string());
     }
@@ -961,7 +962,7 @@ mod test {
         let test1 = "test1";
         let encrypted = reader.encrypt_str(test1, &WzStringType::Ascii);
 
-        let reader = WzReader::new(create_map_from_bytes(&encrypted)).with_iv(WZ_MSEAIV);
+        let reader = WzReader::from_buff(&encrypted).with_iv(WZ_MSEAIV);
 
         assert_eq!(reader.resolve_wz_string_meta(&WzStringType::Ascii, 0, 5).unwrap(), test1.to_string());
     }
@@ -972,7 +973,7 @@ mod test {
         let test1 = "測試";
         let encrypted = reader.encrypt_str(test1, &WzStringType::Unicode);
 
-        let reader = WzReader::new(create_map_from_bytes(&encrypted)).with_iv(WZ_MSEAIV);
+        let reader = WzReader::from_buff(&encrypted).with_iv(WZ_MSEAIV);
 
         assert_eq!(reader.resolve_wz_string_meta(&WzStringType::Unicode, 0, 4).unwrap(), test1.to_string());
     }
