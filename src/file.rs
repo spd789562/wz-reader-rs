@@ -41,7 +41,7 @@ pub struct WzFileMeta {
 
 /// Root of the `WzNode`, represents the Wz file itself and contains `WzFileMeta`
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct WzFile {
     #[cfg_attr(feature = "serde", serde(skip))]
     pub reader: Arc<WzReader>,

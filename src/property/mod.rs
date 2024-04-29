@@ -44,7 +44,7 @@ pub use raw_data::*;
 #[derive(Debug, Clone)]
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-#[cfg_attr(feature = "serde", serde(tag = "type"))]
+#[cfg_attr(feature = "serde", serde(tag = "type", content = "data"))]
 pub enum WzSubProperty {
     Convex,
     Sound(Box<WzSound>),
@@ -129,8 +129,8 @@ mod test {
         let property_json = serde_json::to_string(&property).unwrap();
         let convex_json = serde_json::to_string(&convex).unwrap();
 
-        assert_eq!(png_json, r#"{"type":"PNG","width":0,"height":0}"#);
-        assert_eq!(sound_json, r#"{"type":"Sound","duration":0,"sound_type":"Binary"}"#);
+        assert_eq!(png_json, r#"{"type":"PNG","data":{"width":0,"height":0}}"#);
+        assert_eq!(sound_json, r#"{"type":"Sound","data":{"duration":0,"sound_type":"Binary"}}"#);
         assert_eq!(property_json, r#"{"type":"Property"}"#);
         assert_eq!(convex_json, r#"{"type":"Convex"}"#);
     }
@@ -138,8 +138,8 @@ mod test {
     #[cfg(feature = "serde")]
     #[test]
     fn test_deserialize_wz_sub_property() {
-        let png_json = r#"{"type":"PNG","width":0,"height":0}"#;
-        let sound_json = r#"{"type":"Sound","duration":0,"sound_type":"Binary"}"#;
+        let png_json = r#"{"type":"PNG","data":{"width":0,"height":0}}"#;
+        let sound_json = r#"{"type":"Sound","data":{"duration":0,"sound_type":"Binary"}}"#;
         let property_json = r#"{"type":"Property"}"#;
         let convex_json = r#"{"type":"Convex"}"#;
 

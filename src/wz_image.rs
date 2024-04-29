@@ -3,6 +3,9 @@ use crate::{ util, WzNode, WzNodeArc, WzNodeArcVec, WzNodeName, WzReader };
 use crate::property::WzLua;
 use thiserror::Error;
 
+#[cfg(feature = "serde")]
+use serde::{Serialize, Deserialize};
+
 #[derive(Debug, Error)]
 pub enum WzImageParseError {
     #[error(transparent)]
@@ -24,13 +27,19 @@ pub enum WzImageParseError {
 pub const WZ_IMAGE_HEADER_BYTE_WITHOUT_OFFSET: u8 = 0x73;
 pub const WZ_IMAGE_HEADER_BYTE_WITH_OFFSET: u8 = 0x1B;
 
-
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(default))]
 #[derive(Debug, Clone, Default)]
 pub struct WzImage {
+    #[cfg_attr(feature = "serde", serde(skip))]
     pub reader: Arc<WzReader>,
+    #[cfg_attr(feature = "serde", serde(skip))]
     pub name: WzNodeName,
+    #[cfg_attr(feature = "serde", serde(skip))]
     pub offset: usize,
+    #[cfg_attr(feature = "serde", serde(skip))]
     pub block_size: usize,
+    #[cfg_attr(feature = "serde", serde(skip))]
     pub is_parsed: bool,
 }
 
