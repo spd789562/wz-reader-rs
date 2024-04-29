@@ -25,7 +25,7 @@ pub const WZ_IMAGE_HEADER_BYTE_WITHOUT_OFFSET: u8 = 0x73;
 pub const WZ_IMAGE_HEADER_BYTE_WITH_OFFSET: u8 = 0x1B;
 
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct WzImage {
     pub reader: Arc<WzReader>,
     pub name: WzNodeName,

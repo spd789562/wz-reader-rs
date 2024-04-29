@@ -39,6 +39,12 @@ impl Display for WzNodeName {
     }
 }
 
+impl Default for WzNodeName {
+    fn default() -> Self {
+        "".into()
+    }
+}
+
 impl WzNodeName {
     pub fn new(s: &str) -> Self {
         s.into()

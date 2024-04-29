@@ -38,7 +38,7 @@ fn get_wz_directory_type_from_byte(byte: u8) -> WzDirectoryType {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct WzDirectory {
     pub reader: Arc<WzReader>,
     pub offset: usize,
