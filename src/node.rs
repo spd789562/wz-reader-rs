@@ -332,6 +332,68 @@ impl WzNode {
             write.children.insert(name, child);
         }
     }
+
+    /// Generate full json that can deserialize back to `WzNode`.
+    #[cfg(feature = "json")]
+    pub fn to_json(&self) -> Result<serde_json::Value, serde_json::Error> {
+        serde_json::to_value(self)
+    }
+
+    /// Generate simple json only name and value.
+    #[cfg(feature = "json")]
+    pub fn to_simple_json(&self) -> Result<serde_json::Value, serde_json::Error> {
+        use serde_json::{Map, Value, to_value};
+        use crate::property::WzSubProperty;
+
+
+        if self.children.is_empty() {
+            match &self.object_type {
+                WzObjectType::Value(value_type) => {
+                    return Ok(value_type.clone().into())
+                },
+                WzObjectType::Property(WzSubProperty::PNG(inner)) => {
+                    return to_value(inner)
+                }
+                WzObjectType::Property(WzSubProperty::Sound(inner)) => {
+                    return to_value(inner)
+                },
+                _ => {
+                    return Ok(Value::Null)
+                }
+            }
+        }
+
+        let mut json = Map::new();
+
+        match &self.object_type {
+            WzObjectType::Property(WzSubProperty::PNG(inner)) => {
+                let dict =  to_value(inner)?;
+
+                if let Value::Object(dict) = dict {
+                    for (name, value) in dict {
+                        json.insert(name, value);
+                    }
+                }
+            },
+            WzObjectType::Property(WzSubProperty::Sound(inner)) => {
+                let dict =  to_value(inner)?;
+
+                if let Value::Object(dict) = dict {
+                    for (name, value) in dict {
+                        json.insert(name, value);
+                    }
+                }
+            },
+            _ => {}
+        }
+
+        for (name, value) in self.children.iter() {
+            let child = value.read().unwrap();
+            json.insert(name.to_string(), child.to_simple_json()?);
+        }
+
+        Ok(Value::Object(json))
+    }
 }
 
 /// Just wrap around of `node.write().unwrap().parse(&node)`
@@ -357,6 +419,14 @@ pub fn resolve_outlink(path: &str, node: &WzNodeArc, force_parse: bool) -> Optio
     }
 }
 
+/// Make sure WzNode tree's all node has correct parent.
+pub fn resolve_childs_parent(node: &WzNodeArc) {
+    let node_read = node.read().unwrap();
+    for child in node_read.children.values() {
+        child.write().unwrap().parent = Arc::downgrade(&node);
+        resolve_childs_parent(&child);
+    }
+}
 
 #[cfg(feature = "serde")]
 mod arc_node_serde {
@@ -507,5 +577,65 @@ mod test {
         assert_eq!(node111.read().unwrap().name.as_str(), "1-1-1");
         // should not be able to resolve parent
         assert!(node111.read().unwrap().parent.upgrade().is_none());
+
+        resolve_childs_parent(&root);
+
+        // should able to get parent after resolved
+        let node111_parent = node111.read().unwrap().parent.upgrade();
+        assert!(node111_parent.is_some());
+
+        let node111_parent = node111_parent.unwrap();
+
+        assert_eq!(node111_parent.read().unwrap().name.as_str(), "1-1");
+    }
+
+    #[cfg(feature = "json")]
+    #[test]
+    fn test_node_to_simple_json() {
+        use crate::property::{WzPng, WzSound};
+
+        let root = WzNode::from_str("root", 1, None).into_lock();
+        let child1 = WzNode::from_str("1", 1, Some(&root)).into_lock();
+        let child2  = WzNode::from_str("2", 1, Some(&root)).into_lock();
+        root.write().unwrap().add(&child1);
+        root.write().unwrap().add(&child2);
+        let child11 = WzNode::from_str("1-1", 1, Some(&child1)).into_lock();
+        let child12 = WzNode::from_str("1-2", 1, Some(&child1)).into_lock();
+        child1.write().unwrap().add(&child11);
+        child1.write().unwrap().add(&child12);
+        let child111 = WzNode::from_str("1-1-1", 1, Some(&child11)).into_lock();
+        let child112 = WzNode::from_str("1-1-2", 2, Some(&child11)).into_lock();
+        let child11png = WzNode::from_str("1-1-png", WzPng::default(), Some(&child11)).into_lock();
+        let child11sound = WzNode::from_str("1-1-sound", WzSound::default(), Some(&child11)).into_lock();
+        child11.write().unwrap().add(&child111);
+        child11.write().unwrap().add(&child112);
+        child11.write().unwrap().add(&child11png);
+        child11.write().unwrap().add(&child11sound);
+        let child11pngz = WzNode::from_str("1-1-png-z", 2, Some(&child11png)).into_lock();
+        child11png.write().unwrap().add(&child11pngz);
+
+        let json = root.read().unwrap().to_simple_json().unwrap();
+
+        let result = json!({
+            "1": {
+                "1-1": {
+                    "1-1-1": 1,
+                    "1-1-2": 2,
+                    "1-1-png": {
+                        "width": 0,
+                        "height": 0,
+                        "1-1-png-z": 2
+                    },
+                    "1-1-sound": {
+                        "duration": 0,
+                        "sound_type": "Binary"
+                    }
+                },
+                "1-2": 1
+            },
+            "2": 1
+        });
+
+        assert_eq!(json, result);
     }
 }

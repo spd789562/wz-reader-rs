@@ -1,6 +1,6 @@
 #[cfg(feature = "serde")]
 use serde::{Serialize, Deserialize};
-#[cfg(feature = "serde")]
+#[cfg(feature = "json")]
 use serde_json::{Value, Number};
 
 pub mod vector;
@@ -82,7 +82,7 @@ impl Default for WzValue {
     }
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "json")]
 impl From<WzValue> for Value {
     fn from(value: WzValue) -> Self {
         match value {
@@ -238,7 +238,7 @@ mod test {
         assert!(matches!(parsed_string, WzValue::ParsedString(_)));
     }
 
-    #[cfg(feature = "serde")]
+    #[cfg(feature = "json")]
     #[test]
     fn test_from_wz_value_to_serde_json_value() {
         let null = WzValue::Null;
