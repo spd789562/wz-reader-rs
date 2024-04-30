@@ -111,8 +111,6 @@ mod test {
         let r = (((color & 0xff000000) >> 24) as u16 * 31 + 127) / 255;
         let g = (((color & 0x00ff0000) >> 16) as u16 * 31 + 127) / 255;
         let b = (((color & 0x0000ff00) >> 8) as u16 * 31 + 127) / 255;
-
-        println!("r: {}, g: {}, b: {}", r, g, b);
         
         let a = if color & 0xff > 0 { 0 } else { 1 };
 

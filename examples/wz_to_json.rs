@@ -1,51 +1,12 @@
-use wz_reader::property::Vector2D;
-use wz_reader::{WzNode, WzNodeArc, WzObjectType, property::WzValue};
+use wz_reader::{WzNode, WzNodeArc, WzObjectType, parse_node};
 use serde_json::{ Map, Value };
 
 fn walk_node_and_to_json(node_arc: &WzNodeArc, json: &mut Map<String, Value>) {
-    {
-        node_arc.write().unwrap().parse(node_arc).unwrap();
-    }
+    parse_node(node_arc).unwrap();
     let node = node_arc.read().unwrap();
     match &node.object_type {
         WzObjectType::Value(value_type) => {
-            match value_type {
-                WzValue::Int(value) => {
-                    json.insert(node.name.to_string(), Value::Number(serde_json::Number::from(*value)));
-                },
-                WzValue::Short(value) => {
-                    json.insert(node.name.to_string(), Value::Number(serde_json::Number::from(*value)));
-                },
-                WzValue::Long(value) => {
-                    json.insert(node.name.to_string(), Value::Number(serde_json::Number::from(*value)));
-                },
-                WzValue::Float(value) => {
-                    json.insert(node.name.to_string(), Value::Number(serde_json::Number::from_f64((*value).into()).unwrap()));
-                },
-                WzValue::Double(value) => {
-                    json.insert(node.name.to_string(), Value::Number(serde_json::Number::from_f64(*value).unwrap()));
-                },
-                WzValue::String(wz_string) | WzValue::UOL(wz_string) => {
-                    let string = wz_string.get_string();
-                    match string {
-                        Ok(string) => {
-                            json.insert(node.name.to_string(), Value::String(string));
-                        },
-                        Err(_) => {
-                            json.insert(node.name.to_string(), Value::String(String::from("")));
-                        }
-                    }
-                },
-                WzValue::Vector(Vector2D (x, y)) => {
-                    let mut vec = Map::new();
-                    vec.insert("x".to_string(), Value::Number(serde_json::Number::from(*x)));
-                    vec.insert("y".to_string(), Value::Number(serde_json::Number::from(*y)));
-                    json.insert(node.name.to_string(), Value::Object(vec));
-                },
-                WzValue::Null | WzValue::RawData(_) | WzValue::Lua(_) => {
-                    json.insert(node.name.to_string(), Value::Null);
-                },
-            }
+            json.insert(node.name.to_string(), value_type.clone().into());
         },
         WzObjectType::Directory(_) | WzObjectType::Image(_) | WzObjectType::File(_) | WzObjectType::Property(_) => {
             let mut child_json = Map::new();

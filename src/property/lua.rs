@@ -19,7 +19,7 @@ pub enum WzLuaParseError {
 }
 
 /// WzLua use to store lua information and extraction method.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct WzLua {
     reader: Arc<WzReader>,
     offset: usize,

@@ -5,6 +5,9 @@ use crate::{Reader, WzDirectory, WzNodeArc, WzNodeArcVec, WzObjectType, WzReader
 
 use thiserror::Error;
 
+#[cfg(feature = "serde")]
+use serde::{Serialize, Deserialize};
+
 #[derive(Debug, Error)]
 pub enum WzFileParseError {
     #[error(transparent)]
@@ -21,6 +24,7 @@ pub enum WzFileParseError {
     UnknownImageHeader(u8, String),
 }
 
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct WzFileMeta {
     /// path of wz file
@@ -36,12 +40,18 @@ pub struct WzFileMeta {
 }
 
 /// Root of the `WzNode`, represents the Wz file itself and contains `WzFileMeta`
-#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, Default)]
 pub struct WzFile {
+    #[cfg_attr(feature = "serde", serde(skip))]
     pub reader: Arc<WzReader>,
+    #[cfg_attr(feature = "serde", serde(skip))]
     pub offset: usize,
+    #[cfg_attr(feature = "serde", serde(skip))]
     pub block_size: usize,
+    #[cfg_attr(feature = "serde", serde(skip))]
     pub is_parsed: bool,
+    #[cfg_attr(feature = "serde", serde(flatten))]
     pub wz_file_meta: WzFileMeta,
 }
 

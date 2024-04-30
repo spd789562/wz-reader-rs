@@ -7,6 +7,9 @@ use crate::{reader, WzNodeArc, WzObjectType, property::WzSubProperty, resolve_in
 use crate::property::string::resolve_string_from_node;
 use crate::util::color::{SimpleColor, SimpleColorAlpha};
 
+#[cfg(feature = "serde")]
+use serde::{Serialize, Deserialize};
+
 #[derive(Debug, Error)]
 pub enum WzPngParseError {
     #[error("inflate raw data failed")]
@@ -63,16 +66,24 @@ pub fn get_image(node: &WzNodeArc) -> Result<DynamicImage, WzPngParseError> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, Default)]
 pub struct WzPng {
+    #[cfg_attr(feature = "serde", serde(skip))]
     reader: Arc<reader::WzReader>,
+    #[cfg_attr(feature = "serde", serde(skip))]
     offset: usize,
+    #[cfg_attr(feature = "serde", serde(skip))]
     block_size: usize,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    format1: u32,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    format2: u32,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    pub header: i32,
+
     pub width: u32,
     pub height: u32,
-    format1: u32,
-    format2: u32,
-    pub header: i32,
 }
 
 impl WzPng {

@@ -1,8 +1,15 @@
 use std::ops::{Add, Sub, Mul, Div};
 use std::fmt;
 
+#[cfg(feature = "serde")]
+use serde::{Serialize, Deserialize};
+
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Vector2D(pub i32, pub i32);
+pub struct Vector2D(
+    pub i32,
+    pub i32
+);
 
 impl Vector2D {
     pub fn new(x: i32, y: i32) -> Vector2D {
@@ -50,5 +57,22 @@ impl Div for Vector2D {
 
     fn div(self, other: Vector2D) -> Vector2D {
         Vector2D(self.0 / other.0, self.1 / other.1)
+    }
+}
+
+#[cfg(feature = "serde")]
+#[cfg(test)]
+mod test {
+    use super::*;
+    use serde_json;
+    
+    #[test]
+    fn test_vector2d_serde() {
+        let vector = Vector2D::new(1, 2);
+        let json = serde_json::to_string(&vector).unwrap();
+        assert_eq!(json, r#"[1,2]"#);
+
+        let vector: Vector2D = serde_json::from_str(r#"[1,2]"#).unwrap();
+        assert_eq!(vector, Vector2D::new(1, 2));
     }
 }

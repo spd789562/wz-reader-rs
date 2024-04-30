@@ -3,7 +3,12 @@ use std::ops::Deref;
 use std::fmt::Display;
 use hashbrown::Equivalent;
 
+#[cfg(feature = "serde")]
+use serde::{Serialize, Deserialize};
+
 /// A wrapper around `Arc<str>` use for WzNode's name and hashmap key.
+#[cfg_attr(feature = "serde", derive(Deserialize))]
+#[cfg_attr(feature = "serde", serde(from = "String"))]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct WzNodeName(Arc<str>);
 
@@ -39,11 +44,28 @@ impl Display for WzNodeName {
     }
 }
 
+impl Default for WzNodeName {
+    fn default() -> Self {
+        "".into()
+    }
+}
+
 impl WzNodeName {
     pub fn new(s: &str) -> Self {
         s.into()
     }
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+}
+
+#[cfg(feature = "serde")]
+impl Serialize for WzNodeName {
+    /// I don't known how to directly into &str, so impl this
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(self.as_str())
     }
 }

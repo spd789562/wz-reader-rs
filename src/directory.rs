@@ -2,6 +2,9 @@ use std::sync::Arc;
 use crate::{ WzImage, WzNode, WzNodeArc, WzNodeArcVec, WzObjectType, WzReader, WzNodeName };
 use thiserror::Error;
 
+#[cfg(feature = "serde")]
+use serde::{Serialize, Deserialize};
+
 #[derive(Debug, Error)]
 pub enum WzDirectoryParseError {
     #[error("Lua parse error")]
@@ -38,12 +41,18 @@ fn get_wz_directory_type_from_byte(byte: u8) -> WzDirectoryType {
     }
 }
 
-#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, Default)]
 pub struct WzDirectory {
+    #[cfg_attr(feature = "serde", serde(skip))]
     pub reader: Arc<WzReader>,
+    #[cfg_attr(feature = "serde", serde(skip))]
     pub offset: usize,
+    #[cfg_attr(feature = "serde", serde(skip))]
     pub block_size: usize,
+    #[cfg_attr(feature = "serde", serde(skip))]
     pub hash: usize,
+    #[cfg_attr(feature = "serde", serde(skip))]
     pub is_parsed: bool
 }
 

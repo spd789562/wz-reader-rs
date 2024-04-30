@@ -16,6 +16,17 @@ pub struct WzReader {
     pub keys: Arc<RwLock<WzMutableKey>>,
 }
 
+impl Default for WzReader {
+    fn default() -> Self {
+        let memmap = memmap2::MmapMut::map_anon(1).unwrap().make_read_only().unwrap();
+        WzReader {
+            map: memmap,
+            wz_iv: [0; 4],
+            keys: Arc::new(RwLock::new(WzMutableKey::new([0; 4], [0; 32]))),
+        }
+    }
+}
+
 /// A reader that only hold part of the original data, and it hold a position of current reading.
 #[derive(Debug, Clone)]
 pub struct WzSliceReader<'a> {
@@ -59,7 +70,7 @@ pub trait Reader {
             WzStringType::Unicode => {
                 let decrypted = self.get_decrypt_slice(offset..(offset + length));
                 let mut strvec = Vec::with_capacity(length / 2);
-        
+
                 for (i, chunk) in decrypted.chunks(2).enumerate() {
                     let c = u16::from_le_bytes([chunk[0], chunk[1]]);
                     strvec.push(resolve_unicode_char(c, i as i32));
@@ -112,6 +123,15 @@ impl WzReader {
             ..self
         }
     }
+    pub fn from_buff(buff: &[u8]) -> Self {
+        let mut memmap = memmap2::MmapMut::map_anon(buff.len()).unwrap();
+        (&mut memmap).copy_from_slice(buff);
+        WzReader {
+            map: memmap.make_read_only().unwrap(),
+            keys: Arc::new(RwLock::new(WzMutableKey::new([0; 4], [0; 32]))),
+            wz_iv: [0; 4]
+        }
+    }
     
     pub fn create_header(&self) -> WzHeader {
         self.map.pread::<WzHeader>(0).unwrap_or(WzHeader::default())
@@ -136,6 +156,45 @@ impl WzReader {
     }
     pub fn create_slice_reader(&self) -> WzSliceReader {
         WzSliceReader::new(&self.map, &self.keys).with_header(self.create_header())
+    }
+    /// create a encrypt string from current `WzReader`
+    pub fn encrypt_str(&self, str: &str, meta_type: &WzStringType) -> Vec<u8> {
+        match meta_type {
+            WzStringType::Empty => {
+                Vec::new()
+            },
+            WzStringType::Unicode => {
+                let mut bytes = str.encode_utf16().collect::<Vec<_>>();
+                let mut keys = self.keys.write().unwrap();
+
+                keys.ensure_key_size(bytes.len() * 2).unwrap();
+
+                bytes.iter_mut().enumerate().flat_map(|(i, b)| {
+                    let key1 = *keys.try_at(i * 2).unwrap_or(&0) as u16;
+                    let key2 = *keys.try_at(i * 2 + 1).unwrap_or(&0) as u16;
+                    let i = (i + 0xAAAA) as u16;
+                    *b ^= i ^ key1 ^ (key2 << 8);
+
+                    b.to_le_bytes().to_vec()
+                }).collect()
+            },
+            WzStringType::Ascii => {
+                let mut bytes = str.bytes().collect::<Vec<_>>();
+
+                let mut keys = self.keys.write().unwrap();
+
+                keys.ensure_key_size(bytes.len()).unwrap();
+
+                for (i, b) in bytes.iter_mut().enumerate() {
+                    let key = keys.try_at(i).unwrap_or(&0);
+                    let i = (i + 0xAA) as u8;
+
+                    *b ^= i ^ key;
+                }
+
+                bytes
+            }
+        }
     }
 }
 
@@ -872,6 +931,50 @@ mod test {
         assert_eq!(wz_header.fsize, 364);
         assert_eq!(wz_header.fstart, 60);
         assert_eq!(wz_header.copyright, "Package file v1.0 Copyright");
+    }
+
+    #[test]
+    fn test_wz_create_encrypt_str_ascii() {
+        let reader = WzReader::default();
+        let test1 = "test1";
+        let encrypted = reader.encrypt_str(test1, &WzStringType::Ascii);
+
+        let reader = WzReader::from_buff(&encrypted);
+
+        assert_eq!(reader.resolve_wz_string_meta(&WzStringType::Ascii, 0, 5).unwrap(), test1.to_string());
+    }
+
+    #[test]
+    fn test_wz_create_encrypt_str_unicode() {
+        let reader = WzReader::default();
+        let test1 = "測試";
+        let encrypted = reader.encrypt_str(test1, &WzStringType::Unicode);
+
+        let reader = WzReader::from_buff(&encrypted);
+
+        assert_eq!(reader.resolve_wz_string_meta(&WzStringType::Unicode, 0, 4).unwrap(), test1.to_string());
+    }
+
+    #[test]
+    fn test_wz_create_encrypt_str_ascii_with_iv() {
+        let reader = WzReader::default().with_iv(WZ_MSEAIV);
+        let test1 = "test1";
+        let encrypted = reader.encrypt_str(test1, &WzStringType::Ascii);
+
+        let reader = WzReader::from_buff(&encrypted).with_iv(WZ_MSEAIV);
+
+        assert_eq!(reader.resolve_wz_string_meta(&WzStringType::Ascii, 0, 5).unwrap(), test1.to_string());
+    }
+
+    #[test]
+    fn test_wz_create_encrypt_str_unicode_with_iv() {
+        let reader = WzReader::default().with_iv(WZ_MSEAIV);
+        let test1 = "測試";
+        let encrypted = reader.encrypt_str(test1, &WzStringType::Unicode);
+
+        let reader = WzReader::from_buff(&encrypted).with_iv(WZ_MSEAIV);
+
+        assert_eq!(reader.resolve_wz_string_meta(&WzStringType::Unicode, 0, 4).unwrap(), test1.to_string());
     }
 
     #[test]
