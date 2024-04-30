@@ -141,12 +141,11 @@ impl WzReader {
 
 impl<'a> WzSliceReader<'a> {
     pub fn new(buf: &'a [u8], key: &Arc<RwLock<WzMutableKey>>) -> Self {
-        let header = buf.pread::<WzHeader>(0).unwrap();
         WzSliceReader {
             buf,
             pos: Cell::new(0),
             _save_pos: Cell::new(0),
-            header,
+            header: Default::default(),
             hash: 0,
             keys: Arc::clone(key)
         }
