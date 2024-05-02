@@ -314,7 +314,7 @@ fn should_success_using_wz_node_methods_on_childs() {
     let force_get_some_node = parent_img.read().unwrap().at_path_parsed("2/nil");
     assert!(force_get_some_node.is_ok());
 
-    assert!(parent_img.write().unwrap().unparse().is_ok());
+    parent_img.write().unwrap().unparse();
 
     assert_eq!(parent_img.read().unwrap().children.len(), 0);
 

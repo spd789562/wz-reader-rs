@@ -71,6 +71,9 @@ impl WzNode {
         ))
     }
     /// Create a `WzNode` from a any `.img` file. If version is not provided, it will try to detect the version.
+    /// 
+    /// # Errors
+    /// When provided version is incorrect or unable to detect version.
     pub fn from_img_file(path: &str, version: Option<version::WzMapleVersion>, parent: Option<&WzNodeArc>) -> Result<Self, Error> {
         let wz_image = WzImage::from_file(path, version.map(version::get_iv_by_maple_version))?;
         Ok(WzNode::new(
@@ -81,6 +84,9 @@ impl WzNode {
     }
 
     /// Create a `WzNode` from a any `.img` file with custom wz iv([u8; 4])
+    /// 
+    /// # Errors
+    /// When provided iv is incorrect or unable to detect version.
     pub fn from_img_file_with_iv(path: &str, iv: [u8; 4], parent: Option<&WzNodeArc>) -> Result<Self, Error> {
         let wz_image = WzImage::from_file(path, Some(iv))?;
         Ok(WzNode::new(
@@ -127,7 +133,7 @@ impl WzNode {
     }
 
     /// Clear the node childrens and set the node to unparsed.
-    pub fn unparse(&mut self) -> Result<(), Error> {
+    pub fn unparse(&mut self) {
         match &mut self.object_type {
             WzObjectType::Directory(directory) => {
                 directory.is_parsed = false;
@@ -138,12 +144,10 @@ impl WzNode {
             WzObjectType::Image(image) => {
                 image.is_parsed = false;
             },
-            _ => return Ok(()),
+            _ => return (),
         }
         
         self.children.clear();
-
-        Ok(())
     }
 
     pub fn add(&mut self, node: &WzNodeArc) {

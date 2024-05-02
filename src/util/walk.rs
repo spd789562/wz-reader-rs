@@ -18,7 +18,7 @@ pub fn walk_node(node: &WzNodeArc, force_parse: bool, f: &dyn Fn(&WzNodeArc)) {
 
     if force_parse && is_wz_image {
         if let Ok(mut node) = node.write() {
-            node.unparse().unwrap();
+            node.unparse();
         }
     }
 }
