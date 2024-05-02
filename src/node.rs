@@ -1,25 +1,24 @@
 use std::path::Path;
 use std::sync::{Arc, Weak, RwLock};
 use hashbrown::HashMap;
-use crate::{ version, WzDirectoryParseError, WzFile, WzFileParseError, WzImage, WzImageParseError, WzObjectType, WzNodeName};
-use thiserror::Error;
+use crate::{ version, directory, wz_image, file, WzFile, WzImage, WzObjectType, WzNodeName};
 
 #[cfg(feature = "serde")]
 use serde::{Serialize, Deserialize};
 
-#[derive(Debug, Error)]
-pub enum NodeParseError {
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
     #[error("Node has been using")]
     NodeHasBeenUsing,
 
     #[error("Error parsing WzDirectory: {0}")]
-    WzDirectoryParseError(#[from] WzDirectoryParseError),
+    WzDirectoryParseError(#[from] directory::Error),
 
     #[error("Error parsing WzFile: {0}")]
-    WzFileParseError(#[from] WzFileParseError),
+    WzFileParseError(#[from] file::Error),
 
     #[error("Error parsing WzImage: {0}")]
-    WzImageParseError(#[from] WzImageParseError),
+    WzImageParseError(#[from] wz_image::Error),
 
     #[error("Node not found")]
     NodeNotFound,
@@ -61,7 +60,7 @@ impl WzNode {
         Self::new(&name.into(), object_type, parent)
     }
     /// Create a `WzNode` from a any `.wz` file.
-    pub fn from_wz_file(path: &str, version: Option<version::WzMapleVersion>, patch_version: Option<i32>, parent: Option<&WzNodeArc>) -> Result<Self, NodeParseError> {
+    pub fn from_wz_file(path: &str, version: Option<version::WzMapleVersion>, patch_version: Option<i32>, parent: Option<&WzNodeArc>) -> Result<Self, Error> {
         let name = Path::new(path).file_stem().unwrap().to_str().unwrap();
         let version = version.unwrap_or(version::WzMapleVersion::BMS);
         let wz_file = WzFile::from_file(path, version::get_iv_by_maple_version(version), patch_version)?;
@@ -72,7 +71,7 @@ impl WzNode {
         ))
     }
     /// Create a `WzNode` from a any `.img` file. If version is not provided, it will try to detect the version.
-    pub fn from_img_file(path: &str, version: Option<version::WzMapleVersion>, parent: Option<&WzNodeArc>) -> Result<Self, NodeParseError> {
+    pub fn from_img_file(path: &str, version: Option<version::WzMapleVersion>, parent: Option<&WzNodeArc>) -> Result<Self, Error> {
         let wz_image = WzImage::from_file(path, version.map(version::get_iv_by_maple_version))?;
         Ok(WzNode::new(
             &wz_image.name.clone(), 
@@ -82,7 +81,7 @@ impl WzNode {
     }
 
     /// Create a `WzNode` from a any `.img` file with custom wz iv([u8; 4])
-    pub fn from_img_file_with_iv(path: &str, iv: [u8; 4], parent: Option<&WzNodeArc>) -> Result<Self, NodeParseError> {
+    pub fn from_img_file_with_iv(path: &str, iv: [u8; 4], parent: Option<&WzNodeArc>) -> Result<Self, Error> {
         let wz_image = WzImage::from_file(path, Some(iv))?;
         Ok(WzNode::new(
             &wz_image.name.clone(), 
@@ -97,7 +96,7 @@ impl WzNode {
     }
 
     /// Parse the node base on the object type.
-    pub fn parse(&mut self, parent: &WzNodeArc) -> Result<(), NodeParseError> {
+    pub fn parse(&mut self, parent: &WzNodeArc) -> Result<(), Error> {
         let childs: WzNodeArcVec = match self.object_type {
             WzObjectType::Directory(ref mut directory) => {
                 if directory.is_parsed {
@@ -128,7 +127,7 @@ impl WzNode {
     }
 
     /// Clear the node childrens and set the node to unparsed.
-    pub fn unparse(&mut self) -> Result<(), NodeParseError> {
+    pub fn unparse(&mut self) -> Result<(), Error> {
         match &mut self.object_type {
             WzObjectType::Directory(directory) => {
                 directory.is_parsed = false;
@@ -249,7 +248,7 @@ impl WzNode {
         }
     }
     /// Get node by path like `a/b/c` and parse all nodes in the path.
-    pub fn at_path_parsed(&self, path: &str) -> Result<WzNodeArc, NodeParseError> {
+    pub fn at_path_parsed(&self, path: &str) -> Result<WzNodeArc, Error> {
         let mut pathes = path.split('/');
         
         let first = self.at(pathes.next().unwrap());
@@ -257,10 +256,10 @@ impl WzNode {
             pathes.try_fold(first, |node, name| {
                 let mut write = node.write().unwrap();
                 write.parse(&node)?;
-                write.at(name).ok_or(NodeParseError::NodeNotFound)
+                write.at(name).ok_or(Error::NodeNotFound)
             })
         } else {
-            Err(NodeParseError::NodeNotFound)
+            Err(Error::NodeNotFound)
         }
     }
     /// Get node by path that include relative path like `../../b/c`.
@@ -410,7 +409,7 @@ impl WzNode {
 }
 
 /// Just wrap around of `node.write().unwrap().parse(&node)`
-pub fn parse_node(node: &WzNodeArc) -> Result<(), NodeParseError> {
+pub fn parse_node(node: &WzNodeArc) -> Result<(), Error> {
     node.write().unwrap().parse(node)
 }
 

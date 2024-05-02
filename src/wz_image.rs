@@ -2,13 +2,12 @@ use std::sync::Arc;
 use crate::{ reader, util, WzNode, WzNodeArc, WzNodeArcVec, WzNodeName, WzReader };
 use crate::property::WzLua;
 use crate::version::{verify_iv_from_wz_img, guess_iv_from_wz_img};
-use thiserror::Error;
 
 #[cfg(feature = "serde")]
 use serde::{Serialize, Deserialize};
 
-#[derive(Debug, Error)]
-pub enum WzImageParseError {
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
     #[error(transparent)]
     FileError(#[from] std::io::Error),
     #[error("Lua parse error")]
@@ -58,18 +57,18 @@ impl WzImage {
             is_parsed: false,
         }
     }
-    pub fn from_file(path: &str, wz_iv: Option<[u8; 4]>) -> Result<Self, WzImageParseError> {
+    pub fn from_file(path: &str, wz_iv: Option<[u8; 4]>) -> Result<Self, Error> {
         let name = std::path::Path::new(path).file_name().unwrap().to_str().unwrap().to_string();
         let file = std::fs::File::open(path)?;
         let map = unsafe { memmap2::Mmap::map(&file)? };
 
         let wz_iv = if let Some(iv) = wz_iv {
             if !verify_iv_from_wz_img(&map, &iv) {
-                return Err(WzImageParseError::WrongVersion);
+                return Err(Error::WrongVersion);
             }
             iv
         } else {
-            guess_iv_from_wz_img(&map).ok_or(WzImageParseError::UnableToGuessVersion)?
+            guess_iv_from_wz_img(&map).ok_or(Error::UnableToGuessVersion)?
         };
 
         let block_size = map.len();
@@ -87,19 +86,19 @@ impl WzImage {
     /// Direct get child node inside `WzImage` without parsing the whole `WzImage`. Sometimes
     /// we just need a single node in `WzImage`, but don't want to parse it and
     /// unparse later, it waste time and memory.
-    pub fn at_path(&self, path: &str) -> Result<WzNodeArc, WzImageParseError> {
+    pub fn at_path(&self, path: &str) -> Result<WzNodeArc, Error> {
         let reader = self.reader.create_slice_reader_without_hash();
 
         reader.seek(self.offset);
         let header_byte = reader.read_u8()?;
 
         if header_byte != WZ_IMAGE_HEADER_BYTE_WITHOUT_OFFSET {
-            return Err(WzImageParseError::UnknownImageHeader(header_byte, reader.pos.get()));
+            return Err(Error::UnknownImageHeader(header_byte, reader.pos.get()));
         } else {
             let name = reader.read_wz_string()?;
             let value = reader.read_u16()?;
             if name != "Property" && value != 0 {
-                return Err(WzImageParseError::ParseError(reader.pos.get()));
+                return Err(Error::ParseError(reader.pos.get()));
             }
         }
 
@@ -107,11 +106,11 @@ impl WzImage {
 
         match result {
             Ok(node) => Ok(node.1),
-            Err(e) => Err(WzImageParseError::from(e)),
+            Err(e) => Err(Error::from(e)),
         }
     }
 
-    pub fn resolve_children(&self, parent: &WzNodeArc) -> Result<WzNodeArcVec, WzImageParseError> {
+    pub fn resolve_children(&self, parent: &WzNodeArc) -> Result<WzNodeArcVec, Error> {
         let reader = self.reader.create_slice_reader_without_hash();
 
         reader.seek(self.offset);
@@ -144,22 +143,22 @@ impl WzImage {
 
                     return Ok(childrens);
                 }
-                return Err(WzImageParseError::LuaParseError)
+                return Err(Error::LuaParseError)
             },
             WZ_IMAGE_HEADER_BYTE_WITHOUT_OFFSET => {
                 let name = reader.read_wz_string()?;
                 let value = reader.read_u16()?;
                 if name != "Property" && value != 0 {
-                    return Err(WzImageParseError::WrongVersion);
+                    return Err(Error::WrongVersion);
                 }
             },
             _ => {
-                return Err(WzImageParseError::UnknownImageHeader(header_byte, reader.pos.get()));
+                return Err(Error::UnknownImageHeader(header_byte, reader.pos.get()));
             }
         }
 
         util::parse_property_list(parent, &self.reader, &reader, self.offset)
-            .map_err(WzImageParseError::from)
+            .map_err(Error::from)
     }
 }
 

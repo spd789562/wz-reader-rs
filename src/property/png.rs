@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use flate2::{Decompress, FlushDecompress};
-use image::{DynamicImage, ImageError, ImageBuffer, Rgb, Rgba};
+use image::{DynamicImage, ImageBuffer, Rgb, Rgba};
 use thiserror::Error;
 use rayon::prelude::*;
 use crate::{reader, WzNodeArc, WzObjectType, property::WzSubProperty, resolve_inlink, resolve_outlink};
@@ -25,7 +25,7 @@ pub enum WzPngParseError {
     ReadColorError(#[from] reader::Error),
 
     #[error(transparent)]
-    SaveError(#[from] ImageError),
+    SaveError(#[from] image::ImageError),
 
     #[error("Can't not resolve _inlink or _outlink")]
     LinkError,

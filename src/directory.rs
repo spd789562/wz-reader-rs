@@ -1,12 +1,11 @@
 use std::sync::Arc;
 use crate::{ reader, WzImage, WzNode, WzNodeArc, WzNodeArcVec, WzObjectType, WzReader, WzNodeName };
-use thiserror::Error;
 
 #[cfg(feature = "serde")]
 use serde::{Serialize, Deserialize};
 
-#[derive(Debug, Error)]
-pub enum WzDirectoryParseError {
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
     #[error("Lua parse error")]
     LuaParseError,
     #[error("parse as wz image failed, pos at {0}")]
@@ -71,7 +70,7 @@ impl WzDirectory {
         self
     }
 
-    pub fn resolve_children(&self, parent: &WzNodeArc) -> Result<WzNodeArcVec, WzDirectoryParseError> {
+    pub fn resolve_children(&self, parent: &WzNodeArc) -> Result<WzNodeArcVec, Error> {
         let reader = self.reader.create_slice_reader_with_hash(self.hash);
 
         reader.seek(self.offset);
@@ -79,7 +78,7 @@ impl WzDirectory {
         let entry_count = reader.read_wz_int()?;
 
         if !(0..=1000000).contains(&entry_count) {
-            return Err(WzDirectoryParseError::InvalidEntryCount);
+            return Err(Error::InvalidEntryCount);
         }
 
         let mut nodes: WzNodeArcVec = Vec::new();
@@ -116,7 +115,7 @@ impl WzDirectory {
                 }
                 WzDirectoryType::NewUnknownType => {
                     println!("NewUnknownType: {}", dir_byte);
-                    return Err(WzDirectoryParseError::UnknownWzDirectoryType(dir_byte, reader.pos.get()))
+                    return Err(Error::UnknownWzDirectoryType(dir_byte, reader.pos.get()))
                 }
             }
 
@@ -128,7 +127,7 @@ impl WzDirectory {
             let buf_end = buf_start + fsize as usize;
     
             if !reader.is_valid_pos(buf_end) {
-                return Err(WzDirectoryParseError::InvalidWzVersion);
+                return Err(Error::InvalidWzVersion);
             }
 
             match dir_type {

@@ -1,5 +1,5 @@
 use wz_reader::property::{WzValue, WzSubProperty, Vector2D};
-use wz_reader::{WzNode, WzNodeArc, WzObjectType, NodeParseError, WzImageParseError, WzNodeCast,resolve_inlink};
+use wz_reader::{WzNode, WzNodeArc, WzObjectType, node, wz_image, WzNodeCast,resolve_inlink};
 use wz_reader::util;
 use wz_reader::version::WzMapleVersion;
 
@@ -238,7 +238,7 @@ fn should_success_using_wz_node_methods_on_childs() {
     assert_eq!(parent_img.read().unwrap().get_full_path(), wz_img.read().unwrap().get_full_path());
 
     let force_get_next_exist_node = parent_img.read().unwrap().at_path_parsed("2/not_exist");
-    assert!(matches!(force_get_next_exist_node, Err(NodeParseError::NodeNotFound)));
+    assert!(matches!(force_get_next_exist_node, Err(node::Error::NodeNotFound)));
 
     let force_get_some_node = parent_img.read().unwrap().at_path_parsed("2/nil");
     assert!(force_get_some_node.is_ok());
@@ -251,7 +251,7 @@ fn should_success_using_wz_node_methods_on_childs() {
     if let WzObjectType::Image(wz_image) = &parent_img_read.object_type {
         let direct_access_not_exist = wz_image.at_path("2/not_exist");
 
-        assert!(matches!(direct_access_not_exist, Err(WzImageParseError::ParsePropertyListError(util::WzPropertyParseError::NodeNotFound))));
+        assert!(matches!(direct_access_not_exist, Err(wz_image::Error::ParsePropertyListError(util::WzPropertyParseError::NodeNotFound))));
 
         let direct_access_nil = wz_image.at_path("2/nil");
         assert!(direct_access_nil.is_ok());

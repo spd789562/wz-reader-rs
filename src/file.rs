@@ -3,13 +3,11 @@ use std::sync::Arc;
 use memmap2::Mmap;
 use crate::{Reader, WzDirectory, WzNodeArc, WzNodeArcVec, WzObjectType, WzReader, WzSliceReader};
 
-use thiserror::Error;
-
 #[cfg(feature = "serde")]
 use serde::{Serialize, Deserialize};
 
-#[derive(Debug, Error)]
-pub enum WzFileParseError {
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
     #[error(transparent)]
     FileError(#[from] std::io::Error),
     #[error("invald wz file")]
@@ -56,14 +54,14 @@ pub struct WzFile {
 }
 
 impl WzFile {
-    pub fn from_file(path: &str, wz_iv: [u8; 4], patch_version: Option<i32>) -> Result<WzFile, WzFileParseError> {
+    pub fn from_file(path: &str, wz_iv: [u8; 4], patch_version: Option<i32>) -> Result<WzFile, Error> {
         let file: File = File::open(path)?;
         let map = unsafe { Mmap::map(&file)? };
 
         let block_size = map.len();
         let reader = WzReader::new(map).with_iv(wz_iv);
 
-        let offset = reader.get_wz_fstart().map_err(|_| WzFileParseError::InvalidWzFile)? + 2;
+        let offset = reader.get_wz_fstart().map_err(|_| Error::InvalidWzFile)? + 2;
 
         let wz_file_meta = WzFileMeta {
             path: path.to_string(),
@@ -81,7 +79,7 @@ impl WzFile {
             wz_file_meta
         })
     }
-    pub fn parse(&mut self, parent: &WzNodeArc, patch_version: Option<i32>) -> Result<WzNodeArcVec, WzFileParseError> {
+    pub fn parse(&mut self, parent: &WzNodeArc, patch_version: Option<i32>) -> Result<WzNodeArcVec, Error> {
         let reader = self.reader.clone();
 
         let mut wz_file_meta = WzFileMeta {
@@ -133,7 +131,7 @@ impl WzFile {
                 }
             }
     
-            return Err(WzFileParseError::ErrorGameVerHash);
+            return Err(Error::ErrorGameVerHash);
         }
 
         wz_file_meta.hash = check_and_get_version_hash(wz_file_meta.wz_version_header, wz_file_meta.patch_version) as usize;
@@ -151,9 +149,9 @@ impl WzFile {
         reader: &WzSliceReader,
         meta: &WzFileMeta,
         use_maplestory_patch_version: i32
-    ) -> Result<WzNodeArcVec, WzFileParseError> {
+    ) -> Result<WzNodeArcVec, Error> {
         if meta.hash == 0 {
-            return Err(WzFileParseError::ErrorGameVerHash);
+            return Err(Error::ErrorGameVerHash);
         }
 
         let node = WzDirectory::new(
@@ -165,7 +163,7 @@ impl WzFile {
             .with_hash(meta.hash);
 
 
-        let childs = node.resolve_children(parent).map_err(|_| WzFileParseError::ErrorGameVerHash)?;
+        let childs = node.resolve_children(parent).map_err(|_| Error::ErrorGameVerHash)?;
 
         let first_image_node = childs.iter().find(|(_, node)| matches!(node.read().unwrap().object_type, WzObjectType::Image(_)));
 
@@ -173,10 +171,10 @@ impl WzFile {
             let offset = if let WzObjectType::Image(node) = &image_node.read().unwrap().object_type {
                 node.offset
             } else {
-                return Err(WzFileParseError::ErrorGameVerHash);
+                return Err(Error::ErrorGameVerHash);
             };
 
-            let check_byte = reader.read_u8_at(offset).map_err(|_| WzFileParseError::ErrorGameVerHash)?;
+            let check_byte = reader.read_u8_at(offset).map_err(|_| Error::ErrorGameVerHash)?;
 
             match check_byte {
                 0x73 | 0x1b | 0x01 => {
@@ -184,14 +182,14 @@ impl WzFile {
                 _ => {
                     /* 0x30, 0x6C, 0xBC */
                     println!("UnknownImageHeader: check_byte = {}, File Name = {}", check_byte, name);
-                    return Err(WzFileParseError::UnknownImageHeader(check_byte, name.to_string()));
+                    return Err(Error::UnknownImageHeader(check_byte, name.to_string()));
                 }
             }
         }
 
         if !meta.wz_with_encrypt_version_header && use_maplestory_patch_version == 113 {
             // return Err("is_64bit_wz_file && patch_version == 113".to_string());
-            return Err(WzFileParseError::ErrorGameVerHash);
+            return Err(Error::ErrorGameVerHash);
         }
 
         Ok(childs)
