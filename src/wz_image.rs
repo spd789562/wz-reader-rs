@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use crate::{ util, WzNode, WzNodeArc, WzNodeArcVec, WzNodeName, WzReader };
 use crate::property::WzLua;
+use crate::version::{verify_iv_from_wz_img, guess_iv_from_wz_img};
 use thiserror::Error;
 
 #[cfg(feature = "serde")]
@@ -16,6 +17,10 @@ pub enum WzImageParseError {
     ParseError(usize),
     #[error("New Wz image header found. b = {0}, offset = {1}")]
     UnknownImageHeader(u8, usize),
+    #[error("Wrong Wz Version")]
+    WrongVersion,
+    #[error("Unable to guess version")]
+    UnableToGuessVersion,
     #[error(transparent)]
     ParsePropertyListError(#[from] util::WzPropertyParseError),
     #[error("Binary reading error")]
@@ -53,10 +58,19 @@ impl WzImage {
             is_parsed: false,
         }
     }
-    pub fn from_file(path: &str, wz_iv: [u8; 4]) -> Result<Self, WzImageParseError> {
+    pub fn from_file(path: &str, wz_iv: Option<[u8; 4]>) -> Result<Self, WzImageParseError> {
         let name = std::path::Path::new(path).file_name().unwrap().to_str().unwrap().to_string();
         let file = std::fs::File::open(path)?;
         let map = unsafe { memmap2::Mmap::map(&file)? };
+
+        let wz_iv = if let Some(iv) = wz_iv {
+            if !verify_iv_from_wz_img(&map, &iv) {
+                return Err(WzImageParseError::WrongVersion);
+            }
+            iv
+        } else {
+            guess_iv_from_wz_img(&map).ok_or(WzImageParseError::UnableToGuessVersion)?
+        };
 
         let block_size = map.len();
         let reader = WzReader::new(map).with_iv(wz_iv);
@@ -136,7 +150,7 @@ impl WzImage {
                 let name = reader.read_wz_string()?;
                 let value = reader.read_u16()?;
                 if name != "Property" && value != 0 {
-                    return Err(WzImageParseError::ParseError(reader.pos.get()));
+                    return Err(WzImageParseError::WrongVersion);
                 }
             },
             _ => {

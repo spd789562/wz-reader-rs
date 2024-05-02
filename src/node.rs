@@ -67,18 +67,26 @@ impl WzNode {
         let wz_file = WzFile::from_file(path, version::get_iv_by_maple_version(version), patch_version)?;
         Ok(WzNode::new(
             &name.into(), 
-            WzObjectType::File(Box::new(wz_file)), 
+            wz_file, 
             parent
         ))
     }
-    /// Create a `WzNode` from a any `.img` file.
+    /// Create a `WzNode` from a any `.img` file. If version is not provided, it will try to detect the version.
     pub fn from_img_file(path: &str, version: Option<version::WzMapleVersion>, parent: Option<&WzNodeArc>) -> Result<Self, NodeParseError> {
-        let name = Path::new(path).file_name().unwrap().to_str().unwrap();
-        let version = version.unwrap_or(version::WzMapleVersion::BMS);
-        let wz_image = WzImage::from_file(path, version::get_iv_by_maple_version(version))?;
+        let wz_image = WzImage::from_file(path, version.map(version::get_iv_by_maple_version))?;
         Ok(WzNode::new(
-            &name.into(), 
-            WzObjectType::Image(Box::new(wz_image)), 
+            &wz_image.name.clone(), 
+            wz_image, 
+            parent
+        ))
+    }
+
+    /// Create a `WzNode` from a any `.img` file with custom wz iv([u8; 4])
+    pub fn from_img_file_with_iv(path: &str, iv: [u8; 4], parent: Option<&WzNodeArc>) -> Result<Self, NodeParseError> {
+        let wz_image = WzImage::from_file(path, Some(iv))?;
+        Ok(WzNode::new(
+            &wz_image.name.clone(), 
+            wz_image, 
             parent
         ))
     }
