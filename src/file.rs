@@ -54,8 +54,10 @@ pub struct WzFile {
 }
 
 impl WzFile {
-    pub fn from_file(path: &str, wz_iv: [u8; 4], patch_version: Option<i32>) -> Result<WzFile, Error> {
-        let file: File = File::open(path)?;
+    pub fn from_file<P>(path: P, wz_iv: [u8; 4], patch_version: Option<i32>) -> Result<WzFile, Error> 
+        where P: AsRef<std::path::Path>
+    {
+        let file: File = File::open(&path)?;
         let map = unsafe { Mmap::map(&file)? };
 
         let block_size = map.len();
@@ -64,7 +66,7 @@ impl WzFile {
         let offset = reader.get_wz_fstart().map_err(|_| Error::InvalidWzFile)? + 2;
 
         let wz_file_meta = WzFileMeta {
-            path: path.to_string(),
+            path: path.as_ref().to_str().unwrap().to_string(),
             patch_version: patch_version.unwrap_or(-1),
             wz_version_header: 0,
             wz_with_encrypt_version_header: true,

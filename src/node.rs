@@ -60,10 +60,12 @@ impl WzNode {
         Self::new(&name.into(), object_type, parent)
     }
     /// Create a `WzNode` from a any `.wz` file.
-    pub fn from_wz_file(path: &str, version: Option<version::WzMapleVersion>, patch_version: Option<i32>, parent: Option<&WzNodeArc>) -> Result<Self, Error> {
-        let name = Path::new(path).file_stem().unwrap().to_str().unwrap();
+    pub fn from_wz_file<P>(path: P, version: Option<version::WzMapleVersion>, patch_version: Option<i32>, parent: Option<&WzNodeArc>) -> Result<Self, Error> 
+        where P: AsRef<Path>
+    {
+        let name = path.as_ref().file_stem().unwrap().to_str().unwrap();
         let version = version.unwrap_or(version::WzMapleVersion::BMS);
-        let wz_file = WzFile::from_file(path, version::get_iv_by_maple_version(version), patch_version)?;
+        let wz_file = WzFile::from_file(&path, version::get_iv_by_maple_version(version), patch_version)?;
         Ok(WzNode::new(
             &name.into(), 
             wz_file, 
@@ -74,8 +76,10 @@ impl WzNode {
     /// 
     /// # Errors
     /// When provided version is incorrect or unable to detect version.
-    pub fn from_img_file(path: &str, version: Option<version::WzMapleVersion>, parent: Option<&WzNodeArc>) -> Result<Self, Error> {
-        let wz_image = WzImage::from_file(path, version.map(version::get_iv_by_maple_version))?;
+    pub fn from_img_file<P>(path: P, version: Option<version::WzMapleVersion>, parent: Option<&WzNodeArc>) -> Result<Self, Error> 
+        where P: AsRef<Path>
+    {
+        let wz_image = WzImage::from_file(&path, version.map(version::get_iv_by_maple_version))?;
         Ok(WzNode::new(
             &wz_image.name.clone(), 
             wz_image, 
@@ -87,8 +91,10 @@ impl WzNode {
     /// 
     /// # Errors
     /// When provided iv is incorrect or unable to detect version.
-    pub fn from_img_file_with_iv(path: &str, iv: [u8; 4], parent: Option<&WzNodeArc>) -> Result<Self, Error> {
-        let wz_image = WzImage::from_file(path, Some(iv))?;
+    pub fn from_img_file_with_iv<P>(path: P, iv: [u8; 4], parent: Option<&WzNodeArc>) -> Result<Self, Error> 
+        where P: AsRef<Path>
+    {
+        let wz_image = WzImage::from_file(&path, Some(iv))?;
         Ok(WzNode::new(
             &wz_image.name.clone(), 
             wz_image, 

@@ -57,8 +57,10 @@ impl WzImage {
             is_parsed: false,
         }
     }
-    pub fn from_file(path: &str, wz_iv: Option<[u8; 4]>) -> Result<Self, Error> {
-        let name = std::path::Path::new(path).file_name().unwrap().to_str().unwrap().to_string();
+    pub fn from_file<P>(path: P, wz_iv: Option<[u8; 4]>) -> Result<Self, Error> 
+        where P: AsRef<std::path::Path>
+    {
+        let name = path.as_ref().file_name().unwrap().to_str().unwrap().to_string();
         let file = std::fs::File::open(path)?;
         let map = unsafe { memmap2::Mmap::map(&file)? };
 
