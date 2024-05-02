@@ -31,12 +31,44 @@ fn can_parse_node(node: &WzNodeArc) {
 
 #[test]
 fn should_parsing_with_default_version() {
+    let wz_img = WzNode::from_img_file(r"tests/test.img", None, None);
+    assert!(wz_img.is_ok());
+
+    let wz_img = wz_img.unwrap().into_lock();
+    
+    can_parse_node(&wz_img);
+}
+
+#[test]
+fn should_parsing_with_correct_version() {
     let wz_img = WzNode::from_img_file(r"tests/test.img", Some(WzMapleVersion::BMS), None);
     assert!(wz_img.is_ok());
 
     let wz_img = wz_img.unwrap().into_lock();
     
     can_parse_node(&wz_img);
+}
+
+#[test]
+fn should_error_with_wrong_version() {
+    let wz_img = WzNode::from_img_file(r"tests/test.img", Some(WzMapleVersion::EMS), None);
+    assert!(wz_img.is_err());
+}
+
+#[test]
+fn should_parsing_with_correct_iv() {
+    let wz_img = WzNode::from_img_file_with_iv(r"tests/test.img", [0, 0, 0, 0], None);
+    assert!(wz_img.is_ok());
+
+    let wz_img = wz_img.unwrap().into_lock();
+    
+    can_parse_node(&wz_img);
+}
+
+#[test]
+fn should_error_with_wrong_iv() {
+    let wz_img = WzNode::from_img_file_with_iv(r"tests/test.img", [1, 2, 3, 4], None);
+    assert!(wz_img.is_err());
 }
 
 fn check_sample_wz_img(wz_img: &WzNodeArc) {    
