@@ -164,7 +164,7 @@ impl WzReader {
     }
     pub fn from_buff(buff: &[u8]) -> Self {
         let mut memmap = memmap2::MmapMut::map_anon(buff.len()).unwrap();
-        (&mut memmap).copy_from_slice(buff);
+        memmap.copy_from_slice(buff);
         WzReader {
             map: memmap.make_read_only().unwrap(),
             keys: Arc::new(RwLock::new(WzMutableKey::new([0; 4], [0; 32]))),

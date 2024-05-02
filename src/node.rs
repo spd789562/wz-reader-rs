@@ -150,7 +150,7 @@ impl WzNode {
             WzObjectType::Image(image) => {
                 image.is_parsed = false;
             },
-            _ => return (),
+            _ => return,
         }
         
         self.children.clear();
@@ -202,7 +202,7 @@ impl WzNode {
     /// assert!(root.at("3").is_none());
     /// ```
     pub fn at(&self, name: &str) -> Option<WzNodeArc> {
-        self.children.get(name).map(Arc::clone)
+        self.children.get(name).cloned()
     }
 
     /// A relative path version of `at` able to use `..` to get parent node.
@@ -349,7 +349,7 @@ impl WzNode {
             if let Some(old) = write.children.get(&name) {
                 child.write().unwrap().transfer_childs(old);
             } else {
-                child.write().unwrap().parent = Arc::downgrade(&to);
+                child.write().unwrap().parent = Arc::downgrade(to);
                 write.children.insert(name, child);
             }
         }
@@ -445,8 +445,8 @@ pub fn resolve_outlink(path: &str, node: &WzNodeArc, force_parse: bool) -> Optio
 pub fn resolve_childs_parent(node: &WzNodeArc) {
     let node_read = node.read().unwrap();
     for child in node_read.children.values() {
-        child.write().unwrap().parent = Arc::downgrade(&node);
-        resolve_childs_parent(&child);
+        child.write().unwrap().parent = Arc::downgrade(node);
+        resolve_childs_parent(child);
     }
 }
 

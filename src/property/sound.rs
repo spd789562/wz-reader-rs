@@ -23,17 +23,12 @@ pub enum WzSoundError {
 }
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub enum WzSoundType {
     Mp3,
     Wav,
+    #[default]
     Binary,
-}
-
-impl Default for WzSoundType {
-    fn default() -> Self {
-        WzSoundType::Binary
-    }
 }
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]

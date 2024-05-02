@@ -39,16 +39,11 @@ pub enum WzMapleVersion {
 
 /// Verify IV from wz image
 pub fn verify_iv_from_wz_img(buf: &[u8], iv: &[u8; 4]) -> bool {
-    let reader = WzSliceReader::new(buf, &Arc::new(RwLock::new(WzMutableKey::from_iv(iv.clone()))));
-    reader.pos.set(1);
+    let reader = WzSliceReader::new(buf, &Arc::new(RwLock::new(WzMutableKey::from_iv(*iv))));
     
-    let name = reader.read_wz_string().unwrap_or_default();
+    reader.pos.set(1);
 
-    if name == "Property" {
-        true
-    } else {
-        false
-    }
+    reader.read_wz_string().unwrap_or_default() == "Property"
 }
 
 /// Try to guess IV from wz image use fixed value. Currently will try GMS, EMS, BMS.

@@ -18,7 +18,7 @@ impl WzRawData {
         }
     }
     fn get_buffer_range(&self) -> Range<usize> {
-        self.offset..self.offset + self.length as usize
+        self.offset..self.offset + self.length
     }
     pub fn get_buffer(&self) -> &[u8] {
         let range = self.get_buffer_range();
