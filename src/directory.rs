@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use crate::{ WzImage, WzNode, WzNodeArc, WzNodeArcVec, WzObjectType, WzReader, WzNodeName };
+use crate::{ reader, WzImage, WzNode, WzNodeArc, WzNodeArcVec, WzObjectType, WzReader, WzNodeName };
 use thiserror::Error;
 
 #[cfg(feature = "serde")]
@@ -18,7 +18,7 @@ pub enum WzDirectoryParseError {
     #[error("Entry count overflow, Invalid wz version used for decryption, try parsing other version numbers.")]
     InvalidEntryCount,
     #[error("Binary reading error")]
-    ReaderError(#[from] scroll::Error),
+    ReaderError(#[from] reader::Error),
 }
 
 #[derive(Debug)]
@@ -105,7 +105,7 @@ impl WzDirectory {
     
                     reader.seek(offset);
     
-                    dir_type = get_wz_directory_type_from_byte(reader.read_u8().unwrap());
+                    dir_type = get_wz_directory_type_from_byte(reader.read_u8()?);
                     fname = reader.read_wz_string()?.into();
     
                     reader.seek(pos);

@@ -22,7 +22,7 @@ pub enum WzPngParseError {
     UnsupportedHeader(i32),
     
     #[error("Error reading color: {0}")]
-    ReadColorError(#[from] scroll::Error),
+    ReadColorError(#[from] reader::Error),
 
     #[error(transparent)]
     SaveError(#[from] ImageError),

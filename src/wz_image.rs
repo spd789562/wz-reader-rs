@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use crate::{ util, WzNode, WzNodeArc, WzNodeArcVec, WzNodeName, WzReader };
+use crate::{ reader, util, WzNode, WzNodeArc, WzNodeArcVec, WzNodeName, WzReader };
 use crate::property::WzLua;
 use crate::version::{verify_iv_from_wz_img, guess_iv_from_wz_img};
 use thiserror::Error;
@@ -24,7 +24,7 @@ pub enum WzImageParseError {
     #[error(transparent)]
     ParsePropertyListError(#[from] util::WzPropertyParseError),
     #[error("Binary reading error")]
-    ReaderError(#[from] scroll::Error),
+    ReaderError(#[from] reader::Error),
     #[error("Not a Image object")]
     NotImageObject,
 }

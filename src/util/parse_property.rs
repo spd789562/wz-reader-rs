@@ -1,6 +1,6 @@
 use std::sync::Arc;
-use crate::{property::{ get_sound_type_from_header, Vector2D }, WzNode, WzNodeArc, WzNodeArcVec, WzNodeName, WzObjectType, WzReader, WzSliceReader};
-use crate::property::{WzSubProperty, WzValue, WzString, WzSound, WzPng, WzRawData};
+use crate::{WzNode, WzNodeArc, WzNodeArcVec, WzNodeName, WzObjectType, WzReader, WzSliceReader, reader};
+use crate::property::{get_sound_type_from_header, Vector2D, WzSubProperty, WzValue, WzString, WzSound, WzPng, WzRawData};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -18,7 +18,7 @@ pub enum WzPropertyParseError {
     UnknownExtendedPropertyType(String, usize),
 
     #[error("Binary reading error")]
-    ReaderError(#[from] scroll::Error),
+    ReaderError(#[from] reader::Error),
 }
 
 pub fn parse_property_list(parent: &WzNodeArc, org_reader: &Arc<WzReader>, reader: &WzSliceReader, origin_offset: usize) -> Result<WzNodeArcVec, WzPropertyParseError> {

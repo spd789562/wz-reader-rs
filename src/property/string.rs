@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use crate::{WzReader, Reader, WzNodeArc, WzNodeCast};
+use crate::{WzReader, Reader, WzNodeArc, WzNodeCast, reader};
 use thiserror::Error;
 
 #[cfg(feature = "serde")]
@@ -9,7 +9,7 @@ use serde::{Serialize, Deserialize};
 #[derive(Debug, Error)]
 pub enum WzStringParseError {
     #[error("Error parsing WzString: {0}")]
-    ParseError(#[from] scroll::Error),
+    ParseError(#[from] reader::Error),
 
     #[error("Not a String property")]
     NotStringProperty,
