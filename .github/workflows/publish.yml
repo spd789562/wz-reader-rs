@@ -35,4 +35,4 @@ jobs:
               run: cargo login ${{ secrets.CRATES_IO_API_TOKEN }}
 
             - name: 'Publish'
-              run: cargo release publish --execute --no-confirm --no-verify --allow-branch [HEAD, main]
+              run: cargo release publish --execute --no-confirm --no-verify --allow-branch HEAD
