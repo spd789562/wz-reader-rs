@@ -342,6 +342,13 @@ impl<'a> WzSliceReader<'a> {
             Ok(sl as i32)
         }
     }
+    pub fn read_ascii_str_len(&self, sl: i8) -> Result<i32> {
+        if sl == i8::MIN {
+            self.read_i32()
+        } else {
+            Ok((-sl).into())
+        }
+    }
     pub fn read_unicode_string(&self, sl: i8) -> Result<String> {
         let len = self.read_unicode_str_len(sl)?;
 
@@ -356,14 +363,6 @@ impl<'a> WzSliceReader<'a> {
         self.skip(unicode_u8_len);
 
         Ok(string)
-    }
-
-    pub fn read_ascii_str_len(&self, sl: i8) -> Result<i32> {
-        if sl == i8::MIN {
-            self.read_i32()
-        } else {
-            Ok((-sl).into())
-        }
     }
     pub fn read_ascii_string(&self, sl: i8) -> Result<String> {
         let len = self.read_ascii_str_len(sl)? as usize;

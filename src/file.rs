@@ -1,7 +1,7 @@
 use std::fs::File;
 use std::sync::Arc;
 use memmap2::Mmap;
-use crate::{Reader, WzDirectory, WzNodeArc, WzNodeArcVec, WzObjectType, WzReader, WzSliceReader};
+use crate::{reader, directory,Reader, WzDirectory, WzNodeArc, WzNodeArcVec, WzObjectType, WzReader, WzSliceReader};
 
 #[cfg(feature = "serde")]
 use serde::{Serialize, Deserialize};
@@ -17,7 +17,9 @@ pub enum Error {
     #[error("Failed, in this case the causes are undetermined.")]
     FailedUnknown,
     #[error("Binary reading error")]
-    ReaderError(#[from] scroll::Error),
+    ReaderError(#[from] reader::Error),
+    #[error(transparent)]
+    DirectoryError(#[from] directory::Error),
     #[error("[WzFile] New Wz image header found. checkByte = {0}, File Name = {1}")]
     UnknownImageHeader(u8, String),
 }
@@ -27,7 +29,7 @@ pub enum Error {
 pub struct WzFileMeta {
     /// path of wz file
     pub path: String,
-    /// the wz file's version
+    /// the wz file's patch version, if not set, try to guess from wz file
     pub patch_version: i32,
     /// a.k.a encver
     pub wz_version_header: i32,
@@ -165,7 +167,7 @@ impl WzFile {
             .with_hash(meta.hash);
 
 
-        let childs = node.resolve_children(parent).map_err(|_| Error::ErrorGameVerHash)?;
+        let childs = node.resolve_children(parent).map_err(Error::from)?;
 
         let first_image_node = childs.iter().find(|(_, node)| matches!(node.read().unwrap().object_type, WzObjectType::Image(_)));
 
@@ -189,8 +191,8 @@ impl WzFile {
             }
         }
 
+        // there a special case this 2 will match
         if !meta.wz_with_encrypt_version_header && use_maplestory_patch_version == 113 {
-            // return Err("is_64bit_wz_file && patch_version == 113".to_string());
             return Err(Error::ErrorGameVerHash);
         }
 
