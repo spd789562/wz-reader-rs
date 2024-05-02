@@ -333,11 +333,16 @@ impl WzNode {
         self.filter_parent(|node| matches!(node.object_type, WzObjectType::File(_)) && node.name.as_str() == "Base")
     }
 
-    /// Transfer all children to another node.
+    /// Transfer all children to another node. It will merge the children instead of replace to new one.
     pub fn transfer_childs(&mut self, to: &WzNodeArc) {
         let mut write = to.write().unwrap();
         for (name, child) in self.children.drain() {
-            write.children.insert(name, child);
+            if let Some(old) = write.children.get(&name) {
+                child.write().unwrap().transfer_childs(old);
+            } else {
+                child.write().unwrap().parent = Arc::downgrade(&to);
+                write.children.insert(name, child);
+            }
         }
     }
 
