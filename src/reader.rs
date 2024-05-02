@@ -62,31 +62,58 @@ pub trait Reader {
             _ => WzStringType::Ascii
         }
     }
+    fn resolve_unicode_raw(&self, offset: usize, length: usize) -> Vec<u16> {
+        let decrypted = self.get_decrypt_slice(offset..(offset + length));
+        let mut strvec = Vec::with_capacity(length / 2);
+
+        for (i, chunk) in decrypted.chunks(2).enumerate() {
+            let c = u16::from_le_bytes([chunk[0], chunk[1]]);
+            strvec.push(resolve_unicode_char(c, i as i32));
+        }
+
+        strvec
+    }
+    fn resolve_ascii_raw(&self, offset: usize, length: usize) -> Vec<u8> {
+        let mut decrypted = self.get_decrypt_slice(offset..(offset + length));
+
+        decrypted.iter_mut().enumerate()
+            .for_each(|(i, byte)| {
+                *byte = resolve_ascii_char(*byte, i as i32);
+            });
+
+        decrypted
+    }
     fn resolve_wz_string_meta(&self, meta_type: &WzStringType, offset: usize, length: usize) -> Result<String, scroll::Error> {
         match meta_type {
             WzStringType::Empty => {
                 Ok(String::new())
             },
             WzStringType::Unicode => {
-                let decrypted = self.get_decrypt_slice(offset..(offset + length));
-                let mut strvec = Vec::with_capacity(length / 2);
-
-                for (i, chunk) in decrypted.chunks(2).enumerate() {
-                    let c = u16::from_le_bytes([chunk[0], chunk[1]]);
-                    strvec.push(resolve_unicode_char(c, i as i32));
-                }
+                let strvec = self.resolve_unicode_raw(offset, length);
 
                 Ok(String::from_utf16_lossy(&strvec))
             },
             WzStringType::Ascii => {
-                let mut decrypted = self.get_decrypt_slice(offset..(offset + length));
+                let strvec = self.resolve_ascii_raw(offset, length);
 
-                decrypted.iter_mut().enumerate()
-                    .for_each(|(i, byte)| {
-                        *byte = resolve_ascii_char(*byte, i as i32);
-                    });
+                Ok(String::from_utf8_lossy(&strvec).to_string())
+            }
+        }
+    }
+    fn try_resolve_wz_string_meta(&self, meta_type: &WzStringType, offset: usize, length: usize) -> Result<String, String> {
+        match meta_type {
+            WzStringType::Empty => {
+                Ok(String::new())
+            },
+            WzStringType::Unicode => {
+                let strvec = self.resolve_unicode_raw(offset, length);
 
-                Ok(String::from_utf8_lossy(&decrypted).to_string())
+                String::from_utf16(&strvec).map_err(|_| "Invalid utf16 string".to_string())
+            },
+            WzStringType::Ascii => {
+                let strvec = self.resolve_ascii_raw(offset, length);
+
+                String::from_utf8(strvec).map_err(|_| "Invalid utf8 string".to_string())
             }
         }
     }
