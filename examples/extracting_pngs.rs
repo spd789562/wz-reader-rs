@@ -1,11 +1,11 @@
-use wz_reader::{WzNode, WzNodeArc, WzObjectType};
-use wz_reader::property::{WzSubProperty, get_image};
+use wz_reader::{WzNode, WzNodeArc, WzNodeCast};
+use wz_reader::property::get_image;
 use wz_reader::util::{resolve_base, resolve_root_wz_file_dir, walk_node};
 
 fn main() {
     let save_image_fn = |node: &WzNodeArc| {
         let node_read = node.read().unwrap();
-        if matches!(node_read.object_type, WzObjectType::Property(WzSubProperty::PNG(_))) {
+        if node_read.try_as_png().is_some() {
             let image = get_image(&node).unwrap();
             /* the name of image is easily got conflect */
             let save_name = node_read.get_full_path().replace("/", "-");

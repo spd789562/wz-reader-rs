@@ -1,13 +1,12 @@
-use wz_reader::{WzNode, WzNodeArc, WzObjectType};
-use wz_reader::property::WzSubProperty;
+use wz_reader::{WzNode, WzNodeArc, WzNodeCast};
 use wz_reader::util::{resolve_base, resolve_root_wz_file_dir, walk_node};
 
 fn main() {
     let save_sound_fn = |node: &WzNodeArc| {
         let node_read = node.read().unwrap();
-        if let WzObjectType::Property(WzSubProperty::Sound(wz_png)) = &node_read.object_type {
+        if let Some(sound) = node_read.try_as_sound() {
             let path = std::path::Path::new("./sounds").join(node_read.name.as_str());
-            if wz_png.extract_sound(path).is_err() {
+            if sound.extract_sound(path).is_err() {
                 println!("failed to extract sound: {}", node_read.get_full_path());
             }
         }
