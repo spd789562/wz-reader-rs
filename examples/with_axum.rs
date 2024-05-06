@@ -35,6 +35,8 @@ async fn main() {
         .route("/get_image/*path", get(get_image))
         .route("/get_image_urls/*path", get(get_image_urls))
         .route("/get_sound/*path", get(get_sound))
+        .route("/browse", get(simple_browse_root))
+        .route("/browse/*path", get(simple_browse))
         .with_state(state);
 
     let listener = tokio::net::TcpListener::bind(format!("127.0.0.1:{port}"))
@@ -57,7 +59,9 @@ async fn handler() -> Html<&'static str> {
             <li><a href=\"/get_image_urls/Etc/BossLucid.img/Butterfly?force_parse=true\" target=\"_blank\">/get_image_urls/Etc/BossLucid.img/Butterfly?force_parse=true</a></li>
             <li><a href=\"/get_image/Etc/BossLucid.img/Butterfly/butterfly/0/fly/0?force_parse=true\" target=\"_blank\">/get_image/Etc/BossLucid.img/Butterfly/butterfly/0/fly/0?force_parse=true</a></li>
             <li><a href=\"/get_sound/Sound/Bgm00.img/SleepyWood?force_parse=true\" target=\"_blank\">/get_sound/Etc/BossLucid.img/Butterfly?force_parse=true</a></li>
-        </ul>"
+        </ul>
+        <p>You can even access a simple browse on <a href=\"/browse\" target=\"_blank\">/browse</a></p>
+        "
     )
 }
 
@@ -165,6 +169,12 @@ fn get_node_from_root(root: Arc<RwLock<Option<WzNodeArc>>>, path: &str, force_pa
     }
 
     let wz_root = wz_root.as_ref().unwrap();
+
+
+    if path.is_empty() {
+        return Ok(wz_root.clone());
+    }
+
     let wz_root = wz_root.read().unwrap();
 
     let target = if force_parse {
@@ -319,4 +329,115 @@ async fn get_sound(
     } 
 
     return NodeFindError::TypeMismatch.into_response();
+}
+
+/* browse part */
+async fn simple_browse_root(
+    State(ServerState { wz_root }): State<ServerState>,
+    Query(param): Query<GetJsonParam>,
+) -> Response {
+    let force_parse = param.force_parse.unwrap_or(false);
+
+    let target = match get_node_from_root(wz_root, "", force_parse) {
+        Ok(t) => t,
+        Err(e) => return e.into_response(),
+    };
+
+    let target_read = target.read().unwrap();
+    
+    let mut result_string = String::new();
+
+    for item in target_read.children.values() {
+        let item = item.read().unwrap();
+        let mut url = item.get_full_path().replace("Base", "/browse");
+        if force_parse {
+            url.push_str("?force_parse=true");
+        }
+        let name = item.name.to_string();
+        result_string.push_str(&format!("<a href=\"{}\">{}</a><br>", url, name));
+    }
+
+    (StatusCode::OK, [(header::CONTENT_TYPE, "text/html;charset=utf-8")], Body::from(result_string)).into_response()
+}
+async fn simple_browse(
+    State(ServerState { wz_root }): State<ServerState>,
+    Path(path): Path<String>,
+    Query(param): Query<GetJsonParam>,
+) -> Response {
+    println!("access node use simple_browse: {}", path);
+    let force_parse = param.force_parse.unwrap_or(false);
+
+    let target = match get_node_from_root(wz_root, &path, force_parse) {
+        Ok(t) => t,
+        Err(e) => return e.into_response(),
+    };
+
+    let target_read = target.read().unwrap();
+    
+    let mut result_string = String::new();
+
+    if target_read.children.is_empty() {
+        let value = target_read.to_simple_json().unwrap().to_string();
+
+        if target_read.name.as_str() == "_inlink" {
+            let value = target_read.try_as_string().unwrap().get_string().unwrap();
+            match node::resolve_inlink(&value, &target) {
+                Some(v) => {
+                    let v = v.read().unwrap();
+                    let mut url = v.get_full_path().replace("Base", "/browse");
+                    if force_parse {
+                        url.push_str("?force_parse=true");
+                    }
+                    result_string.push_str(&format!("<a href=\"{}\">{}</a><br>", url, url));
+                },
+                None => {
+                    result_string.push_str(&format!("can't not resolve _inlink <pre>{}</pre>", &value));
+                }
+            }
+        } else if target_read.name.as_str() == "_outlink" {
+            let value = target_read.try_as_string().unwrap().get_string().unwrap();
+            match node::resolve_outlink(&value, &target, true) {
+                Some(v) => {
+                    let v = v.read().unwrap();
+                    let mut url = v.get_full_path().replace("Base", "/browse");
+                    if force_parse {
+                        url.push_str("?force_parse=true");
+                    }
+                    result_string.push_str(&format!("<a href=\"{}\">{}</a><br>", url, url));
+                },
+                None => {
+                    result_string.push_str(&format!("can't not resolve _outlink <pre>{}</pre>", &value));
+                }
+            }
+        } else {
+            result_string.push_str(&format!("<pre>{}</pre>", &value));
+        }
+    } else {
+        if let Some(parent) = target_read.parent.upgrade() {
+            let parent = parent.read().unwrap();
+            let parent_path = parent.get_full_path().replace("Base", "/browse");
+            result_string.push_str(&format!("<a href=\"{}\">..</a><br>", parent_path));
+        }
+
+        let mut results: Vec<(String, String)> = vec![];
+
+        for item in target_read.children.values() {
+            let item = item.read().unwrap();
+            let mut url = item.get_full_path().replace("Base", "/browse");
+            if force_parse {
+                url.push_str("?force_parse=true");
+            }
+            let name = item.name.to_string();
+            let html = format!("<a href=\"{}\">{}</a><br>", url, name);
+            results.push((name, html));
+        }
+
+        results.sort_by(|a, b| a.0.cmp(&b.0));
+
+        for (_, html) in results {
+            result_string.push_str(&html);
+        }
+    }
+
+    (StatusCode::OK, [(header::CONTENT_TYPE, "text/html;charset=utf-8")], Body::from(result_string)).into_response()
 }
