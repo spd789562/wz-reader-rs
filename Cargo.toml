@@ -40,9 +40,9 @@ name = "bench_main"
 harness = false
 
 [[example]]
-name = "wz_to_json"
+name = "with_axum"
 required-features = ["json"]
 
 [[example]]
-name = "with_axum"
+name = "wz_to_json"
 required-features = ["json"]
