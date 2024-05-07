@@ -183,6 +183,34 @@ impl WzNode {
         }
         path
     }
+
+    /// Returns the path of the WzNode but start from root. It useful when you need this path later to find this node from root.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use wz_reader::{WzObjectType, WzNode};
+    /// # use wz_reader::property::WzValue;
+    /// let root = WzNode::from_str("root", 1, None).into_lock();
+    /// let child = WzNode::from_str("1", 1, Some(&root)).into_lock();
+    /// let grandchild = WzNode::from_str("2", 1, Some(&child)).into_lock();
+    /// 
+    /// assert_eq!(grandchild.read().unwrap().get_path_from_root(), "1/2");
+    /// ```
+    pub fn get_path_from_root(&self) -> String {
+        let mut path: String = self.name.to_string();
+        let mut parent = self.parent.upgrade();
+        while let Some(parent_inner) = parent {
+            let read = parent_inner.read().unwrap();
+            parent = read.parent.upgrade();
+            if parent.is_none() {
+                return path;
+            }
+            path = format!("{}/{}", &read.name, path);
+        }
+        path
+    }
+
     /// A alias to get child.
     ///
     /// # Examples
