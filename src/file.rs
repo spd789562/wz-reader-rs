@@ -126,7 +126,6 @@ impl WzFile {
     
             for ver_to_decode in 1..max_patch_version {
                 wz_file_meta.hash = check_and_get_version_hash(wz_file_meta.wz_version_header, ver_to_decode) as usize;
-                // println!("try_decode_with_wz_version_number: {}", ver_to_decode);
                 if let Ok(childs) = self.try_decode_with_wz_version_number(parent, &slice_reader, &wz_file_meta, ver_to_decode) {
                     wz_file_meta.patch_version = ver_to_decode;
                     self.update_wz_file_meta(wz_file_meta);

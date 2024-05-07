@@ -10,6 +10,8 @@ use crate::property::{WzStringMeta, WzStringType};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    #[error("Decryption error with len {0}")]
+    DecryptError(usize),
     #[error("Error reading binary: {0}")]
     ReadError(#[from] scroll::Error),
     #[error("Error reading utf8 string: {0}")]
@@ -55,7 +57,7 @@ static WZ_OFFSET: i32 = 0x581C3F6D;
 
 pub trait Reader {
     fn get_size(&self) -> usize;
-    fn get_decrypt_slice(&self, range: std::ops::Range<usize>) -> Vec<u8>;
+    fn get_decrypt_slice(&self, range: std::ops::Range<usize>) -> Result<Vec<u8>>;
     fn read_u8_at(&self, pos: usize) -> Result<u8>;
     fn read_u16_at(&self, pos: usize) -> Result<u16>;
     fn read_u32_at(&self, pos: usize) -> Result<u32>;
@@ -74,8 +76,8 @@ pub trait Reader {
             _ => WzStringType::Ascii
         }
     }
-    fn resolve_unicode_raw(&self, offset: usize, length: usize) -> Vec<u16> {
-        let decrypted = self.get_decrypt_slice(offset..(offset + length));
+    fn resolve_unicode_raw(&self, offset: usize, length: usize) -> Result<Vec<u16>> {
+        let decrypted = self.get_decrypt_slice(offset..(offset + length))?;
         let mut strvec = Vec::with_capacity(length / 2);
 
         for (i, chunk) in decrypted.chunks(2).enumerate() {
@@ -83,17 +85,17 @@ pub trait Reader {
             strvec.push(resolve_unicode_char(c, i as i32));
         }
 
-        strvec
+        Ok(strvec)
     }
-    fn resolve_ascii_raw(&self, offset: usize, length: usize) -> Vec<u8> {
-        let mut decrypted = self.get_decrypt_slice(offset..(offset + length));
+    fn resolve_ascii_raw(&self, offset: usize, length: usize) ->Result< Vec<u8>> {
+        let mut decrypted = self.get_decrypt_slice(offset..(offset + length))?;
 
         decrypted.iter_mut().enumerate()
             .for_each(|(i, byte)| {
                 *byte = resolve_ascii_char(*byte, i as i32);
             });
 
-        decrypted
+        Ok(decrypted)
     }
     fn resolve_wz_string_meta(&self, meta_type: &WzStringType, offset: usize, length: usize) -> Result<String> {
         match meta_type {
@@ -101,12 +103,12 @@ pub trait Reader {
                 Ok(String::new())
             },
             WzStringType::Unicode => {
-                let strvec = self.resolve_unicode_raw(offset, length);
+                let strvec = self.resolve_unicode_raw(offset, length)?;
 
                 Ok(String::from_utf16_lossy(&strvec))
             },
             WzStringType::Ascii => {
-                let strvec = self.resolve_ascii_raw(offset, length);
+                let strvec = self.resolve_ascii_raw(offset, length)?;
 
                 Ok(String::from_utf8_lossy(&strvec).to_string())
             }
@@ -118,31 +120,15 @@ pub trait Reader {
                 Ok(String::new())
             },
             WzStringType::Unicode => {
-                let strvec = self.resolve_unicode_raw(offset, length);
+                let strvec = self.resolve_unicode_raw(offset, length)?;
 
                 String::from_utf16(&strvec).map_err(Error::from)
             },
             WzStringType::Ascii => {
-                let strvec = self.resolve_ascii_raw(offset, length);
+                let strvec = self.resolve_ascii_raw(offset, length)?;
 
                 String::from_utf8(strvec).map_err(Error::from)
             }
-        }
-    }
-
-    fn read_unicode_str_len_at(&self, pos: usize, sl: i8) -> i32 {
-        if sl == i8::MAX {
-            self.read_i32_at(pos).unwrap()
-        } else {
-            sl as i32
-        }
-    }
-
-    fn read_ascii_str_len_at(&self, pos: usize, sl: i8) -> i32 {
-        if sl == i8::MIN {
-            self.read_i32_at(pos).unwrap()
-        } else {
-            (-sl).into()
         }
     }
 }
@@ -551,7 +537,7 @@ impl Reader for WzReader {
     fn get_size(&self) -> usize {
         self.map.len()
     }
-    fn get_decrypt_slice(&self, range: std::ops::Range<usize>) -> Vec<u8> {
+    fn get_decrypt_slice(&self, range: std::ops::Range<usize>) -> Result<Vec<u8>> {
         let len = range.len();
         get_decrypt_slice(&self.map[range], len, &self.keys)
     }
@@ -591,7 +577,7 @@ impl<'a> Reader for WzSliceReader<'a> {
     fn read_double_at(&self, pos: usize) -> Result<f64> {
         self.buf.pread_with::<f64>(pos, LE).map_err(Error::from)
     }
-    fn get_decrypt_slice(&self, range: std::ops::Range<usize>) -> Vec<u8> {
+    fn get_decrypt_slice(&self, range: std::ops::Range<usize>) -> Result<Vec<u8>> {
         let len = range.len();
         get_decrypt_slice(&self.buf[range], len, &self.keys)
     }
@@ -752,7 +738,7 @@ fn resolve_unicode_char(c: u16, i: i32) -> u16 {
     (c as i32 ^ (0xAAAA + i)) as u16
 }
 
-pub fn get_decrypt_slice(buf: &[u8], len: usize, keys: &Arc<RwLock<WzMutableKey>>) -> Vec<u8> {
+pub fn get_decrypt_slice(buf: &[u8], len: usize, keys: &Arc<RwLock<WzMutableKey>>) -> Result<Vec<u8>> {
     
     let is_need_mut = {
         let read = keys.read().unwrap();
@@ -761,7 +747,7 @@ pub fn get_decrypt_slice(buf: &[u8], len: usize, keys: &Arc<RwLock<WzMutableKey>
 
     if is_need_mut {
         let mut key = keys.write().unwrap();
-        key.ensure_key_size(len).unwrap();
+        key.ensure_key_size(len).map_err(|_| Error::DecryptError(len))?;
     }
 
     let keys = keys.read().unwrap();
@@ -772,7 +758,7 @@ pub fn get_decrypt_slice(buf: &[u8], len: usize, keys: &Arc<RwLock<WzMutableKey>
         keys.decrypt_slice(&mut original);
     }
 
-    original
+    Ok(original)
 }
 
 #[cfg(test)]

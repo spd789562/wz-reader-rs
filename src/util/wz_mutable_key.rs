@@ -89,7 +89,7 @@ impl WzMutableKey {
             }
             ecb::Encryptor::<Aes256>::new(&self.aes_key.into())
                 .encrypt_padded_b2b_mut::<Pkcs7>(&block, &mut self.keys)
-                .unwrap();
+                .map_err(|_| "Failed to encrypt block")?;
 
             self.keys.truncate(16);
         }
@@ -109,7 +109,7 @@ impl WzMutableKey {
             ecb::Encryptor::<Aes256>::new(&self.aes_key.into())
                 // im not sure why this will actually append block_size * 2 to out_buff, so will be trimed at the end
                 .encrypt_padded_b2b_mut::<Pkcs7>(&in_buf, &mut self.keys[i..])
-                .unwrap();
+                .map_err(|_| "Failed to encrypt block")?;
         }
 
         if self.keys.len() > size {
