@@ -93,12 +93,12 @@ impl IntoResponse for InitWzError {
 async fn init_wz_root(
     State(ServerState { wz_root }): State<ServerState>,
     Json(body): Json<Value>,
-) -> Response {
+) -> Result<impl IntoResponse, InitWzError> {
     let base_path = body.get("path").and_then(|v| v.as_str());
     let version = body.get("version").and_then(|v| v.as_str());
 
     if base_path.is_none() || version.is_none() {
-        return InitWzError::MissingParam.into_response();
+        return Err(InitWzError::MissingParam);
     }
 
     let version = match version.unwrap() {
@@ -111,18 +111,18 @@ async fn init_wz_root(
     let base_path = base_path.unwrap();
 
     if base_path.is_empty() {
-        return InitWzError::MissingParam.into_response();
+        return Err(InitWzError::MissingParam);
     }
 
     let result = resolve_base(base_path, version);
     if result.is_err() {
-        return InitWzError::IoError.into_response();
+        return Err(InitWzError::IoError);
     }
     let base_node = result.unwrap();
     let mut wz_root = wz_root.write().unwrap();
     *wz_root = Some(base_node);
 
-    return StatusCode::OK.into_response();
+    return Ok(StatusCode::OK);
 }
 
 
@@ -156,8 +156,11 @@ impl IntoResponse for NodeFindError {
     }
 }
 impl From<node::Error> for NodeFindError {
-    fn from(_err: node::Error) -> Self {
-        NodeFindError::ParseError
+    fn from(e: node::Error) -> Self {
+        match e {
+            node::Error::NodeNotFound => NodeFindError::NotFound,
+            _ => NodeFindError::ParseError,
+        }
     }
 }
 
@@ -178,15 +181,10 @@ fn get_node_from_root(root: Arc<RwLock<Option<WzNodeArc>>>, path: &str, force_pa
     let wz_root = wz_root.read().unwrap();
 
     let target = if force_parse {
-        wz_root.at_path_parsed(&path)
+        wz_root.at_path_parsed(&path)?
     } else {
-        wz_root.at_path(&path).ok_or(node::Error::NodeNotFound)
+        wz_root.at_path(&path).ok_or(node::Error::NodeNotFound)?
     };
-
-    let target = target.map_err(|e| match e {
-        node::Error::NodeNotFound => NodeFindError::NotFound,
-        _ => NodeFindError::ParseError,
-    })?;
 
     if force_parse {
         node::parse_node(&target)?;
@@ -206,15 +204,12 @@ async fn get_json(
     State(ServerState { wz_root }): State<ServerState>,
     Path(path): Path<String>,
     Query(param): Query<GetJsonParam>,
-) -> Response {
+) -> Result<impl IntoResponse, NodeFindError> {
     println!("try to get path's json: {}", path);
     let is_simple = param.simple.unwrap_or(false);
     let force_parse = param.force_parse.unwrap_or(false);
 
-    let target = match get_node_from_root(wz_root, &path, force_parse) {
-        Ok(t) => t,
-        Err(e) => return e.into_response(),
-    };
+    let target = get_node_from_root(wz_root, &path, force_parse)?;
 
     let json = if is_simple {
         target.read().unwrap().to_simple_json()
@@ -222,9 +217,9 @@ async fn get_json(
         target.read().unwrap().to_json()
     };
 
-    let json = json.unwrap();
+    let json = json.map_err(|_| NodeFindError::ServerError)?;
 
-    (StatusCode::OK, [(header::CONTENT_TYPE, "application/json;charset=utf-8")], Body::from(json.to_string())).into_response()
+    Ok((StatusCode::OK, [(header::CONTENT_TYPE, "application/json;charset=utf-8")], Body::from(json.to_string())))
 }
 
 /* grabe image part */
@@ -232,28 +227,19 @@ async fn get_image(
     State(ServerState { wz_root }): State<ServerState>,
     Path(path): Path<String>,
     Query(param): Query<GetJsonParam>,
-) -> Response {
+) -> Result<impl IntoResponse, NodeFindError> {
     println!("try to get image: {}", path);
     let force_parse = param.force_parse.unwrap_or(false);
 
-    let target = match get_node_from_root(wz_root, &path, force_parse) {
-        Ok(t) => t,
-        Err(e) => return e.into_response(),
-    };
+    let target = get_node_from_root(wz_root, &path, force_parse)?;
 
     let target_read = target.read().unwrap();
     
     if let Some(_) = target_read.try_as_png() {
-        let img = property::get_image(&target);
-
-        if img.is_err() {
-            return NodeFindError::ServerError.into_response();
-        }
-
-        let img = img.unwrap();
+        let img = property::get_image(&target).map_err(|_| NodeFindError::ServerError)?;
 
         let mut buf = BufWriter::new(Cursor::new(Vec::new()));
-        img.write_to(&mut buf, ImageFormat::Bmp).expect("write image error");
+        img.write_to(&mut buf, ImageFormat::Bmp).map_err(|_| NodeFindError::ServerError)?;
 
         let body = Body::from(buf.into_inner().unwrap().into_inner());
 
@@ -261,11 +247,11 @@ async fn get_image(
             .status(StatusCode::OK)
             .header(header::CONTENT_TYPE, "image/bmp")
             .header(header::CACHE_CONTROL, "max-age=3600")
-            .body(body).unwrap()
-            .into_response();
+            .body(body)
+            .map_err(|_| NodeFindError::ServerError);
     } 
 
-    return NodeFindError::TypeMismatch.into_response();
+    return Err(NodeFindError::TypeMismatch);
 }
 
 /* grabe image urls part */
@@ -273,14 +259,11 @@ async fn get_image_urls(
     State(ServerState { wz_root }): State<ServerState>,
     Path(path): Path<String>,
     Query(param): Query<GetJsonParam>,
-) -> Response {
+) -> Result<impl IntoResponse, NodeFindError> {
     println!("try to get images from a node: {}", path);
     let force_parse = param.force_parse.unwrap_or(false);
 
-    let target = match get_node_from_root(wz_root, &path, force_parse) {
-        Ok(t) => t,
-        Err(e) => return e.into_response(),
-    };
+    let target = get_node_from_root(wz_root, &path, force_parse)?;
 
     let urls = Mutex::new(Vec::new());
     
@@ -297,7 +280,7 @@ async fn get_image_urls(
     
     let json = serde_json::to_string(&urls).unwrap();
 
-    (StatusCode::OK, [(header::CONTENT_TYPE, "application/json;charset=utf-8")], Body::from(json)).into_response()
+    Ok((StatusCode::OK, [(header::CONTENT_TYPE, "application/json;charset=utf-8")], Body::from(json)))
 }
 
 /* grabe sound part */
@@ -305,14 +288,11 @@ async fn get_sound(
     State(ServerState { wz_root }): State<ServerState>,
     Path(path): Path<String>,
     Query(param): Query<GetJsonParam>,
-) -> Response {
+) -> Result<impl IntoResponse, NodeFindError> {
     println!("try to get sound: {}", path);
     let force_parse = param.force_parse.unwrap_or(false);
 
-    let target = match get_node_from_root(wz_root, &path, force_parse) {
-        Ok(t) => t,
-        Err(e) => return e.into_response(),
-    };
+    let target = get_node_from_root(wz_root, &path, force_parse)?;
 
     let target_read = target.read().unwrap();
     
@@ -327,11 +307,11 @@ async fn get_sound(
         return Response::builder()
             .status(StatusCode::OK)
             .header(header::CONTENT_TYPE, mini)
-            .body::<Body>(sound_buf.into()).unwrap()
-            .into_response();
+            .body::<Body>(sound_buf.into())
+            .map_err(|_| NodeFindError::ServerError);
     } 
 
-    return NodeFindError::TypeMismatch.into_response();
+    return Err(NodeFindError::TypeMismatch);
 }
 
 /* browse part */
@@ -385,31 +365,25 @@ fn make_node_children_ul(node: &WzNodeArc, force_parse: bool) -> String {
 async fn simple_browse_root(
     State(ServerState { wz_root }): State<ServerState>,
     Query(param): Query<GetJsonParam>,
-) -> Response {
+) -> Result<impl IntoResponse, NodeFindError> {
     let force_parse = param.force_parse.unwrap_or(false);
 
-    let target = match get_node_from_root(wz_root, "", force_parse) {
-        Ok(t) => t,
-        Err(e) => return e.into_response(),
-    };
+    let target = get_node_from_root(wz_root, "", force_parse)?;
 
     let result_ul = make_node_children_ul(&target, force_parse);
 
-    (StatusCode::OK, [(header::CONTENT_TYPE, "text/html;charset=utf-8")], Body::from(result_ul)).into_response()
+    Ok((StatusCode::OK, [(header::CONTENT_TYPE, "text/html;charset=utf-8")], Body::from(result_ul)))
 }
 
 async fn simple_browse(
     State(ServerState { wz_root }): State<ServerState>,
     Path(path): Path<String>,
     Query(param): Query<GetJsonParam>,
-) -> Response {
+) -> Result<impl IntoResponse, NodeFindError> {
     println!("access node use simple_browse: {}", path);
     let force_parse = param.force_parse.unwrap_or(false);
 
-    let target = match get_node_from_root(wz_root, &path, force_parse) {
-        Ok(t) => t,
-        Err(e) => return e.into_response(),
-    };
+    let target = get_node_from_root(wz_root, &path, force_parse)?;
 
     let target_read = target.read().unwrap();
     
@@ -440,6 +414,15 @@ async fn simple_browse(
                     result_string.push_str(&format!("can't not resolve _outlink <pre>{}</pre>", &value));
                 }
             }
+        }else if target_read.name.ends_with(".json") {
+            let content = target_read.try_as_string().unwrap().get_string().unwrap();
+            return Ok((StatusCode::OK, [(header::CONTENT_TYPE, "application/json;charset=utf-8")], Body::from(content)));
+        } else if target_read.name.ends_with(".atlas") {
+            let content = target_read.try_as_string().unwrap().get_string().unwrap();
+            return Ok((StatusCode::OK, [(header::CONTENT_TYPE, "text/plain;charset=utf-8")], Body::from(content)));
+        } else if let Some(lua) = target_read.try_as_lua() {
+            let content = lua.extract_lua().map_err(|_| NodeFindError::ServerError)?;
+            return Ok((StatusCode::OK, [(header::CONTENT_TYPE, "text/plain;charset=utf-8")], Body::from(content)));
         } else {
             result_string.push_str(&format!("<pre>{}</pre>", &value));
         }
@@ -447,5 +430,5 @@ async fn simple_browse(
         result_string.push_str(&make_node_children_ul(&target, force_parse));
     }
 
-    (StatusCode::OK, [(header::CONTENT_TYPE, "text/html;charset=utf-8")], Body::from(result_string)).into_response()
+    Ok((StatusCode::OK, [(header::CONTENT_TYPE, "text/html;charset=utf-8")], Body::from(result_string)))
 }
