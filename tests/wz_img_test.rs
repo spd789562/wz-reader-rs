@@ -3,6 +3,9 @@ use wz_reader::{WzNode, WzNodeArc, WzObjectType, node, wz_image, WzNodeCast,reso
 use wz_reader::util;
 use wz_reader::version::WzMapleVersion;
 
+type Error = Box<dyn std::error::Error>;
+type Result<T> = std::result::Result<T, Error>;
+
 /**
  * the wz_img.img file structure:
  *   wz_img.img
@@ -23,56 +26,61 @@ use wz_reader::version::WzMapleVersion;
  *       - uol
  */
 
-fn can_parse_node(node: &WzNodeArc) {
-    let mut node_read = node.write().unwrap();
-
-    assert!(node_read.parse(node).is_ok());
-}
-
 #[test]
-fn should_parsing_with_default_version() {
+fn should_parsing_with_default_version() -> Result<()> {
     let wz_img = WzNode::from_img_file(r"tests/test.img", None, None);
     assert!(wz_img.is_ok());
 
-    let wz_img = wz_img.unwrap().into_lock();
+    let wz_img = wz_img?.into_lock();
     
-    can_parse_node(&wz_img);
+    assert!(node::parse_node(&wz_img).is_ok());
+
+    Ok(())
 }
 
 #[test]
-fn should_parsing_with_correct_version() {
+fn should_parsing_with_correct_version() -> Result<()> {
     let wz_img = WzNode::from_img_file(r"tests/test.img", Some(WzMapleVersion::BMS), None);
     assert!(wz_img.is_ok());
 
-    let wz_img = wz_img.unwrap().into_lock();
+    let wz_img = wz_img?.into_lock();
     
-    can_parse_node(&wz_img);
+    assert!(node::parse_node(&wz_img).is_ok());
+
+    Ok(())
 }
 
 #[test]
-fn should_error_with_wrong_version() {
+fn should_error_with_wrong_version() -> Result<()> {
     let wz_img = WzNode::from_img_file(r"tests/test.img", Some(WzMapleVersion::EMS), None);
+    
     assert!(wz_img.is_err());
+
+    Ok(())
 }
 
 #[test]
-fn should_parsing_with_correct_iv() {
+fn should_parsing_with_correct_iv() -> Result<()> {
     let wz_img = WzNode::from_img_file_with_iv(r"tests/test.img", [0, 0, 0, 0], None);
     assert!(wz_img.is_ok());
 
-    let wz_img = wz_img.unwrap().into_lock();
+    let wz_img = wz_img?.into_lock();
     
-    can_parse_node(&wz_img);
+    assert!(node::parse_node(&wz_img).is_ok());
+
+    Ok(())
 }
 
 #[test]
-fn should_error_with_wrong_iv() {
+fn should_error_with_wrong_iv() -> Result<()> {
     let wz_img = WzNode::from_img_file_with_iv(r"tests/test.img", [1, 2, 3, 4], None);
     assert!(wz_img.is_err());
+
+    Ok(())
 }
 
-fn check_sample_wz_img(wz_img: &WzNodeArc) {    
-    can_parse_node(&wz_img);
+fn check_sample_wz_img(wz_img: &WzNodeArc) -> Result<()> {
+    assert!(node::parse_node(&wz_img).is_ok());
     
     let wz_img_read = wz_img.read().unwrap();
 
@@ -134,12 +142,11 @@ fn check_sample_wz_img(wz_img: &WzNodeArc) {
         
         let string = string.unwrap();
         let string = string.read().unwrap();
-        let string = string.try_as_string();
-        if let Some(string) = string {
+        if let Some(string) = string.try_as_string() {
             let s = string.get_string();
             assert!(s.is_ok());
-            assert_eq!(&s.unwrap(), "foo");
-        }
+            assert_eq!(&s?, "foo");
+        };
 
         let uol = second_folder.at("uol");
         assert!(uol.is_some());
@@ -149,7 +156,7 @@ fn check_sample_wz_img(wz_img: &WzNodeArc) {
         if let WzObjectType::Value(WzValue::UOL(string)) = &uol.object_type {
             let s = string.get_string();
             assert!(s.is_ok());
-            assert_eq!(&s.unwrap(), "string");
+            assert_eq!(&s?, "string");
         }
     }
 
@@ -163,64 +170,60 @@ fn check_sample_wz_img(wz_img: &WzNodeArc) {
         
         let vector = vector.unwrap();
         let vector = vector.read().unwrap();
-        if let WzObjectType::Value(WzValue::Vector(vec)) = &vector.object_type {
+        if let Some(vec) = vector.try_as_vector2d() {
             assert_eq!(vec, &Vector2D(1, 1));
-        }
+        };
 
         let png = convex_folder.at("1");
         assert!(png.is_some());
         
         let png = png.unwrap();
         let png = png.read().unwrap();
-        assert!(matches!(png.object_type, WzObjectType::Property(WzSubProperty::PNG(_))));
+        assert!(png.try_as_png().is_some());
 
         let vector = png.at("origin");
         assert!(vector.is_some());
 
         let vector = vector.unwrap();
         let vector = vector.read().unwrap();
-        if let WzObjectType::Value(WzValue::Vector(vec)) = &vector.object_type {
+        if let Some(vec) = vector.try_as_vector2d() {
             assert_eq!(vec, &Vector2D(0, 0));
-        }
+        };
 
         let inlink = png.at("_inlink");
         assert!(inlink.is_some());
 
         let inlink = inlink.unwrap();
-        let inlink_str = if let WzObjectType::Value(WzValue::String(string)) = &inlink.read().unwrap().object_type {
+        let inlink_str = if let Some(string) = inlink.read().unwrap().try_as_string() {
             string.get_string().unwrap()
         } else {
             String::new()
         };
         assert_eq!(&inlink_str, "conv/png2");
     }
+
+    Ok(())
 }
 
 #[test]
-fn should_parsing_wz_img_and_check_values() {
-    let wz_file = WzNode::from_wz_file(r"tests/test.wz", Some(WzMapleVersion::BMS), Some(123), None);
-    assert!(wz_file.is_ok());
+fn should_parsing_wz_img_and_check_values() -> Result<()> {
+    let wz_img = WzNode::from_img_file(r"tests/test.img", Some(WzMapleVersion::BMS), None);
 
-    let wz_file = wz_file.unwrap().into_lock();
-    
-    assert!(wz_file.write().unwrap().parse(&wz_file).is_ok());
+    assert!(wz_img.is_ok());
 
-    let wz_file_read = wz_file.read().unwrap();
+    assert!(check_sample_wz_img(&wz_img?.into_lock()).is_ok());
 
-    let wz_img = wz_file_read.at("wz_img.img");
-    assert!(wz_img.is_some());
-
-    check_sample_wz_img(&wz_img.unwrap());
+    Ok(())
 }
 
 #[test]
-fn should_success_using_wz_node_methods_on_childs() {
+fn should_success_using_wz_node_methods_on_childs() -> Result<()> {
     let wz_img = WzNode::from_img_file(r"tests/test.img", Some(WzMapleVersion::BMS), None);
     assert!(wz_img.is_ok());
 
-    let wz_img = wz_img.unwrap().into_lock();
+    let wz_img = wz_img?.into_lock();
 
-    assert!(wz_img.write().unwrap().parse(&wz_img).is_ok());
+    assert!(node::parse_node(&wz_img).is_ok());
 
     let nil_node = wz_img.read().unwrap().at_path("2/nil");
     assert!(nil_node.is_some());
@@ -292,6 +295,8 @@ fn should_success_using_wz_node_methods_on_childs() {
         let nil = nil.read().unwrap();
         assert!(matches!(nil.object_type, WzObjectType::Value(WzValue::Null)));
     }
+
+    Ok(())
 }
 
 #[test]
