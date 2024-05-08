@@ -208,7 +208,7 @@ impl WzNode {
             }
             path = format!("{}/{}", &read.name, path);
         }
-        path
+        String::new()
     }
 
     /// A alias to get child.
