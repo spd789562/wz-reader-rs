@@ -198,6 +198,7 @@ fn get_node_from_root(root: Arc<RwLock<Option<WzNodeArc>>>, path: &str, force_pa
 struct GetJsonParam {
     simple: Option<bool>,
     force_parse: Option<bool>,
+    sort: Option<bool>,
 }
 
 async fn get_json(
@@ -315,13 +316,28 @@ async fn get_sound(
 }
 
 /* browse part */
-
-fn make_simple_browse_node_link(node: &WzNodeArc, force_parse: bool, name: Option<&str>) -> String {
+/// generate various links for a node in <li><a /></li>
+fn make_simple_browse_node_link(node: &WzNodeArc, force_parse: bool, name: Option<&str>) -> Result<String, NodeFindError> {
     let node = node.read().unwrap();
-    let mut url = node.get_full_path().replace("Base", "");
+    let mut url = node.get_path_from_root();
+    
+    if let Some(uol_string) = node.try_as_uol() {
+        let mut uol_target_path = uol_string.get_string().map_err(|_| NodeFindError::ServerError)?;
+        uol_target_path.insert_str(0, "../");
+        let uol_target = node.at_path_relative(&uol_target_path);
+        if let Some(uol_target) = uol_target {
+            let uol_target = uol_target.read().unwrap();
+            url = uol_target.get_path_from_root();
+        }
+    }
+
+    if !url.is_empty() {
+        url.insert_str(0, "/");
+    }
     if force_parse {
         url.push_str("?force_parse=true");
     }
+
     let name = name.unwrap_or(&node.name);
 
     let mut extra_link = String::new();
@@ -330,28 +346,33 @@ fn make_simple_browse_node_link(node: &WzNodeArc, force_parse: bool, name: Optio
         extra_link.push_str(&format!("<a href=\"/get_image{}\" target=\"_blank\">(image)</a>", url));
     } else if node.try_as_sound().is_some() {
         extra_link.push_str(&format!("<a href=\"/get_sound{}\" target=\"_blank\">(sound)</a>", url));
+    } else if node.try_as_uol().is_some() {
+        extra_link.push_str("(uol link)");
     }
 
-    format!("<li><a href=\"/browse{}\">{}</a>{}</li>", url, name, extra_link)
+    Ok(format!("<li><a href=\"/browse{}\">{}</a>{}</li>", url, name, extra_link))
 }
 
-fn make_node_children_ul(node: &WzNodeArc, force_parse: bool) -> String {
+/// generate a list of childrens of a node in <ul></ul>
+fn make_node_children_ul(node: &WzNodeArc, sort: bool, force_parse: bool) -> Result<String, NodeFindError> {
     let node_read = node.read().unwrap();
     let mut name_and_urls: Vec<(WzNodeName, String)> = vec![];
 
     for item in node_read.children.values() {
         let item_read = item.read().unwrap();
         let name = item_read.name.clone();
-        let html = make_simple_browse_node_link(item, force_parse, None);
+        let html = make_simple_browse_node_link(item, force_parse, None)?;
         name_and_urls.push((name, html));
     }
 
-    name_and_urls.sort_by(|(aname, _), (bname, _)| aname.cmp(bname.as_str()));
+    if sort {
+        name_and_urls.sort_by(|(aname, _), (bname, _)| aname.cmp(bname.as_str()));
+    }
 
     let mut result_string = String::new();
 
     if let Some(parent) = node_read.parent.upgrade() {
-        result_string.push_str(&make_simple_browse_node_link(&parent, force_parse, Some("..")));
+        result_string.push_str(&make_simple_browse_node_link(&parent, force_parse, Some(".."))?);
     }
 
     for (_, html) in name_and_urls {
@@ -359,18 +380,19 @@ fn make_node_children_ul(node: &WzNodeArc, force_parse: bool) -> String {
     }
 
 
-    format!("<ul>{}</ul>", result_string)
+    Ok(format!("<ul>{}</ul>", result_string))
 }
 
 async fn simple_browse_root(
     State(ServerState { wz_root }): State<ServerState>,
     Query(param): Query<GetJsonParam>,
 ) -> Result<impl IntoResponse, NodeFindError> {
-    let force_parse = param.force_parse.unwrap_or(false);
+    let force_parse = param.force_parse.unwrap_or(true);
+    let need_sort = param.sort.unwrap_or(true);
 
     let target = get_node_from_root(wz_root, "", force_parse)?;
 
-    let result_ul = make_node_children_ul(&target, force_parse);
+    let result_ul = make_node_children_ul(&target, need_sort, force_parse)?;
 
     Ok((StatusCode::OK, [(header::CONTENT_TYPE, "text/html;charset=utf-8")], Body::from(result_ul)))
 }
@@ -381,13 +403,16 @@ async fn simple_browse(
     Query(param): Query<GetJsonParam>,
 ) -> Result<impl IntoResponse, NodeFindError> {
     println!("access node use simple_browse: {}", path);
-    let force_parse = param.force_parse.unwrap_or(false);
+    let force_parse = param.force_parse.unwrap_or(true);
+    let need_sort = param.sort.unwrap_or(true);
 
     let target = get_node_from_root(wz_root, &path, force_parse)?;
 
     let target_read = target.read().unwrap();
     
     let mut result_string = String::new();
+
+    result_string.push_str(&format!("<h2>Node Info:</h2><pre>{}</pre>", serde_json::to_string(&target_read.object_type).map_err(|_| NodeFindError::ServerError)?));
 
     if target_read.children.is_empty() {
         let value = target_read.to_simple_json().unwrap().to_string();
@@ -397,7 +422,7 @@ async fn simple_browse(
             match node::resolve_inlink(&value, &target) {
                 Some(v) => {
                     let link_dest = v.read().unwrap().get_full_path();
-                    result_string.push_str(&make_simple_browse_node_link(&v, force_parse, Some(&link_dest)));
+                    result_string.push_str(&make_simple_browse_node_link(&v, force_parse, Some(&link_dest))?);
                 },
                 None => {
                     result_string.push_str(&format!("can't not resolve _inlink <pre>{}</pre>", &value));
@@ -408,7 +433,7 @@ async fn simple_browse(
             match node::resolve_outlink(&value, &target, true) {
                 Some(v) => {
                     let link_dest = v.read().unwrap().get_full_path();
-                    result_string.push_str(&make_simple_browse_node_link(&v, force_parse, Some(&link_dest)));
+                    result_string.push_str(&make_simple_browse_node_link(&v, force_parse, Some(&link_dest))?);
                 },
                 None => {
                     result_string.push_str(&format!("can't not resolve _outlink <pre>{}</pre>", &value));
@@ -427,7 +452,7 @@ async fn simple_browse(
             result_string.push_str(&format!("<pre>{}</pre>", &value));
         }
     } else {
-        result_string.push_str(&make_node_children_ul(&target, force_parse));
+        result_string.push_str(&make_node_children_ul(&target, need_sort, force_parse)?);
     }
 
     Ok((StatusCode::OK, [(header::CONTENT_TYPE, "text/html;charset=utf-8")], Body::from(result_string)))
