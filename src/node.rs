@@ -196,19 +196,25 @@ impl WzNode {
     /// let grandchild = WzNode::from_str("2", 1, Some(&child)).into_lock();
     /// 
     /// assert_eq!(grandchild.read().unwrap().get_path_from_root(), "1/2");
+    /// assert!(root.read().unwrap().get_path_from_root().is_empty());
     /// ```
     pub fn get_path_from_root(&self) -> String {
-        let mut path: String = self.name.to_string();
         let mut parent = self.parent.upgrade();
+
+        if parent.is_none() {
+            return String::new();
+        }
+        
+        let mut path = self.name.to_string();
+        
         while let Some(parent_inner) = parent {
             let read = parent_inner.read().unwrap();
             parent = read.parent.upgrade();
-            if parent.is_none() {
-                return path;
+            if parent.is_some() {
+                path = format!("{}/{}", &read.name, path);
             }
-            path = format!("{}/{}", &read.name, path);
         }
-        String::new()
+        path
     }
 
     /// A alias to get child.
