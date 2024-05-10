@@ -38,11 +38,11 @@ fn main() {
 
         if let Some(sound_node) = node_read.try_as_sound() {
             let path = std::path::Path::new("./sounds").join(node_read.name.as_str());
-            if sound_node.extract_sound(path).is_err() {
+            if sound_node.save(path).is_err() {
                 println!("failed to extract sound: {}", node_read.get_full_path());
             }
         }
-    })
+    });
 }
 ```
 

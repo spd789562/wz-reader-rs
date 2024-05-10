@@ -1,6 +1,5 @@
-use std::ops::Range;
+use std::{io::{Seek, Write}, ops::Range};
 use std::fs::File;
-use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
 use crate::reader::{read_i32_at, WzReader};
@@ -114,6 +113,24 @@ impl WzSound {
 
         wav_header
     }
+    /// Write the sound to a writer. Will inculde the header if the sound is a wav file.
+    pub fn write_to<W>(&self, writer: &mut W) -> Result<(), WzSoundError> 
+        where W: Write + Seek
+    {
+        let buffer = self.reader.get_slice(self.get_buffer_range());
+        match self.sound_type {
+            WzSoundType::Wav => {
+                let wav_header = self.get_wav_header();
+                writer.write_all(&wav_header)?;
+                writer.write_all(buffer)?;
+            },
+            _ => {
+                writer.write_all(buffer)?;
+            }
+        }
+
+        Ok(())
+    }
     pub fn get_buffer(&self) -> Vec<u8> {
         let buffer = self.reader.get_slice(self.get_buffer_range());
         match self.sound_type {
@@ -128,25 +145,20 @@ impl WzSound {
             }
         }
     }
-    pub fn extract_sound(&self, path: PathBuf) -> Result<(), WzSoundError> {
-        let buffer = self.reader.get_slice(self.get_buffer_range());
-
-        match self.sound_type {
+    pub fn save(&self, path: PathBuf) -> Result<(), WzSoundError> {
+        let mut file = match self.sound_type {
             WzSoundType::Wav => {
-                let mut file = File::create(path.with_extension("wav"))?;
-                let wav_header = self.get_wav_header();
-                file.write_all(&wav_header)?;
-                file.write_all(buffer)?;
+                File::create(path.with_extension("wav"))?
             },
             WzSoundType::Mp3 => {
-                let mut file = File::create(path.with_extension("mp3"))?;
-                file.write_all(buffer)?;
+                File::create(path.with_extension("mp3"))?
             },
             _ => {
-            let mut file = File::create(path)?;
-                file.write_all(buffer)?;
+                File::create(path)?
             }
-        }
+        };
+
+        self.write_to(&mut file)?;
 
         Ok(())
     }

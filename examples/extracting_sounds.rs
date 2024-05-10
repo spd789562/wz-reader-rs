@@ -6,7 +6,7 @@ fn main() {
         let node_read = node.read().unwrap();
         if let Some(sound) = node_read.try_as_sound() {
             let path = std::path::Path::new("./sounds").join(node_read.name.as_str());
-            if sound.extract_sound(path).is_err() {
+            if sound.save(path).is_err() {
                 println!("failed to extract sound: {}", node_read.get_full_path());
             }
         }
