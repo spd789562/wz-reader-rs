@@ -1,5 +1,5 @@
-use wz_reader::{WzNode, WzNodeArc, WzObjectType, parse_node};
-use serde_json::{ Map, Value };
+use serde_json::{Map, Value};
+use wz_reader::{parse_node, WzNode, WzNodeArc, WzObjectType};
 
 fn walk_node_and_to_json(node_arc: &WzNodeArc, json: &mut Map<String, Value>) {
     parse_node(node_arc).unwrap();
@@ -7,8 +7,11 @@ fn walk_node_and_to_json(node_arc: &WzNodeArc, json: &mut Map<String, Value>) {
     match &node.object_type {
         WzObjectType::Value(value_type) => {
             json.insert(node.name.to_string(), value_type.clone().into());
-        },
-        WzObjectType::Directory(_) | WzObjectType::Image(_) | WzObjectType::File(_) | WzObjectType::Property(_) => {
+        }
+        WzObjectType::Directory(_)
+        | WzObjectType::Image(_)
+        | WzObjectType::File(_)
+        | WzObjectType::Property(_) => {
             let mut child_json = Map::new();
             if node.children.len() != 0 {
                 for value in node.children.values() {
@@ -22,7 +25,10 @@ fn walk_node_and_to_json(node_arc: &WzNodeArc, json: &mut Map<String, Value>) {
 
 fn main() {
     /* resolve single wz file */
-    let node: WzNodeArc = WzNode::from_wz_file(r"D:\MapleStory\Data\UI\UI_000.wz", None, None, None).unwrap().into();
+    let node: WzNodeArc =
+        WzNode::from_wz_file(r"D:\MapleStory\Data\UI\UI_000.wz", None, None, None)
+            .unwrap()
+            .into();
 
     let mut node_write = node.write().unwrap();
 

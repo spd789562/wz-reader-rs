@@ -1,24 +1,26 @@
-use crate::{WzFile, WzDirectory, WzImage};
-use crate::property::{WzSubProperty, WzValue, WzPng, WzSound, WzString, WzLua, WzRawData, Vector2D};
+use crate::property::{
+    Vector2D, WzLua, WzPng, WzRawData, WzSound, WzString, WzSubProperty, WzValue,
+};
+use crate::{WzDirectory, WzFile, WzImage};
 
 #[cfg(feature = "serde")]
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 /// All variants of `WzObjectType`.
-/// 
+///
 /// `WzObjectType` implement most of the From trait for the types that can be converted to it.
-/// 
+///
 /// # Example
-/// 
+///
 /// ```
 /// # use wz_reader::WzObjectType;
 /// # use wz_reader::property::WzValue;
 /// let wz_int: WzObjectType = 1.into();
-/// 
+///
 /// assert!(matches!(wz_int, WzObjectType::Value(WzValue::Int(1))));
 /// ```
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-#[cfg_attr(feature = "serde", serde(tag="type", content="data"))]
+#[cfg_attr(feature = "serde", serde(tag = "type", content = "data"))]
 #[derive(Debug, Clone)]
 pub enum WzObjectType {
     File(Box<WzFile>),
@@ -94,7 +96,10 @@ mod test {
         let dir_json = serde_json::to_string(&dir).unwrap();
         let image_json = serde_json::to_string(&image).unwrap();
 
-        assert_eq!(file_json, r#"{"type":"File","data":{"path":"","patch_version":0,"wz_version_header":0,"wz_with_encrypt_version_header":false,"hash":0}}"#);
+        assert_eq!(
+            file_json,
+            r#"{"type":"File","data":{"path":"","patch_version":0,"wz_version_header":0,"wz_with_encrypt_version_header":false,"hash":0}}"#
+        );
         assert_eq!(dir_json, r#"{"type":"Directory","data":{}}"#);
         assert_eq!(image_json, r#"{"type":"Image","data":{}}"#);
     }

@@ -1,7 +1,9 @@
-use image::{Rgba, Rgb};
+use image::{Rgb, Rgba};
 
-pub trait SimpleColor 
-    where Self: Sized {
+pub trait SimpleColor
+where
+    Self: Sized,
+{
     fn create(r: u8, g: u8, b: u8) -> Self;
     fn white() -> Self;
     fn black() -> Self;
@@ -9,7 +11,7 @@ pub trait SimpleColor
         let r = ((color & 0xF800) >> 11) as u8;
         let g = ((color & 0x07E0) >> 5) as u8;
         let b = (color & 0x001F) as u8;
-    
+
         Self::create(r << 3 | r >> 2, g << 2 | g >> 4, b << 3 | b >> 2)
     }
     fn r(&self) -> u8;
@@ -17,8 +19,10 @@ pub trait SimpleColor
     fn b(&self) -> u8;
 }
 
-pub trait SimpleColorAlpha 
-    where Self: Sized {
+pub trait SimpleColorAlpha
+where
+    Self: Sized,
+{
     fn create_alpha(r: u8, g: u8, b: u8, a: u8) -> Self;
     fn transparent() -> Self;
     fn from_argb1555(color: u16) -> Self {
@@ -26,7 +30,7 @@ pub trait SimpleColorAlpha
         let r = ((color & 0x7C00) >> 10) as u8;
         let g = ((color & 0x03E0) >> 5) as u8;
         let b = (color & 0x001F) as u8;
-    
+
         Self::create_alpha(r << 3 | r >> 2, g << 3 | g >> 2, b << 3 | b >> 2, a)
     }
     fn a(&self) -> u8;
@@ -89,7 +93,7 @@ impl SimpleColor for Rgb<u8> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use image::{Rgba, Rgb};
+    use image::{Rgb, Rgba};
 
     const RED: u32 = 0xFF0000;
     const GREEN: u32 = 0x00FF00;
@@ -111,7 +115,7 @@ mod test {
         let r = (((color & 0xff000000) >> 24) as u16 * 31 + 127) / 255;
         let g = (((color & 0x00ff0000) >> 16) as u16 * 31 + 127) / 255;
         let b = (((color & 0x0000ff00) >> 8) as u16 * 31 + 127) / 255;
-        
+
         let a = if color & 0xff > 0 { 0 } else { 1 };
 
         dbg!((a << 15) | (r << 10) | (g << 5) | b)

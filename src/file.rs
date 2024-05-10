@@ -1,11 +1,14 @@
-use std::fs::File;
-use std::sync::Arc;
-use std::ops::Range;
+use crate::{
+    directory, reader, version, Reader, WzDirectory, WzNodeArc, WzNodeArcVec, WzObjectType,
+    WzReader, WzSliceReader,
+};
 use memmap2::Mmap;
-use crate::{reader, directory, version, Reader, WzDirectory, WzNodeArc, WzNodeArcVec, WzObjectType, WzReader, WzSliceReader};
+use std::fs::File;
+use std::ops::Range;
+use std::sync::Arc;
 
 #[cfg(feature = "serde")]
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -39,7 +42,7 @@ pub struct WzFileMeta {
     /// a wz file is cantain wz_version_header(encver) in header
     pub wz_with_encrypt_version_header: bool,
     /// the hash use to calculate img offset
-    pub hash: usize
+    pub hash: usize,
 }
 
 /// Root of the `WzNode`, represents the Wz file itself and contains `WzFileMeta`
@@ -59,8 +62,13 @@ pub struct WzFile {
 }
 
 impl WzFile {
-    pub fn from_file<P>(path: P, wz_iv: Option<[u8; 4]>, patch_version: Option<i32>) -> Result<WzFile, Error> 
-        where P: AsRef<std::path::Path>
+    pub fn from_file<P>(
+        path: P,
+        wz_iv: Option<[u8; 4]>,
+        patch_version: Option<i32>,
+    ) -> Result<WzFile, Error>
+    where
+        P: AsRef<std::path::Path>,
     {
         let file: File = File::open(&path)?;
         let map = unsafe { Mmap::map(&file)? };
@@ -83,7 +91,7 @@ impl WzFile {
             patch_version: patch_version.unwrap_or(-1),
             wz_version_header: 0,
             wz_with_encrypt_version_header: true,
-            hash: 0
+            hash: 0,
         };
 
         Ok(WzFile {
@@ -91,10 +99,14 @@ impl WzFile {
             block_size,
             is_parsed: false,
             reader: Arc::new(reader),
-            wz_file_meta
+            wz_file_meta,
         })
     }
-    pub fn parse(&mut self, parent: &WzNodeArc, patch_version: Option<i32>) -> Result<WzNodeArcVec, Error> {
+    pub fn parse(
+        &mut self,
+        parent: &WzNodeArc,
+        patch_version: Option<i32>,
+    ) -> Result<WzNodeArcVec, Error> {
         let reader = self.reader.clone();
 
         let mut wz_file_meta = WzFileMeta {
@@ -102,9 +114,9 @@ impl WzFile {
             patch_version: patch_version.unwrap_or(self.wz_file_meta.patch_version),
             wz_version_header: 0,
             wz_with_encrypt_version_header: true,
-            hash: 0
+            hash: 0,
         };
-        
+
         let slice_reader = reader.create_slice_reader();
 
         let (wz_with_encrypt_version_header, encrypt_version) = check_64bit_client(&slice_reader);
@@ -114,9 +126,9 @@ impl WzFile {
         } else {
             WZ_VERSION_HEADER_64BIT_START as i32
         };
-    
+
         wz_file_meta.wz_with_encrypt_version_header = wz_with_encrypt_version_header;
-    
+
         if wz_file_meta.patch_version == -1 {
             let guess_range: Range<i32> = if wz_with_encrypt_version_header {
                 1..2000
@@ -124,28 +136,42 @@ impl WzFile {
                 /* not hold encver in wz_file, directly try 770 - 780 */
                 WZ_VERSION_HEADER_64BIT_START as i32..WZ_VERSION_HEADER_64BIT_START as i32 + 10
             };
-    
+
             /* there has code in maplelib to detect version from maplestory.exe here */
-    
+
             for ver_to_decode in guess_range {
-                wz_file_meta.hash = check_and_get_version_hash(wz_file_meta.wz_version_header, ver_to_decode) as usize;
-                if let Ok(childs) = self.try_decode_with_wz_version_number(parent, &slice_reader, &wz_file_meta, ver_to_decode) {
+                wz_file_meta.hash =
+                    check_and_get_version_hash(wz_file_meta.wz_version_header, ver_to_decode)
+                        as usize;
+                if let Ok(childs) = self.try_decode_with_wz_version_number(
+                    parent,
+                    &slice_reader,
+                    &wz_file_meta,
+                    ver_to_decode,
+                ) {
                     wz_file_meta.patch_version = ver_to_decode;
                     self.update_wz_file_meta(wz_file_meta);
                     self.is_parsed = true;
                     return Ok(childs);
                 }
             }
-    
+
             return Err(Error::ErrorGameVerHash);
         }
 
-        wz_file_meta.hash = check_and_get_version_hash(wz_file_meta.wz_version_header, wz_file_meta.patch_version) as usize;
+        wz_file_meta.hash =
+            check_and_get_version_hash(wz_file_meta.wz_version_header, wz_file_meta.patch_version)
+                as usize;
 
-        let childs = self.try_decode_with_wz_version_number(parent, &slice_reader, &wz_file_meta, wz_file_meta.patch_version)?;
+        let childs = self.try_decode_with_wz_version_number(
+            parent,
+            &slice_reader,
+            &wz_file_meta,
+            wz_file_meta.patch_version,
+        )?;
         self.update_wz_file_meta(wz_file_meta);
         self.is_parsed = true;
-            
+
         Ok(childs)
     }
 
@@ -154,41 +180,43 @@ impl WzFile {
         parent: &WzNodeArc,
         reader: &WzSliceReader,
         meta: &WzFileMeta,
-        use_maplestory_patch_version: i32
+        use_maplestory_patch_version: i32,
     ) -> Result<WzNodeArcVec, Error> {
         if meta.hash == 0 {
             return Err(Error::ErrorGameVerHash);
         }
 
-        let node = WzDirectory::new(
-                self.offset,
-                self.block_size,
-                &self.reader,
-                false
-            )
+        let node = WzDirectory::new(self.offset, self.block_size, &self.reader, false)
             .with_hash(meta.hash);
 
         node.verify_hash()?;
 
         let childs = node.resolve_children(parent)?;
 
-        let first_image_node = childs.iter().find(|(_, node)| matches!(node.read().unwrap().object_type, WzObjectType::Image(_)));
+        let first_image_node = childs
+            .iter()
+            .find(|(_, node)| matches!(node.read().unwrap().object_type, WzObjectType::Image(_)));
 
         if let Some((name, image_node)) = first_image_node {
-            let offset = if let WzObjectType::Image(node) = &image_node.read().unwrap().object_type {
+            let offset = if let WzObjectType::Image(node) = &image_node.read().unwrap().object_type
+            {
                 node.offset
             } else {
                 return Err(Error::ErrorGameVerHash);
             };
 
-            let check_byte = reader.read_u8_at(offset).map_err(|_| Error::ErrorGameVerHash)?;
+            let check_byte = reader
+                .read_u8_at(offset)
+                .map_err(|_| Error::ErrorGameVerHash)?;
 
             match check_byte {
-                0x73 | 0x1b | 0x01 => {
-                },
+                0x73 | 0x1b | 0x01 => {}
                 _ => {
                     /* 0x30, 0x6C, 0xBC */
-                    println!("UnknownImageHeader: check_byte = {}, File Name = {}", check_byte, name);
+                    println!(
+                        "UnknownImageHeader: check_byte = {}, File Name = {}",
+                        check_byte, name
+                    );
                     return Err(Error::UnknownImageHeader(check_byte, name.to_string()));
                 }
             }
@@ -214,7 +242,7 @@ const WZ_VERSION_HEADER_64BIT_START: u16 = 770;
 
 fn check_64bit_client(wz_reader: &WzSliceReader) -> (bool, u16) {
     let encrypt_version = wz_reader.read_u16_at(wz_reader.header.fstart).unwrap();
-    
+
     if wz_reader.header.fsize >= 2 {
         if encrypt_version > 0xff {
             return (false, 0);
@@ -243,16 +271,16 @@ fn check_and_get_version_hash(encver: i32, patch_version: i32) -> i32 {
         // version_hash * 2^5 + char_code + 1
         version_hash = version_hash * 32 + char_code + 1;
     }
-    
+
     if encver == patch_version {
-        return version_hash
+        return version_hash;
     }
 
-    let enc = 0xff ^
-        (version_hash >> 24) & 0xff ^
-        (version_hash >> 16) & 0xff ^
-        (version_hash >> 8) & 0xff ^
-        version_hash & 0xff;
+    let enc = 0xff
+        ^ (version_hash >> 24) & 0xff
+        ^ (version_hash >> 16) & 0xff
+        ^ (version_hash >> 8) & 0xff
+        ^ version_hash & 0xff;
 
     if enc == encver {
         version_hash

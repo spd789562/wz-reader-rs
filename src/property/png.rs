@@ -1,14 +1,16 @@
-use std::sync::Arc;
-use flate2::{Decompress, FlushDecompress};
-use image::{DynamicImage, ImageBuffer, Rgb, Rgba};
-use thiserror::Error;
-use rayon::prelude::*;
-use crate::{reader, WzNodeArc, WzObjectType, property::WzSubProperty, resolve_inlink, resolve_outlink};
 use crate::property::string::resolve_string_from_node;
 use crate::util::color::{SimpleColor, SimpleColorAlpha};
+use crate::{
+    property::WzSubProperty, reader, resolve_inlink, resolve_outlink, WzNodeArc, WzObjectType,
+};
+use flate2::{Decompress, FlushDecompress};
+use image::{DynamicImage, ImageBuffer, Rgb, Rgba};
+use rayon::prelude::*;
+use std::sync::Arc;
+use thiserror::Error;
 
 #[cfg(feature = "serde")]
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Error)]
 pub enum WzPngParseError {
@@ -20,7 +22,7 @@ pub enum WzPngParseError {
 
     #[error("Unsupported header: {0}")]
     UnsupportedHeader(i32),
-    
+
     #[error("Error reading color: {0}")]
     ReadColorError(#[from] reader::Error),
 
@@ -42,27 +44,27 @@ pub fn get_image(node: &WzNodeArc) -> Result<DynamicImage, WzPngParseError> {
     let node_read = node.read().unwrap();
     match &node_read.object_type {
         WzObjectType::Property(WzSubProperty::PNG(png)) => {
-            let inlink_target = node_read.at("_inlink")
+            let inlink_target = node_read
+                .at("_inlink")
                 .and_then(|node| resolve_string_from_node(&node).ok())
                 .and_then(|inlink| resolve_inlink(&inlink, node));
-            
+
             if let Some(target) = inlink_target {
-                return get_image(&target)
+                return get_image(&target);
             }
 
-            let outlink_target = node_read.at("_outlink")
+            let outlink_target = node_read
+                .at("_outlink")
                 .and_then(|node| resolve_string_from_node(&node).ok())
                 .and_then(|outlink| resolve_outlink(&outlink, node, true));
 
             if let Some(target) = outlink_target {
-                return get_image(&target)
+                return get_image(&target);
             }
 
             png.extract_png()
-        },
-        _ => {
-            Err(WzPngParseError::NotPngProperty)
         }
+        _ => Err(WzPngParseError::NotPngProperty),
     }
 }
 
@@ -87,7 +89,13 @@ pub struct WzPng {
 }
 
 impl WzPng {
-    pub fn new(reader: &Arc<reader::WzReader>, size: (u32, u32), format: (u32, u32), data_range: (usize, usize), header: i32) -> WzPng {
+    pub fn new(
+        reader: &Arc<reader::WzReader>,
+        size: (u32, u32),
+        format: (u32, u32),
+        data_range: (usize, usize),
+        header: i32,
+    ) -> WzPng {
         WzPng {
             reader: Arc::clone(reader),
             offset: data_range.0,
@@ -96,46 +104,37 @@ impl WzPng {
             height: size.1,
             format1: format.0,
             format2: format.1,
-            header
+            header,
         }
     }
     pub fn format(&self) -> u32 {
         self.format1 + self.format2
     }
     fn list_wz_used(&self) -> bool {
-        self.header != 0x9C78 && self.header != 0xDA78 && self.header != 0x0178 && self.header != 0x5E78
+        self.header != 0x9C78
+            && self.header != 0xDA78
+            && self.header != 0x0178
+            && self.header != 0x5E78
     }
     pub fn extract_png(&self) -> Result<DynamicImage, WzPngParseError> {
-        let data = self.reader.get_slice(self.offset..(self.offset + self.block_size));
+        let data = self
+            .reader
+            .get_slice(self.offset..(self.offset + self.block_size));
         /* decompress */
         let pixels = self.get_raw_data(data)?;
 
         match self.format() {
-            1 => {
-                get_image_from_bgra4444(pixels, self.width, self.height)
-            },
-            2 => {
-                get_image_from_bgra8888(pixels, self.width, self.height)
-            },
-            3 | 1026 => {
-                get_image_from_dxt3(&pixels, self.width, self.height)
-            },
-            257 => {
-                get_image_from_argb1555(&pixels, self.width, self.height)
-            },
-            513 => {
-                get_image_from_rgb565(&pixels, self.width, self.height)
-            },
+            1 => get_image_from_bgra4444(pixels, self.width, self.height),
+            2 => get_image_from_bgra8888(pixels, self.width, self.height),
+            3 | 1026 => get_image_from_dxt3(&pixels, self.width, self.height),
+            257 => get_image_from_argb1555(&pixels, self.width, self.height),
+            513 => get_image_from_rgb565(&pixels, self.width, self.height),
             517 => {
                 let decoded = get_pixel_data_form_517(&pixels, self.width, self.height);
                 get_image_from_rgb565(&decoded, self.width, self.height)
-            },
-            2050 => {
-                get_image_from_dxt5(&pixels, self.width, self.height)
             }
-            _ => {
-                Err(WzPngParseError::UnknownFormat(self.format()))
-            }
+            2050 => get_image_from_dxt5(&pixels, self.width, self.height),
+            _ => Err(WzPngParseError::UnknownFormat(self.format())),
         }
     }
     fn get_raw_data(&self, data: &[u8]) -> Result<Vec<u8>, WzPngParseError> {
@@ -147,36 +146,33 @@ impl WzPng {
             1 | 257 | 513 => {
                 let size = (self.width * self.height * 2) as usize;
                 inflate(data, size)
-            },
+            }
             2 => {
                 let size = (self.width * self.height * 4) as usize;
                 inflate(data, size)
-            },
+            }
             3 => {
                 let size = (self.width * self.height * 4) as usize;
                 inflate(data, size)
-            },
+            }
             1026 | 2050 => {
                 let size = (self.width * self.height) as usize;
                 inflate(data, size)
-            },
+            }
             517 => {
                 /* 128 = 16 * 16 / 2 */
                 let size = (self.width * self.height / 128) as usize;
                 inflate(data, size)
-            },
-            _ => {
-                Err(WzPngParseError::UnknownFormat(self.format()))
             }
+            _ => Err(WzPngParseError::UnknownFormat(self.format())),
         }
     }
-
 }
 
 fn inflate(data: &[u8], capacity: usize) -> Result<Vec<u8>, WzPngParseError> {
     let mut deflater = Decompress::new(true);
     let mut result = Vec::with_capacity(capacity);
-    
+
     if let Err(e) = deflater.decompress_vec(data, &mut result, FlushDecompress::Sync) {
         return Err(WzPngParseError::from(e));
     };
@@ -184,7 +180,11 @@ fn inflate(data: &[u8], capacity: usize) -> Result<Vec<u8>, WzPngParseError> {
     Ok(result)
 }
 
-fn get_image_from_bgra4444(raw_data: Vec<u8>, width: u32, height: u32) -> Result<DynamicImage, WzPngParseError> {
+fn get_image_from_bgra4444(
+    raw_data: Vec<u8>,
+    width: u32,
+    height: u32,
+) -> Result<DynamicImage, WzPngParseError> {
     let imgbuffer = image::ImageBuffer::from_par_fn(width, height, |x, y| {
         let i = (x + y * width) as usize * 2;
         let pixel = raw_data[i];
@@ -209,32 +209,43 @@ fn get_image_from_bgra4444(raw_data: Vec<u8>, width: u32, height: u32) -> Result
     Ok(imgbuffer.into())
 }
 
-fn get_image_from_dxt3(raw_data: &[u8], width: u32, height: u32) -> Result<DynamicImage, WzPngParseError> {
+fn get_image_from_dxt3(
+    raw_data: &[u8],
+    width: u32,
+    height: u32,
+) -> Result<DynamicImage, WzPngParseError> {
     let image_buffer_chunks = raw_data
         .par_chunks(16)
-        .try_fold_with::<_, Vec<ImageBufferRgbaChunk>, Result<_, WzPngParseError>>(Vec::new(), |mut v, chunk| {
-            let alpha_table = create_alpha_table_dxt3(chunk, 0);
+        .try_fold_with::<_, Vec<ImageBufferRgbaChunk>, Result<_, WzPngParseError>>(
+            Vec::new(),
+            |mut v, chunk| {
+                let alpha_table = create_alpha_table_dxt3(chunk, 0);
 
-            let u0: u16 = reader::read_u16_at(chunk, 8)?;
-            let u1: u16 = reader::read_u16_at(chunk, 10)?;
+                let u0: u16 = reader::read_u16_at(chunk, 8)?;
+                let u1: u16 = reader::read_u16_at(chunk, 10)?;
 
-            let color_table = create_color_table(u0, u1);
-            let color_idx_table = create_color_index_table(chunk, 12);
+                let color_table = create_color_table(u0, u1);
+                let color_idx_table = create_color_index_table(chunk, 12);
 
-            let mut img_buffer = image::ImageBuffer::new(4, 4);
-            for y in 0..4 {
-                for x in 0..4 {
-                    let idx = (y * 4 + x) as usize;
-                    let color_idx = color_idx_table[idx] as usize;
-                    let color = color_table[color_idx];
-                    let alpha = alpha_table[idx];
+                let mut img_buffer = image::ImageBuffer::new(4, 4);
+                for y in 0..4 {
+                    for x in 0..4 {
+                        let idx = (y * 4 + x) as usize;
+                        let color_idx = color_idx_table[idx] as usize;
+                        let color = color_table[color_idx];
+                        let alpha = alpha_table[idx];
 
-                    img_buffer.put_pixel(x, y, image::Rgba([color.r(), color.g(), color.b(), alpha]));
+                        img_buffer.put_pixel(
+                            x,
+                            y,
+                            image::Rgba([color.r(), color.g(), color.b(), alpha]),
+                        );
+                    }
                 }
-            }
-            v.push(img_buffer);
-            Ok(v)
-        })
+                v.push(img_buffer);
+                Ok(v)
+            },
+        )
         .try_reduce(Vec::new, |mut acc, v| {
             acc.extend(v);
             Ok(acc)
@@ -249,34 +260,45 @@ fn get_image_from_dxt3(raw_data: &[u8], width: u32, height: u32) -> Result<Dynam
     Ok(img_buffer.into())
 }
 
-fn get_image_from_dxt5(raw_data: &[u8], width: u32, height: u32) -> Result<DynamicImage, WzPngParseError> {
+fn get_image_from_dxt5(
+    raw_data: &[u8],
+    width: u32,
+    height: u32,
+) -> Result<DynamicImage, WzPngParseError> {
     let image_buffer_chunks = raw_data
         .par_chunks(16)
-        .try_fold_with::<_, Vec<ImageBufferRgbaChunk>, Result<_, WzPngParseError>>(Vec::new(), |mut v, chunk| {
-            let alpha_table = create_alpha_table_dxt5(chunk[0], chunk[1]);
-            let alpha_idx_table = create_alpha_index_table_dxt5(chunk, 2);
+        .try_fold_with::<_, Vec<ImageBufferRgbaChunk>, Result<_, WzPngParseError>>(
+            Vec::new(),
+            |mut v, chunk| {
+                let alpha_table = create_alpha_table_dxt5(chunk[0], chunk[1]);
+                let alpha_idx_table = create_alpha_index_table_dxt5(chunk, 2);
 
-            let u0: u16 = reader::read_u16_at(chunk, 8)?;
-            let u1: u16 = reader::read_u16_at(chunk, 10)?;
+                let u0: u16 = reader::read_u16_at(chunk, 8)?;
+                let u1: u16 = reader::read_u16_at(chunk, 10)?;
 
-            let color_table = create_color_table(u0, u1);
-            let color_idx_table = create_color_index_table(chunk, 12);
+                let color_table = create_color_table(u0, u1);
+                let color_idx_table = create_color_index_table(chunk, 12);
 
-            let mut img_buffer = image::ImageBuffer::new(4, 4);
-            for y in 0..4 {
-                for x in 0..4 {
-                    let idx = (y * 4 + x) as usize;
-                    let color_idx = color_idx_table[idx] as usize;
-                    let color = color_table[color_idx];
-                    let alpha_idx = alpha_idx_table[idx] as usize;
-                    let alpha = alpha_table[alpha_idx];
+                let mut img_buffer = image::ImageBuffer::new(4, 4);
+                for y in 0..4 {
+                    for x in 0..4 {
+                        let idx = (y * 4 + x) as usize;
+                        let color_idx = color_idx_table[idx] as usize;
+                        let color = color_table[color_idx];
+                        let alpha_idx = alpha_idx_table[idx] as usize;
+                        let alpha = alpha_table[alpha_idx];
 
-                    img_buffer.put_pixel(x, y, image::Rgba([color.r(), color.g(), color.b(), alpha]));
+                        img_buffer.put_pixel(
+                            x,
+                            y,
+                            image::Rgba([color.r(), color.g(), color.b(), alpha]),
+                        );
+                    }
                 }
-            }
-            v.push(img_buffer);
-            Ok(v)
-        })
+                v.push(img_buffer);
+                Ok(v)
+            },
+        )
         .try_reduce(Vec::new, |mut acc, v| {
             acc.extend(v);
             Ok(acc)
@@ -301,7 +323,7 @@ fn get_pixel_data_form_517(raw_data: &[u8], width: u32, height: u32) -> Vec<u8> 
         let mut dst_idx = line_index;
         for i in 0..i_steps {
             let idx = (i + j * i_steps) * 2;
-            
+
             for _ in 0..16 {
                 pixels[dst_idx] = raw_data[idx];
                 dst_idx += 1;
@@ -309,7 +331,7 @@ fn get_pixel_data_form_517(raw_data: &[u8], width: u32, height: u32) -> Vec<u8> 
                 dst_idx += 1;
             }
         }
-        // dst_idx totally add (width / 16) * 2 * 16 => width * 2 here 
+        // dst_idx totally add (width / 16) * 2 * 16 => width * 2 here
 
         // copy data from previous loop to next 16 chunks
         // don't know why it start from 1, and plus 32(16*2) later.
@@ -327,7 +349,6 @@ fn get_pixel_data_form_517(raw_data: &[u8], width: u32, height: u32) -> Vec<u8> 
     }
 
     pixels
-
 }
 
 fn create_color_table(c0: u16, c1: u16) -> [Rgb<u8>; 4] {
@@ -403,7 +424,7 @@ fn expand_color_table(color_table: &mut [Rgb<u8>; 4], c0: u16, c1: u16) {
 
 fn create_color_index_table(raw_data: &[u8], offset: usize) -> [u8; 16] {
     let mut color_index_table = [0u8; 16];
-    
+
     exnand_color_index_table(&mut color_index_table, raw_data, offset);
 
     color_index_table
@@ -444,7 +465,7 @@ fn expand_alpha_table_dxt3(alpha_table: &mut [u8; 16], raw_data: &[u8], offset: 
 
 fn create_alpha_table_dxt5(a0: u8, a1: u8) -> [u8; 16] {
     let mut alpha_table = [0u8; 16];
-    
+
     expand_alpha_table_dxt5(&mut alpha_table, a0, a1);
 
     alpha_table
@@ -468,7 +489,7 @@ fn expand_alpha_table_dxt5(alpha_table: &mut [u8; 16], a0: u8, a1: u8) {
 
 fn create_alpha_index_table_dxt5(raw_data: &[u8], offset: usize) -> [u8; 16] {
     let mut alpha_index_table = [0u8; 16];
-    
+
     expand_alpha_index_table_dxt5(&mut alpha_index_table, raw_data, offset);
 
     alpha_index_table
@@ -477,31 +498,39 @@ fn create_alpha_index_table_dxt5(raw_data: &[u8], offset: usize) -> [u8; 16] {
 fn expand_alpha_index_table_dxt5(alpha_index_table: &mut [u8; 16], raw_data: &[u8], offset: usize) {
     for i in 0..2 {
         let local_offset = offset + i * 3;
-        let flags = (raw_data[local_offset] as u32) | 
-            ((raw_data[local_offset + 1] as u32) << 8) | 
-            ((raw_data[local_offset + 2] as u32) << 16);
+        let flags = (raw_data[local_offset] as u32)
+            | ((raw_data[local_offset + 1] as u32) << 8)
+            | ((raw_data[local_offset + 2] as u32) << 16);
         for j in 0..8 {
             let mask = (7 << (3 * j)) as u32;
-            alpha_index_table[(i * 8)+j] = ((flags & mask) >> (3 * j)) as u8;
+            alpha_index_table[(i * 8) + j] = ((flags & mask) >> (3 * j)) as u8;
         }
     }
 }
 
-fn get_image_from_bgra8888(raw_data: Vec<u8>, width: u32, height: u32) -> Result<DynamicImage, WzPngParseError> {
+fn get_image_from_bgra8888(
+    raw_data: Vec<u8>,
+    width: u32,
+    height: u32,
+) -> Result<DynamicImage, WzPngParseError> {
     let img_buffer = image::ImageBuffer::from_par_fn(width, height, |x, y| {
         let i = (x + y * width) as usize * 4;
         image::Rgba([
             raw_data[i + 2],
             raw_data[i + 1],
             raw_data[i],
-            raw_data[i + 3]
+            raw_data[i + 3],
         ])
     });
 
     Ok(img_buffer.into())
 }
 
-fn get_image_from_rgb565(raw_data: &[u8], width: u32, height: u32) -> Result<DynamicImage, WzPngParseError> {
+fn get_image_from_rgb565(
+    raw_data: &[u8],
+    width: u32,
+    height: u32,
+) -> Result<DynamicImage, WzPngParseError> {
     let mut img_buffer: ImageBufferRgbChunk = image::ImageBuffer::new(width, height);
     img_buffer
         .enumerate_pixels_mut()
@@ -515,7 +544,11 @@ fn get_image_from_rgb565(raw_data: &[u8], width: u32, height: u32) -> Result<Dyn
     Ok(img_buffer.into())
 }
 
-fn get_image_from_argb1555(raw_data: &[u8], width: u32, height: u32) -> Result<DynamicImage, WzPngParseError> {
+fn get_image_from_argb1555(
+    raw_data: &[u8],
+    width: u32,
+    height: u32,
+) -> Result<DynamicImage, WzPngParseError> {
     let mut img_buffer: ImageBufferRgbaChunk = image::ImageBuffer::new(width, height);
     img_buffer
         .enumerate_pixels_mut()

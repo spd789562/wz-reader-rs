@@ -1,10 +1,10 @@
-use std::sync::Arc;
-use std::ops::Deref;
-use std::fmt::Display;
 use hashbrown::Equivalent;
+use std::fmt::Display;
+use std::ops::Deref;
+use std::sync::Arc;
 
 #[cfg(feature = "serde")]
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 /// A wrapper around `Arc<str>` use for WzNode's name and hashmap key.
 #[cfg_attr(feature = "serde", derive(Deserialize))]

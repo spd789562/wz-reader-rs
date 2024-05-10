@@ -1,15 +1,22 @@
 use axum::{
-    extract::{State, Path, Query}, 
-    http::{header, StatusCode}, 
-    response::{Html, IntoResponse, Response}, 
-    routing::{get, post}, Json, Router, body::Body
+    body::Body,
+    extract::{Path, Query, State},
+    http::{header, StatusCode},
+    response::{Html, IntoResponse, Response},
+    routing::{get, post},
+    Json, Router,
 };
-use std::io::{BufWriter, Cursor};
-use std::sync::{Arc, RwLock, Mutex};
+use image::ImageFormat;
 use serde::Deserialize;
 use serde_json::Value;
-use wz_reader::{WzNodeArc, WzNodeCast, WzNodeName, node, util::{resolve_base, walk_node}, version::WzMapleVersion, property};
-use image::ImageFormat;
+use std::io::{BufWriter, Cursor};
+use std::sync::{Arc, Mutex, RwLock};
+use wz_reader::{
+    node, property,
+    util::{resolve_base, walk_node},
+    version::WzMapleVersion,
+    WzNodeArc, WzNodeCast, WzNodeName,
+};
 
 #[derive(Clone)]
 pub struct ServerState {
@@ -75,18 +82,22 @@ enum InitWzError {
 impl IntoResponse for InitWzError {
     fn into_response(self) -> Response {
         match self {
-            InitWzError::MissingParam => {
-                Response::builder().status(StatusCode::BAD_REQUEST).body("should passing path and version".into()).unwrap()
-            }
-            InitWzError::ParseError => {
-                Response::builder().status(StatusCode::BAD_REQUEST).body("wz parse error".into()).unwrap()
-            }
-            InitWzError::VersionError => {
-                Response::builder().status(StatusCode::BAD_REQUEST).body("passing wrong wz version".into()).unwrap()
-            }
-            InitWzError::IoError => {
-                Response::builder().status(StatusCode::INTERNAL_SERVER_ERROR).body("file error".into()).unwrap()
-            }
+            InitWzError::MissingParam => Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .body("should passing path and version".into())
+                .unwrap(),
+            InitWzError::ParseError => Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .body("wz parse error".into())
+                .unwrap(),
+            InitWzError::VersionError => Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .body("passing wrong wz version".into())
+                .unwrap(),
+            InitWzError::IoError => Response::builder()
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .body("file error".into())
+                .unwrap(),
         }
     }
 }
@@ -125,7 +136,6 @@ async fn init_wz_root(
     return Ok(StatusCode::OK);
 }
 
-
 #[derive(Debug)]
 enum NodeFindError {
     Uninitialized,
@@ -137,18 +147,20 @@ enum NodeFindError {
 impl IntoResponse for NodeFindError {
     fn into_response(self) -> Response {
         match self {
-            NodeFindError::Uninitialized => {
-                (StatusCode::BAD_REQUEST, "wz uninitialized, please do `/init_wz_root` first").into_response()
-            }
-            NodeFindError::NotFound => {
-                (StatusCode::NOT_FOUND, "node not found").into_response()
-            }
+            NodeFindError::Uninitialized => (
+                StatusCode::BAD_REQUEST,
+                "wz uninitialized, please do `/init_wz_root` first",
+            )
+                .into_response(),
+            NodeFindError::NotFound => (StatusCode::NOT_FOUND, "node not found").into_response(),
             NodeFindError::TypeMismatch => {
                 (StatusCode::BAD_REQUEST, "node type can't use on this route").into_response()
-            },
-            NodeFindError::ServerError => {
-                (StatusCode::INTERNAL_SERVER_ERROR, "something wrong when parsing data").into_response()
-            },
+            }
+            NodeFindError::ServerError => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "something wrong when parsing data",
+            )
+                .into_response(),
             NodeFindError::ParseError => {
                 (StatusCode::BAD_REQUEST, "node parse error").into_response()
             }
@@ -164,7 +176,11 @@ impl From<node::Error> for NodeFindError {
     }
 }
 
-fn get_node_from_root(root: Arc<RwLock<Option<WzNodeArc>>>, path: &str, force_parse: bool) -> Result<WzNodeArc, NodeFindError> {
+fn get_node_from_root(
+    root: Arc<RwLock<Option<WzNodeArc>>>,
+    path: &str,
+    force_parse: bool,
+) -> Result<WzNodeArc, NodeFindError> {
     let wz_root = root.read().unwrap();
 
     if wz_root.is_none() {
@@ -172,7 +188,6 @@ fn get_node_from_root(root: Arc<RwLock<Option<WzNodeArc>>>, path: &str, force_pa
     }
 
     let wz_root = wz_root.as_ref().unwrap();
-
 
     if path.is_empty() {
         return Ok(wz_root.clone());
@@ -220,7 +235,11 @@ async fn get_json(
 
     let json = json.map_err(|_| NodeFindError::ServerError)?;
 
-    Ok((StatusCode::OK, [(header::CONTENT_TYPE, "application/json;charset=utf-8")], Body::from(json.to_string())))
+    Ok((
+        StatusCode::OK,
+        [(header::CONTENT_TYPE, "application/json;charset=utf-8")],
+        Body::from(json.to_string()),
+    ))
 }
 
 /* grabe image part */
@@ -235,13 +254,14 @@ async fn get_image(
     let target = get_node_from_root(wz_root, &path, force_parse)?;
 
     let target_read = target.read().unwrap();
-    
+
     if let Some(_) = target_read.try_as_png() {
         let img = property::get_image(&target).map_err(|_| NodeFindError::ServerError)?;
 
         let mut buf = BufWriter::new(Cursor::new(Vec::new()));
         // maybe use ImageFormat::Webp is better it quicker and smaller.
-        img.write_to(&mut buf, ImageFormat::Bmp).map_err(|_| NodeFindError::ServerError)?;
+        img.write_to(&mut buf, ImageFormat::Bmp)
+            .map_err(|_| NodeFindError::ServerError)?;
 
         let body = Body::from(buf.into_inner().unwrap().into_inner());
 
@@ -251,7 +271,7 @@ async fn get_image(
             .header(header::CACHE_CONTROL, "max-age=3600")
             .body(body)
             .map_err(|_| NodeFindError::ServerError);
-    } 
+    }
 
     return Err(NodeFindError::TypeMismatch);
 }
@@ -268,7 +288,7 @@ async fn get_image_urls(
     let target = get_node_from_root(wz_root, &path, force_parse)?;
 
     let urls = Mutex::new(Vec::new());
-    
+
     walk_node(&target, force_parse, &|node| {
         let node_read = node.read().unwrap();
         if let Some(_) = node_read.try_as_png() {
@@ -279,10 +299,14 @@ async fn get_image_urls(
     });
 
     let urls = urls.into_inner().unwrap();
-    
+
     let json = serde_json::to_string(&urls).unwrap();
 
-    Ok((StatusCode::OK, [(header::CONTENT_TYPE, "application/json;charset=utf-8")], Body::from(json)))
+    Ok((
+        StatusCode::OK,
+        [(header::CONTENT_TYPE, "application/json;charset=utf-8")],
+        Body::from(json),
+    ))
 }
 
 /* grabe sound part */
@@ -297,7 +321,7 @@ async fn get_sound(
     let target = get_node_from_root(wz_root, &path, force_parse)?;
 
     let target_read = target.read().unwrap();
-    
+
     if let Some(sound) = target_read.try_as_sound() {
         let sound_buf = sound.get_buffer();
 
@@ -311,19 +335,25 @@ async fn get_sound(
             .header(header::CONTENT_TYPE, mini)
             .body::<Body>(sound_buf.into())
             .map_err(|_| NodeFindError::ServerError);
-    } 
+    }
 
     return Err(NodeFindError::TypeMismatch);
 }
 
 /* browse part */
 /// generate various links for a node in <li><a /></li>
-fn make_simple_browse_node_link(node: &WzNodeArc, force_parse: bool, name: Option<&str>) -> Result<String, NodeFindError> {
+fn make_simple_browse_node_link(
+    node: &WzNodeArc,
+    force_parse: bool,
+    name: Option<&str>,
+) -> Result<String, NodeFindError> {
     let node = node.read().unwrap();
     let mut url = node.get_path_from_root();
-    
+
     if let Some(uol_string) = node.try_as_uol() {
-        let mut uol_target_path = uol_string.get_string().map_err(|_| NodeFindError::ServerError)?;
+        let mut uol_target_path = uol_string
+            .get_string()
+            .map_err(|_| NodeFindError::ServerError)?;
         uol_target_path.insert_str(0, "../");
         let uol_target = node.at_path_relative(&uol_target_path);
         if let Some(uol_target) = uol_target {
@@ -344,18 +374,31 @@ fn make_simple_browse_node_link(node: &WzNodeArc, force_parse: bool, name: Optio
     let mut extra_link = String::new();
 
     if node.try_as_png().is_some() {
-        extra_link.push_str(&format!("<a href=\"/get_image{}\" target=\"_blank\">(image)</a>", url));
+        extra_link.push_str(&format!(
+            "<a href=\"/get_image{}\" target=\"_blank\">(image)</a>",
+            url
+        ));
     } else if node.try_as_sound().is_some() {
-        extra_link.push_str(&format!("<a href=\"/get_sound{}\" target=\"_blank\">(sound)</a>", url));
+        extra_link.push_str(&format!(
+            "<a href=\"/get_sound{}\" target=\"_blank\">(sound)</a>",
+            url
+        ));
     } else if node.try_as_uol().is_some() {
         extra_link.push_str("(uol link)");
     }
 
-    Ok(format!("<li><a href=\"/browse{}\">{}</a>{}</li>", url, name, extra_link))
+    Ok(format!(
+        "<li><a href=\"/browse{}\">{}</a>{}</li>",
+        url, name, extra_link
+    ))
 }
 
 /// generate a list of childrens of a node in <ul></ul>
-fn make_node_children_ul(node: &WzNodeArc, sort: bool, force_parse: bool) -> Result<String, NodeFindError> {
+fn make_node_children_ul(
+    node: &WzNodeArc,
+    sort: bool,
+    force_parse: bool,
+) -> Result<String, NodeFindError> {
     let node_read = node.read().unwrap();
     let mut name_and_urls: Vec<(WzNodeName, String)> = vec![];
 
@@ -373,13 +416,16 @@ fn make_node_children_ul(node: &WzNodeArc, sort: bool, force_parse: bool) -> Res
     let mut result_string = String::new();
 
     if let Some(parent) = node_read.parent.upgrade() {
-        result_string.push_str(&make_simple_browse_node_link(&parent, force_parse, Some(".."))?);
+        result_string.push_str(&make_simple_browse_node_link(
+            &parent,
+            force_parse,
+            Some(".."),
+        )?);
     }
 
     for (_, html) in name_and_urls {
         result_string.push_str(&html);
     }
-
 
     Ok(format!("<ul>{}</ul>", result_string))
 }
@@ -395,7 +441,11 @@ async fn simple_browse_root(
 
     let result_ul = make_node_children_ul(&target, need_sort, force_parse)?;
 
-    Ok((StatusCode::OK, [(header::CONTENT_TYPE, "text/html;charset=utf-8")], Body::from(result_ul)))
+    Ok((
+        StatusCode::OK,
+        [(header::CONTENT_TYPE, "text/html;charset=utf-8")],
+        Body::from(result_ul),
+    ))
 }
 
 async fn simple_browse(
@@ -410,10 +460,13 @@ async fn simple_browse(
     let target = get_node_from_root(wz_root, &path, force_parse)?;
 
     let target_read = target.read().unwrap();
-    
+
     let mut result_string = String::new();
 
-    result_string.push_str(&format!("<h2>Node Info:</h2><pre>{}</pre>", serde_json::to_string(&target_read.object_type).map_err(|_| NodeFindError::ServerError)?));
+    result_string.push_str(&format!(
+        "<h2>Node Info:</h2><pre>{}</pre>",
+        serde_json::to_string(&target_read.object_type).map_err(|_| NodeFindError::ServerError)?
+    ));
 
     if target_read.children.is_empty() {
         let value = target_read.to_simple_json().unwrap().to_string();
@@ -423,10 +476,15 @@ async fn simple_browse(
             match node::resolve_inlink(&value, &target) {
                 Some(v) => {
                     let link_dest = v.read().unwrap().get_full_path();
-                    result_string.push_str(&make_simple_browse_node_link(&v, force_parse, Some(&link_dest))?);
-                },
+                    result_string.push_str(&make_simple_browse_node_link(
+                        &v,
+                        force_parse,
+                        Some(&link_dest),
+                    )?);
+                }
                 None => {
-                    result_string.push_str(&format!("can't not resolve _inlink <pre>{}</pre>", &value));
+                    result_string
+                        .push_str(&format!("can't not resolve _inlink <pre>{}</pre>", &value));
                 }
             }
         } else if target_read.name.as_str() == "_outlink" {
@@ -434,21 +492,38 @@ async fn simple_browse(
             match node::resolve_outlink(&value, &target, true) {
                 Some(v) => {
                     let link_dest = v.read().unwrap().get_full_path();
-                    result_string.push_str(&make_simple_browse_node_link(&v, force_parse, Some(&link_dest))?);
-                },
+                    result_string.push_str(&make_simple_browse_node_link(
+                        &v,
+                        force_parse,
+                        Some(&link_dest),
+                    )?);
+                }
                 None => {
-                    result_string.push_str(&format!("can't not resolve _outlink <pre>{}</pre>", &value));
+                    result_string
+                        .push_str(&format!("can't not resolve _outlink <pre>{}</pre>", &value));
                 }
             }
-        }else if target_read.name.ends_with(".json") {
+        } else if target_read.name.ends_with(".json") {
             let content = target_read.try_as_string().unwrap().get_string().unwrap();
-            return Ok((StatusCode::OK, [(header::CONTENT_TYPE, "application/json;charset=utf-8")], Body::from(content)));
+            return Ok((
+                StatusCode::OK,
+                [(header::CONTENT_TYPE, "application/json;charset=utf-8")],
+                Body::from(content),
+            ));
         } else if target_read.name.ends_with(".atlas") {
             let content = target_read.try_as_string().unwrap().get_string().unwrap();
-            return Ok((StatusCode::OK, [(header::CONTENT_TYPE, "text/plain;charset=utf-8")], Body::from(content)));
+            return Ok((
+                StatusCode::OK,
+                [(header::CONTENT_TYPE, "text/plain;charset=utf-8")],
+                Body::from(content),
+            ));
         } else if let Some(lua) = target_read.try_as_lua() {
             let content = lua.extract_lua().map_err(|_| NodeFindError::ServerError)?;
-            return Ok((StatusCode::OK, [(header::CONTENT_TYPE, "text/plain;charset=utf-8")], Body::from(content)));
+            return Ok((
+                StatusCode::OK,
+                [(header::CONTENT_TYPE, "text/plain;charset=utf-8")],
+                Body::from(content),
+            ));
         } else {
             result_string.push_str(&format!("<pre>{}</pre>", &value));
         }
@@ -456,5 +531,9 @@ async fn simple_browse(
         result_string.push_str(&make_node_children_ul(&target, need_sort, force_parse)?);
     }
 
-    Ok((StatusCode::OK, [(header::CONTENT_TYPE, "text/html;charset=utf-8")], Body::from(result_string)))
+    Ok((
+        StatusCode::OK,
+        [(header::CONTENT_TYPE, "text/html;charset=utf-8")],
+        Body::from(result_string),
+    ))
 }

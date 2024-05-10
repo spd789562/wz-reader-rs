@@ -1,14 +1,16 @@
-use crate::property::{WzValue, WzSubProperty, WzSound, WzPng, WzString, WzLua, WzRawData, Vector2D};
-use crate::{ WzDirectory, WzNode, WzFile, WzImage, WzObjectType};
+use crate::property::{
+    Vector2D, WzLua, WzPng, WzRawData, WzSound, WzString, WzSubProperty, WzValue,
+};
+use crate::{WzDirectory, WzFile, WzImage, WzNode, WzObjectType};
 
 /// Trait for casting `WzNode` to its inner type.
-/// 
+///
 /// # Example
-/// 
+///
 /// ```
 /// # use wz_reader::{WzNode, WzNodeCast};
 /// let wz_int = WzNode::from_str("test", 1, None);
-/// 
+///
 /// assert!(wz_int.try_as_int().is_some());
 /// assert!(wz_int.try_as_file().is_none());
 /// ```
@@ -82,17 +84,23 @@ impl WzNodeCast for WzNode {
     }
     fn try_as_string(&self) -> Option<&WzString> {
         match &self.object_type {
-            WzObjectType::Value(WzValue::String(string)) |
-            WzObjectType::Value(WzValue::UOL(string)) => Some(string),
+            WzObjectType::Value(WzValue::String(string))
+            | WzObjectType::Value(WzValue::UOL(string)) => Some(string),
             _ => None,
         }
     }
-    
+
     fn is_sub_property(&self) -> bool {
-        matches!(&self.object_type, WzObjectType::Property(WzSubProperty::Property))
+        matches!(
+            &self.object_type,
+            WzObjectType::Property(WzSubProperty::Property)
+        )
     }
     fn is_convex(&self) -> bool {
-        matches!(&self.object_type, WzObjectType::Property(WzSubProperty::Convex))
+        matches!(
+            &self.object_type,
+            WzObjectType::Property(WzSubProperty::Convex)
+        )
     }
 
     try_as_wz_value!(try_as_lua, Lua, WzLua);
@@ -109,10 +117,10 @@ impl WzNodeCast for WzNode {
 
 #[cfg(test)]
 mod test {
-    
+
     use super::*;
-    use crate::WzReader;
     use crate::property::{WzSoundType, WzStringMeta};
+    use crate::WzReader;
     use memmap2::Mmap;
     use std::fs::OpenOptions;
     use std::sync::Arc;
@@ -159,7 +167,7 @@ mod test {
         assert!(node.try_as_directory().is_some());
         assert!(node.try_as_file().is_none());
     }
-    
+
     #[test]
     fn try_as_image() {
         let reader = Arc::new(setup_wz_reader().unwrap());
@@ -172,7 +180,11 @@ mod test {
 
     #[test]
     fn try_as_sub_property() {
-        let node = WzNode::from_str("test", WzObjectType::Property(WzSubProperty::Property), None);
+        let node = WzNode::from_str(
+            "test",
+            WzObjectType::Property(WzSubProperty::Property),
+            None,
+        );
 
         assert!(node.try_as_sub_property().is_some());
         assert!(node.try_as_file().is_none());
@@ -235,7 +247,11 @@ mod test {
 
     #[test]
     fn is_sub_property() {
-        let node = WzNode::from_str("test", WzObjectType::Property(WzSubProperty::Property), None);
+        let node = WzNode::from_str(
+            "test",
+            WzObjectType::Property(WzSubProperty::Property),
+            None,
+        );
 
         assert!(node.is_sub_property());
         assert!(!node.is_convex());

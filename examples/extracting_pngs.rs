@@ -1,6 +1,6 @@
-use wz_reader::{WzNode, WzNodeArc, WzNodeCast};
 use wz_reader::property::get_image;
 use wz_reader::util::{resolve_base, resolve_root_wz_file_dir, walk_node};
+use wz_reader::{WzNode, WzNodeArc, WzNodeCast};
 
 fn main() {
     let save_image_fn = |node: &WzNodeArc| {
@@ -13,9 +13,16 @@ fn main() {
             image.save(format!("./images/{save_name}.png")).unwrap();
         }
     };
-    
+
     /* resolve single wz file */
-    let node: WzNodeArc = WzNode::from_wz_file(r"D:\MapleStory\Data\Npc\_Canvas\_Canvas000.wz", None, None, None).unwrap().into();
+    let node: WzNodeArc = WzNode::from_wz_file(
+        r"D:\MapleStory\Data\Npc\_Canvas\_Canvas000.wz",
+        None,
+        None,
+        None,
+    )
+    .unwrap()
+    .into();
 
     walk_node(&node, true, &save_image_fn);
 
@@ -26,7 +33,13 @@ fn main() {
     walk_node(&base_node, true, &save_image_fn);
 
     /* resolve whole wz folder */
-    let root_node = resolve_root_wz_file_dir(r"D:\MapleStory\Data\Npc\_Canvas\_Canvas.wz", None, None, None).unwrap();
+    let root_node = resolve_root_wz_file_dir(
+        r"D:\MapleStory\Data\Npc\_Canvas\_Canvas.wz",
+        None,
+        None,
+        None,
+    )
+    .unwrap();
 
     walk_node(&root_node, true, &save_image_fn);
 }

@@ -1,10 +1,10 @@
-use wz_reader::util::{resolve_base, walk_node};
-use wz_reader::WzNodeCast;
-use wz_reader::version::WzMapleVersion;
 use std::fs::File;
 use std::io::Write;
+use wz_reader::util::{resolve_base, walk_node};
+use wz_reader::version::WzMapleVersion;
+use wz_reader::WzNodeCast;
 
-// usage: 
+// usage:
 //   cargo run --example extracting_lua -- "path/to/Base.wz" "output"
 //   cargo run --example extracting_lua -- "D:\Path\To\Base.wz" "./output"
 fn main() {
@@ -12,10 +12,14 @@ fn main() {
     let base_path = args.get(1).expect("missing base path");
     let out_path = args.get(2).expect("missing target name");
     let base_node = resolve_base(&base_path, Some(WzMapleVersion::BMS)).unwrap();
-    
+
     let start = std::time::Instant::now();
 
-    let script_node = base_node.read().unwrap().at_path("Etc/Script").expect("script node not found");
+    let script_node = base_node
+        .read()
+        .unwrap()
+        .at_path("Etc/Script")
+        .expect("script node not found");
 
     walk_node(&script_node, true, &|node| {
         let node = node.read().unwrap();

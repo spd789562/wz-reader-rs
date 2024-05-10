@@ -1,10 +1,9 @@
+use crate::{reader, Reader, WzNodeArc, WzNodeCast, WzReader};
 use std::sync::Arc;
-use crate::{WzReader, Reader, WzNodeArc, WzNodeCast, reader};
 use thiserror::Error;
 
 #[cfg(feature = "serde")]
-use serde::{Serialize, Deserialize};
-
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Error)]
 pub enum WzStringParseError {
@@ -119,17 +118,20 @@ impl WzString {
     }
     /// Decode string from wz file.
     pub fn get_string(&self) -> Result<String, WzStringParseError> {
-        self.reader.resolve_wz_string_meta(&self.string_type, self.offset, self.length as usize).map_err(WzStringParseError::from)
+        self.reader
+            .resolve_wz_string_meta(&self.string_type, self.offset, self.length as usize)
+            .map_err(WzStringParseError::from)
     }
 }
 
 /// A helper function to resolve string from `WzNodeArc`.
 pub fn resolve_string_from_node(node: &WzNodeArc) -> Result<String, WzStringParseError> {
-    node.read().unwrap().try_as_string()
+    node.read()
+        .unwrap()
+        .try_as_string()
         .ok_or(WzStringParseError::NotStringProperty)
         .and_then(|string| string.get_string())
 }
-
 
 #[cfg(feature = "serde")]
 impl Serialize for WzString {
@@ -143,7 +145,7 @@ impl Serialize for WzString {
     }
 }
 #[cfg(feature = "serde")]
-use serde::de::{self, Visitor, Deserializer};
+use serde::de::{self, Deserializer, Visitor};
 #[cfg(feature = "serde")]
 impl<'de> Deserialize<'de> for WzString {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -167,7 +169,6 @@ impl<'de> Deserialize<'de> for WzString {
             }
         }
 
-
         deserializer.deserialize_str(StringVisitor)
     }
 }
@@ -186,7 +187,7 @@ mod test {
         let encrypted = encrypter_reader.encrypt_str("test", &WzStringType::Ascii);
 
         let reader = WzReader::from_buff(&encrypted);
-        
+
         let string = WzString::from_meta(WzStringMeta::new_ascii(0, 4), &Arc::new(reader));
 
         let json = serde_json::to_string(&string).unwrap();
@@ -204,7 +205,7 @@ mod test {
         let encrypted = encrypter_reader.encrypt_str("測試", &WzStringType::Unicode);
 
         let reader = WzReader::from_buff(&encrypted);
-        
+
         let string = WzString::from_meta(WzStringMeta::new_unicode(0, 4), &Arc::new(reader));
 
         let json = serde_json::to_string(&string).unwrap();

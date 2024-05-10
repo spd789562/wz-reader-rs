@@ -26,10 +26,15 @@ pub fn walk_node(node: &WzNodeArc, force_parse: bool, f: &dyn Fn(&WzNodeArc)) {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{WzObjectType, WzNode, property::WzSubProperty};
+    use crate::{property::WzSubProperty, WzNode, WzObjectType};
 
     fn generate_mock_node() -> WzNodeArc {
-        let root = WzNode::from_str("root", WzObjectType::Property(WzSubProperty::Property), None).into_lock();
+        let root = WzNode::from_str(
+            "root",
+            WzObjectType::Property(WzSubProperty::Property),
+            None,
+        )
+        .into_lock();
 
         let child1 = WzNode::from_str("child1", 1, Some(&root)).into_lock();
         let child2 = WzNode::from_str("child2", 2, Some(&root)).into_lock();
@@ -56,7 +61,7 @@ mod test {
             "root/child2/child21",
             "root/child2/child22",
         ]);
-        
+
         walk_node(&root, false, &|node| {
             let node_read = node.read().unwrap();
             assert!(pathes.contains(node_read.get_full_path().as_str()));

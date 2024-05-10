@@ -1,6 +1,6 @@
+use crate::WzReader;
 use std::ops::Range;
 use std::sync::Arc;
-use crate::WzReader;
 
 #[derive(Debug, Clone, Default)]
 pub struct WzRawData {

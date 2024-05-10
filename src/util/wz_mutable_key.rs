@@ -1,7 +1,7 @@
-use aes::Aes256;
-use aes::cipher::{KeyInit, BlockSizeUser, block_padding::Pkcs7, BlockEncryptMut};
+use super::maple_crypto_constants::{get_trimmed_user_key, MAPLESTORY_USERKEY_DEFAULT, WZ_MSEAIV};
 use crate::reader::read_i32_at;
-use super::maple_crypto_constants::{MAPLESTORY_USERKEY_DEFAULT, WZ_MSEAIV, get_trimmed_user_key};
+use aes::cipher::{block_padding::Pkcs7, BlockEncryptMut, BlockSizeUser, KeyInit};
+use aes::Aes256;
 
 const BATCH_SIZE: f64 = 4096_f64;
 
@@ -63,9 +63,9 @@ impl WzMutableKey {
             return;
         }
         let keys = &self.keys[0..data.len()];
-        data.iter_mut().zip(keys).for_each(|(byte, key)| {
-            *byte ^= key
-        });
+        data.iter_mut()
+            .zip(keys)
+            .for_each(|(byte, key)| *byte ^= key);
     }
     /// ensure keys has enough size to do decryption
     pub fn ensure_key_size(&mut self, size: usize) -> Result<(), String> {
@@ -96,7 +96,7 @@ impl WzMutableKey {
 
         let start_index = self.keys.len();
 
-        // fill enouth 0 for later, 
+        // fill enouth 0 for later,
         if self.keys.len() < size {
             // + 16 is prevent encryption not enough to padding
             self.keys.resize(size + 16, 0);
@@ -162,7 +162,7 @@ mod test {
         assert!(key.try_at(1).is_none());
         assert!(key.try_at(100).is_none());
         assert!(key.try_at(10000).is_none());
-        
+
         assert!(key.ensure_key_size(10000).is_ok());
 
         assert!(key.try_at(1).is_some());

@@ -1,12 +1,11 @@
+use memmap2::Mmap;
 use scroll::{Pread, LE};
 use std::cell::Cell;
-use std::sync::{RwLock, Arc};
-use memmap2::Mmap;
+use std::sync::{Arc, RwLock};
 
-use crate::WzHeader;
-use crate::util::WzMutableKey;
 use crate::property::{WzStringMeta, WzStringType};
-
+use crate::util::WzMutableKey;
+use crate::WzHeader;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -21,7 +20,7 @@ pub enum Error {
 }
 
 type Result<T> = std::result::Result<T, Error>;
-/// A basic reader for reading data, it store original data(Mmap), and can't not 
+/// A basic reader for reading data, it store original data(Mmap), and can't not
 /// read data without provide offset of the data.
 #[derive(Debug)]
 pub struct WzReader {
@@ -32,7 +31,10 @@ pub struct WzReader {
 
 impl Default for WzReader {
     fn default() -> Self {
-        let memmap = memmap2::MmapMut::map_anon(1).unwrap().make_read_only().unwrap();
+        let memmap = memmap2::MmapMut::map_anon(1)
+            .unwrap()
+            .make_read_only()
+            .unwrap();
         WzReader {
             map: memmap,
             wz_iv: [0; 4],
@@ -72,7 +74,7 @@ pub trait Reader {
         match t {
             0 => WzStringType::Empty,
             t if t > 0 => WzStringType::Unicode,
-            _ => WzStringType::Ascii
+            _ => WzStringType::Ascii,
         }
     }
     fn resolve_unicode_raw(&self, offset: usize, length: usize) -> Result<Vec<u16>> {
@@ -86,26 +88,28 @@ pub trait Reader {
 
         Ok(strvec)
     }
-    fn resolve_ascii_raw(&self, offset: usize, length: usize) ->Result<Vec<u8>> {
+    fn resolve_ascii_raw(&self, offset: usize, length: usize) -> Result<Vec<u8>> {
         let mut decrypted = self.get_decrypt_slice(offset..(offset + length))?;
 
-        decrypted.iter_mut().enumerate()
-            .for_each(|(i, byte)| {
-                *byte = resolve_ascii_char(*byte, i as i32);
-            });
+        decrypted.iter_mut().enumerate().for_each(|(i, byte)| {
+            *byte = resolve_ascii_char(*byte, i as i32);
+        });
 
         Ok(decrypted)
     }
-    fn resolve_wz_string_meta(&self, meta_type: &WzStringType, offset: usize, length: usize) -> Result<String> {
+    fn resolve_wz_string_meta(
+        &self,
+        meta_type: &WzStringType,
+        offset: usize,
+        length: usize,
+    ) -> Result<String> {
         match meta_type {
-            WzStringType::Empty => {
-                Ok(String::new())
-            },
+            WzStringType::Empty => Ok(String::new()),
             WzStringType::Unicode => {
                 let strvec = self.resolve_unicode_raw(offset, length)?;
 
                 Ok(String::from_utf16_lossy(&strvec))
-            },
+            }
             WzStringType::Ascii => {
                 let strvec = self.resolve_ascii_raw(offset, length)?;
 
@@ -113,16 +117,19 @@ pub trait Reader {
             }
         }
     }
-    fn try_resolve_wz_string_meta(&self, meta_type: &WzStringType, offset: usize, length: usize) -> Result<String> {
+    fn try_resolve_wz_string_meta(
+        &self,
+        meta_type: &WzStringType,
+        offset: usize,
+        length: usize,
+    ) -> Result<String> {
         match meta_type {
-            WzStringType::Empty => {
-                Ok(String::new())
-            },
+            WzStringType::Empty => Ok(String::new()),
             WzStringType::Unicode => {
                 let strvec = self.resolve_unicode_raw(offset, length)?;
 
                 String::from_utf16(&strvec).map_err(Error::from)
-            },
+            }
             WzStringType::Ascii => {
                 let strvec = self.resolve_ascii_raw(offset, length)?;
 
@@ -137,7 +144,7 @@ impl WzReader {
         WzReader {
             map,
             keys: Arc::new(RwLock::new(WzMutableKey::new([0; 4], [0; 32]))),
-            wz_iv: [0; 4]
+            wz_iv: [0; 4],
         }
     }
     pub fn with_iv(self, iv: [u8; 4]) -> Self {
@@ -153,10 +160,10 @@ impl WzReader {
         WzReader {
             map: memmap.make_read_only().unwrap(),
             keys: Arc::new(RwLock::new(WzMutableKey::new([0; 4], [0; 32]))),
-            wz_iv: [0; 4]
+            wz_iv: [0; 4],
         }
     }
-    
+
     pub fn try_header(&self) -> Result<WzHeader> {
         self.map.pread::<WzHeader>(0)
     }
@@ -184,24 +191,26 @@ impl WzReader {
     /// create a encrypt string from current `WzReader`
     pub fn encrypt_str(&self, str: &str, meta_type: &WzStringType) -> Vec<u8> {
         match meta_type {
-            WzStringType::Empty => {
-                Vec::new()
-            },
+            WzStringType::Empty => Vec::new(),
             WzStringType::Unicode => {
                 let mut bytes = str.encode_utf16().collect::<Vec<_>>();
                 let mut keys = self.keys.write().unwrap();
 
                 keys.ensure_key_size(bytes.len() * 2).unwrap();
 
-                bytes.iter_mut().enumerate().flat_map(|(i, b)| {
-                    let key1 = *keys.try_at(i * 2).unwrap_or(&0) as u16;
-                    let key2 = *keys.try_at(i * 2 + 1).unwrap_or(&0) as u16;
-                    let i = (i + 0xAAAA) as u16;
-                    *b ^= i ^ key1 ^ (key2 << 8);
+                bytes
+                    .iter_mut()
+                    .enumerate()
+                    .flat_map(|(i, b)| {
+                        let key1 = *keys.try_at(i * 2).unwrap_or(&0) as u16;
+                        let key2 = *keys.try_at(i * 2 + 1).unwrap_or(&0) as u16;
+                        let i = (i + 0xAAAA) as u16;
+                        *b ^= i ^ key1 ^ (key2 << 8);
 
-                    b.to_le_bytes().to_vec()
-                }).collect()
-            },
+                        b.to_le_bytes().to_vec()
+                    })
+                    .collect()
+            }
             WzStringType::Ascii => {
                 let mut bytes = str.bytes().collect::<Vec<_>>();
 
@@ -229,14 +238,11 @@ impl<'a> WzSliceReader<'a> {
             pos: Cell::new(0),
             _save_pos: Cell::new(0),
             header: Default::default(),
-            keys: Arc::clone(key)
+            keys: Arc::clone(key),
         }
     }
     pub fn with_header(self, header: WzHeader<'a>) -> Self {
-        WzSliceReader {
-            header,
-            ..self
-        }
+        WzSliceReader { header, ..self }
     }
     pub fn get_slice(&self, range: std::ops::Range<usize>) -> &[u8] {
         &self.buf[range]
@@ -312,7 +318,7 @@ impl<'a> WzSliceReader<'a> {
         self.pos.set(self.pos.get() + 8);
         res
     }
-    
+
     pub fn read_unicode_str_len(&self, sl: i8) -> Result<i32> {
         if sl == i8::MAX {
             self.read_i32()
@@ -336,7 +342,8 @@ impl<'a> WzSliceReader<'a> {
 
         let unicode_u8_len = (len * 2) as usize;
 
-        let string = self.resolve_wz_string_meta(&WzStringType::Unicode, self.pos.get(), unicode_u8_len)?;
+        let string =
+            self.resolve_wz_string_meta(&WzStringType::Unicode, self.pos.get(), unicode_u8_len)?;
 
         self.skip(unicode_u8_len);
 
@@ -354,13 +361,13 @@ impl<'a> WzSliceReader<'a> {
 
         Ok(string)
     }
-    
+
     pub fn read_wz_string_meta_at(&self, offset: usize) -> Result<WzStringMeta> {
         self.save_pos();
 
         self.pos.set(offset);
         let meta = self.read_wz_string_meta();
-        
+
         self.restore_pos();
         meta
     }
@@ -370,9 +377,7 @@ impl<'a> WzSliceReader<'a> {
         let string_type = self.get_wz_string_type(small_len);
 
         match string_type {
-            WzStringType::Empty => {
-                Ok(WzStringMeta::empty())
-            },
+            WzStringType::Empty => Ok(WzStringMeta::empty()),
             WzStringType::Unicode => {
                 if small_len == i8::MAX {
                     let length = self.read_i32()? as u32 * 2;
@@ -386,7 +391,7 @@ impl<'a> WzSliceReader<'a> {
                     self.skip(length as usize);
                     Ok(meta)
                 }
-            },
+            }
             WzStringType::Ascii => {
                 if small_len == i8::MIN {
                     let length = self.read_i32()?;
@@ -404,13 +409,12 @@ impl<'a> WzSliceReader<'a> {
     }
 
     pub fn read_wz_string(&self) -> Result<String> {
-
         let small_len = self.read_i8()?;
 
         match self.get_wz_string_type(small_len) {
             WzStringType::Empty => Ok(String::new()),
             WzStringType::Unicode => self.read_unicode_string(small_len),
-            WzStringType::Ascii => self.read_ascii_string(small_len)
+            WzStringType::Ascii => self.read_ascii_string(small_len),
         }
     }
     pub fn read_wz_string_at_offset(&self, offset: usize) -> Result<String> {
@@ -426,37 +430,29 @@ impl<'a> WzSliceReader<'a> {
         let string_type = self.read_u8()?;
 
         match string_type {
-            0 | 0x73 => {
-                self.read_wz_string()
-            },
+            0 | 0x73 => self.read_wz_string(),
             1 | 0x1B => {
                 let append_offset = self.read_i32()?;
                 self.read_wz_string_at_offset(offset + append_offset as usize)
-            },
-            _ => {
-                Ok(String::new())
             }
+            _ => Ok(String::new()),
         }
     }
     pub fn read_wz_string_block_meta(&self, wz_img_offset: usize) -> Result<WzStringMeta> {
         let string_type = self.read_u8()?;
-        
+
         match string_type {
-            0 | 0x73 => {
-                self.read_wz_string_meta()
-            },
+            0 | 0x73 => self.read_wz_string_meta(),
             1 | 0x1B => {
                 let append_offset = self.read_i32()?;
                 self.read_wz_string_meta_at(wz_img_offset + append_offset as usize)
-            },
-            _ => {
-                Ok(WzStringMeta::empty())
             }
+            _ => Ok(WzStringMeta::empty()),
         }
     }
     pub fn read_wz_int(&self) -> Result<i32> {
         let small_len = self.read_i8()?;
-        
+
         if small_len == i8::MIN {
             return self.read_i32();
         }
@@ -465,7 +461,7 @@ impl<'a> WzSliceReader<'a> {
     }
     pub fn read_wz_int64(&self) -> Result<i64> {
         let small_len = self.read_i8()?;
-        
+
         if small_len == i8::MIN {
             return self.read_i64();
         }
@@ -485,11 +481,11 @@ impl<'a> WzSliceReader<'a> {
         let offset = (offset * hash) & 0xFFFFFFFF;
         let offset = offset.overflowing_sub(WZ_OFFSET as usize).0;
         let offset = (offset as i32).rotate_left((offset as u32) & 0x1F) as usize & 0xFFFFFFFF;
-        
+
         let encrypted_offset = self.read_u32()? as usize;
         let offset = (offset ^ encrypted_offset) & 0xFFFFFFFF;
         let offset = (offset + fstart * 2) & 0xFFFFFFFF;
-    
+
         Ok(offset)
     }
 }
@@ -575,7 +571,6 @@ impl<'a> Reader for WzSliceReader<'a> {
     }
 }
 
-
 pub fn read_u8_at(buf: &[u8], pos: usize) -> Result<u8> {
     buf.pread_with::<u8>(pos, LE).map_err(Error::from)
 }
@@ -602,14 +597,11 @@ pub fn read_i64_at(buf: &[u8], pos: usize) -> Result<i64> {
 }
 pub fn read_string_by_len(buf: &[u8], len: usize, offset: Option<usize>) -> String {
     let offset = offset.unwrap_or(0);
-    let strvec: Vec<u8> = (0..len).map(|index| {
-        buf[offset + index]
-    }).collect();
+    let strvec: Vec<u8> = (0..len).map(|index| buf[offset + index]).collect();
 
     String::from_utf8_lossy(&strvec).to_string()
 }
 pub fn read_wz_string(buf: &[u8]) -> Result<String> {
-
     let small_len = read_i8_at(buf, 0)?;
 
     if small_len == 0 {
@@ -623,25 +615,21 @@ pub fn read_wz_string(buf: &[u8]) -> Result<String> {
 }
 pub fn read_wz_string_block(buf: &[u8], offset: usize) -> Result<String> {
     let string_type = read_u8_at(buf, 0)?;
-    
+
     match string_type {
-        0 | 0x73 => {
-            read_wz_string(&buf[1..])
-        },
+        0 | 0x73 => read_wz_string(&buf[1..]),
         1 | 0x1B => {
             let append_offset = read_i32_at(buf, 1)? as usize;
             read_wz_string(&buf[append_offset + offset..])
-        },
-        _ => {
-            Ok(String::new())
         }
+        _ => Ok(String::new()),
     }
 }
 
 pub fn read_wz_int(buf: &[u8], offset: Option<usize>) -> Result<i32> {
     let offset = offset.unwrap_or(0);
     let small_len = read_i8_at(buf, offset)?;
-    
+
     if small_len == i8::MIN {
         return read_i32_at(buf, offset + 1);
     }
@@ -651,7 +639,7 @@ pub fn read_wz_int(buf: &[u8], offset: Option<usize>) -> Result<i32> {
 pub fn read_wz_int64(buf: &[u8], offset: Option<usize>) -> Result<i64> {
     let offset = offset.unwrap_or(0);
     let small_len = read_i8_at(buf, offset)?;
-    
+
     if small_len == i8::MIN {
         return read_i64_at(buf, offset + 1);
     }
@@ -662,12 +650,18 @@ pub fn read_wz_long(buf: &[u8], offset: Option<usize>) -> Result<i64> {
     read_wz_int64(buf, offset)
 }
 
-pub fn read_wz_offset(buf: &[u8], encrypted_offset: usize, fstart: usize, offset: usize, hash: usize) -> Result<usize> {
+pub fn read_wz_offset(
+    buf: &[u8],
+    encrypted_offset: usize,
+    fstart: usize,
+    offset: usize,
+    hash: usize,
+) -> Result<usize> {
     let offset = (offset - fstart) ^ 0xFFFFFFFF;
     let offset = (offset * hash) & 0xFFFFFFFF;
     let offset = offset.overflowing_sub(WZ_OFFSET as usize).0;
     let offset = offset.rotate_left((offset as u32) & 0x1F) & 0xFFFFFFFF;
-    
+
     let encrypted_offset = buf.pread_with::<u32>(encrypted_offset, LE)?;
     let offset = (offset ^ encrypted_offset as usize) & 0xFFFFFFFF;
     let offset = (offset + fstart * 2) & 0xFFFFFFFF;
@@ -691,9 +685,7 @@ pub fn read_unicode_string(buf: &[u8], sl: i8) -> Result<String> {
     }
 
     let strvec: Vec<u16> = (0..len)
-        .map(|i| {
-            resolve_unicode_char(read_u16_at(buf, (i * 2 + offset) as usize).unwrap(), i)
-        })
+        .map(|i| resolve_unicode_char(read_u16_at(buf, (i * 2 + offset) as usize).unwrap(), i))
         .collect();
 
     Ok(String::from_utf16_lossy(&strvec).to_string())
@@ -715,9 +707,7 @@ pub fn read_ascii_string(buf: &[u8], sl: i8) -> Result<String> {
     }
 
     let strvec: Vec<u8> = (0..len)
-        .map(|i| {
-            resolve_ascii_char(read_u8_at(buf, (i + offset) as usize).unwrap(), i)
-        })
+        .map(|i| resolve_ascii_char(read_u8_at(buf, (i + offset) as usize).unwrap(), i))
         .collect();
 
     Ok(String::from_utf8_lossy(&strvec).to_string())
@@ -730,8 +720,11 @@ fn resolve_unicode_char(c: u16, i: i32) -> u16 {
     (c as i32 ^ (0xAAAA + i)) as u16
 }
 
-pub fn get_decrypt_slice(buf: &[u8], len: usize, keys: &Arc<RwLock<WzMutableKey>>) -> Result<Vec<u8>> {
-    
+pub fn get_decrypt_slice(
+    buf: &[u8],
+    len: usize,
+    keys: &Arc<RwLock<WzMutableKey>>,
+) -> Result<Vec<u8>> {
     let is_need_mut = {
         let read = keys.read().unwrap();
         !read.is_enough(len) && !read.without_decrypt
@@ -739,7 +732,8 @@ pub fn get_decrypt_slice(buf: &[u8], len: usize, keys: &Arc<RwLock<WzMutableKey>
 
     if is_need_mut {
         let mut key = keys.write().unwrap();
-        key.ensure_key_size(len).map_err(|_| Error::DecryptError(len))?;
+        key.ensure_key_size(len)
+            .map_err(|_| Error::DecryptError(len))?;
     }
 
     let keys = keys.read().unwrap();
@@ -755,12 +749,12 @@ pub fn get_decrypt_slice(buf: &[u8], len: usize, keys: &Arc<RwLock<WzMutableKey>
 
 #[cfg(test)]
 mod test {
+    use super::*;
+    use crate::util::maple_crypto_constants::{WZ_GMSIV, WZ_MSEAIV};
+    use crate::util::WzMutableKey;
+    use memmap2::MmapMut;
     use std::fs::OpenOptions;
     use tempfile;
-    use memmap2::MmapMut;
-    use super::*;
-    use crate::util::WzMutableKey;
-    use crate::util::maple_crypto_constants::{WZ_GMSIV, WZ_MSEAIV};
 
     type Error = Box<dyn std::error::Error>;
     type Result<T> = std::result::Result<T, Error>;
@@ -829,40 +823,36 @@ mod test {
             0x6c, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // fsize
             0x3c, 0x00, 0x00, 0x00, // fstart
             // copyright
-            0x50, 0x61, 0x63, 0x6b, 0x61, 0x67, 0x65, 0x20, 0x66, 0x69, 0x6c, 0x65, 0x20, 0x76, 0x31, 0x2e,
-            0x30, 0x20, 0x43, 0x6f, 0x70, 0x79, 0x72, 0x69, 0x67, 0x68, 0x74, 0x20, 0x32, 0x30, 0x30, 0x32,
-            0x20, 0x57, 0x69, 0x7a, 0x65, 0x74, 0x2c, 0x20, 0x5a, 0x4d, 0x53, 
-            // string end mark
+            0x50, 0x61, 0x63, 0x6b, 0x61, 0x67, 0x65, 0x20, 0x66, 0x69, 0x6c, 0x65, 0x20, 0x76,
+            0x31, 0x2e, 0x30, 0x20, 0x43, 0x6f, 0x70, 0x79, 0x72, 0x69, 0x67, 0x68, 0x74, 0x20,
+            0x32, 0x30, 0x30, 0x32, 0x20, 0x57, 0x69, 0x7a, 0x65, 0x74, 0x2c, 0x20, 0x5a, 0x4d,
+            0x53, // string end mark
             0x00,
         ];
 
         let mock_data = [
             // i8, i16, i32, i64
-            0x01, 0x02, 0x00, 0x03, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            // u8, u16, u32, u64
-            0x01, 0x02, 0x00, 0x03, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            // f32(1.1), f64(2.22)
+            0x01, 0x02, 0x00, 0x03, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, // u8, u16, u32, u64
+            0x01, 0x02, 0x00, 0x03, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, // f32(1.1), f64(2.22)
             0xcd, 0xcc, 0x8c, 0x3f, 0xc3, 0xf5, 0x28, 0x5c, 0x8f, 0xc2, 0x01, 0x40,
             // wz_int without i32
-            0x01,
-            // wz_int with i32
-            0x80, 0x02, 0x00, 0x00, 0x00,
-            // wz_int64 without i64
-            0x01,
-            // wz_int64 with i64
-            0x80, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+            0x01, // wz_int with i32
+            0x80, 0x02, 0x00, 0x00, 0x00, // wz_int64 without i64
+            0x01, // wz_int64 with i64
+            0x80, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         ];
 
         let pos = 0;
         let mut end = 60;
 
         (&mut map[pos..end]).copy_from_slice(&mock_wz_header);
-        
+
         let pos = end;
         end += 58;
         (&mut map[pos..end]).copy_from_slice(&mock_data);
 
-        
         // empty string
         let pos = end;
         end += 1;
@@ -962,7 +952,10 @@ mod test {
 
         let reader = WzReader::from_buff(&encrypted);
 
-        assert_eq!(reader.resolve_wz_string_meta(&WzStringType::Ascii, 0, 5)?, test1.to_string());
+        assert_eq!(
+            reader.resolve_wz_string_meta(&WzStringType::Ascii, 0, 5)?,
+            test1.to_string()
+        );
 
         Ok(())
     }
@@ -975,7 +968,10 @@ mod test {
 
         let reader = WzReader::from_buff(&encrypted);
 
-        assert_eq!(reader.resolve_wz_string_meta(&WzStringType::Unicode, 0, 4)?, test1.to_string());
+        assert_eq!(
+            reader.resolve_wz_string_meta(&WzStringType::Unicode, 0, 4)?,
+            test1.to_string()
+        );
 
         Ok(())
     }
@@ -988,7 +984,10 @@ mod test {
 
         let reader = WzReader::from_buff(&encrypted).with_iv(WZ_MSEAIV);
 
-        assert_eq!(reader.resolve_wz_string_meta(&WzStringType::Ascii, 0, 5)?, test1.to_string());
+        assert_eq!(
+            reader.resolve_wz_string_meta(&WzStringType::Ascii, 0, 5)?,
+            test1.to_string()
+        );
 
         Ok(())
     }
@@ -1001,7 +1000,10 @@ mod test {
 
         let reader = WzReader::from_buff(&encrypted).with_iv(WZ_MSEAIV);
 
-        assert_eq!(reader.resolve_wz_string_meta(&WzStringType::Unicode, 0, 4)?, test1.to_string());
+        assert_eq!(
+            reader.resolve_wz_string_meta(&WzStringType::Unicode, 0, 4)?,
+            test1.to_string()
+        );
 
         Ok(())
     }
@@ -1009,7 +1011,7 @@ mod test {
     #[test]
     fn test_wz_signed() -> Result<()> {
         let reader = WzReader::new(setup()?);
-        
+
         assert_eq!(reader.read_i8_at(60)?, 1);
         assert_eq!(reader.read_i16_at(61)?, 2);
         assert_eq!(reader.read_i32_at(63)?, 3);
@@ -1018,7 +1020,6 @@ mod test {
         let slice_reader = reader.create_slice_reader();
 
         slice_reader.seek(60);
-
 
         assert_eq!(slice_reader.read_i8()?, 1);
         assert_eq!(slice_reader.read_i16()?, 2);
@@ -1031,7 +1032,7 @@ mod test {
     #[test]
     fn test_wz_unsigned() -> Result<()> {
         let reader = WzReader::new(setup()?);
-        
+
         assert_eq!(reader.read_u8_at(75)?, 1);
         assert_eq!(reader.read_u16_at(76)?, 2);
         assert_eq!(reader.read_u32_at(78)?, 3);
@@ -1040,7 +1041,6 @@ mod test {
         let slice_reader = reader.create_slice_reader();
 
         slice_reader.seek(75);
-
 
         assert_eq!(slice_reader.read_u8()?, 1);
         assert_eq!(slice_reader.read_u16()?, 2);
@@ -1053,14 +1053,13 @@ mod test {
     #[test]
     fn test_wz_float() -> Result<()> {
         let reader = WzReader::new(setup()?);
-        
+
         assert_eq!(reader.read_float_at(90)?, 1.1);
         assert_eq!(reader.read_double_at(94)?, 2.22);
 
         let slice_reader = reader.create_slice_reader();
 
         slice_reader.seek(90);
-
 
         assert_eq!(slice_reader.read_float()?, 1.1);
         assert_eq!(slice_reader.read_double()?, 2.22);
@@ -1112,7 +1111,10 @@ mod test {
         assert_eq!(meta.offset, 0);
         assert_eq!(meta.string_type, WzStringType::Empty);
 
-        assert_eq!(reader.resolve_wz_string_meta(&meta.string_type, meta.offset, meta.length as usize)?, "");
+        assert_eq!(
+            reader.resolve_wz_string_meta(&meta.string_type, meta.offset, meta.length as usize)?,
+            ""
+        );
 
         Ok(())
     }
@@ -1135,7 +1137,10 @@ mod test {
         assert_eq!(meta.offset, 120);
         assert_eq!(meta.string_type, WzStringType::Ascii);
 
-        assert_eq!(reader.resolve_wz_string_meta(&meta.string_type, meta.offset, meta.length as usize)?, result_string);
+        assert_eq!(
+            reader.resolve_wz_string_meta(&meta.string_type, meta.offset, meta.length as usize)?,
+            result_string
+        );
 
         Ok(())
     }
@@ -1158,7 +1163,10 @@ mod test {
         assert_eq!(meta.offset, 145);
         assert_eq!(meta.string_type, WzStringType::Ascii);
 
-        assert_eq!(reader.resolve_wz_string_meta(&meta.string_type, meta.offset, meta.length as usize)?, result_string);
+        assert_eq!(
+            reader.resolve_wz_string_meta(&meta.string_type, meta.offset, meta.length as usize)?,
+            result_string
+        );
 
         Ok(())
     }
@@ -1181,7 +1189,10 @@ mod test {
         assert_eq!(meta.offset, 346);
         assert_eq!(meta.string_type, WzStringType::Unicode);
 
-        assert_eq!(reader.resolve_wz_string_meta(&meta.string_type, meta.offset, meta.length as usize)?, result_string);
+        assert_eq!(
+            reader.resolve_wz_string_meta(&meta.string_type, meta.offset, meta.length as usize)?,
+            result_string
+        );
 
         Ok(())
     }
@@ -1204,7 +1215,10 @@ mod test {
         assert_eq!(meta.offset, 391);
         assert_eq!(meta.string_type, WzStringType::Unicode);
 
-        assert_eq!(reader.resolve_wz_string_meta(&meta.string_type, meta.offset, meta.length as usize)?, result_string);
+        assert_eq!(
+            reader.resolve_wz_string_meta(&meta.string_type, meta.offset, meta.length as usize)?,
+            result_string
+        );
 
         Ok(())
     }
@@ -1227,7 +1241,10 @@ mod test {
         assert_eq!(meta.offset, 792);
         assert_eq!(meta.string_type, WzStringType::Ascii);
 
-        assert_eq!(reader.resolve_wz_string_meta(&meta.string_type, meta.offset, meta.length as usize)?, result_string);
+        assert_eq!(
+            reader.resolve_wz_string_meta(&meta.string_type, meta.offset, meta.length as usize)?,
+            result_string
+        );
 
         Ok(())
     }
@@ -1250,7 +1267,10 @@ mod test {
         assert_eq!(meta.offset, 813);
         assert_eq!(meta.string_type, WzStringType::Unicode);
 
-        assert_eq!(reader.resolve_wz_string_meta(&meta.string_type, meta.offset, meta.length as usize)?, result_string);
+        assert_eq!(
+            reader.resolve_wz_string_meta(&meta.string_type, meta.offset, meta.length as usize)?,
+            result_string
+        );
 
         Ok(())
     }
@@ -1273,7 +1293,10 @@ mod test {
         assert_eq!(meta.offset, 854);
         assert_eq!(meta.string_type, WzStringType::Ascii);
 
-        assert_eq!(reader.resolve_wz_string_meta(&meta.string_type, meta.offset, meta.length as usize)?, result_string);
+        assert_eq!(
+            reader.resolve_wz_string_meta(&meta.string_type, meta.offset, meta.length as usize)?,
+            result_string
+        );
 
         Ok(())
     }
@@ -1296,7 +1319,10 @@ mod test {
         assert_eq!(meta.offset, 875);
         assert_eq!(meta.string_type, WzStringType::Unicode);
 
-        assert_eq!(reader.resolve_wz_string_meta(&meta.string_type, meta.offset, meta.length as usize)?, result_string);
+        assert_eq!(
+            reader.resolve_wz_string_meta(&meta.string_type, meta.offset, meta.length as usize)?,
+            result_string
+        );
 
         Ok(())
     }

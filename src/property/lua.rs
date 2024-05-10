@@ -1,10 +1,8 @@
-use std::sync::Arc;
-use crate::WzReader;
 use crate::util::maple_crypto_constants::{WZ_GMSIV, WZ_MSEAIV};
 use crate::util::WzMutableKey;
+use crate::WzReader;
+use std::sync::Arc;
 use thiserror::Error;
-
-
 
 #[derive(Debug, Error)]
 pub enum WzLuaParseError {
@@ -37,9 +35,13 @@ impl WzLua {
 
     /// extract lua string from wz file
     pub fn extract_lua(&self) -> Result<String, WzLuaParseError> {
-        let data = self.reader.get_slice(self.offset..self.length + self.offset);
+        let data = self
+            .reader
+            .get_slice(self.offset..self.length + self.offset);
 
-        let mut keys = self.get_mtb_keys_from_guess_lua_iv().ok_or(WzLuaParseError::UnknownLuaIv)?;
+        let mut keys = self
+            .get_mtb_keys_from_guess_lua_iv()
+            .ok_or(WzLuaParseError::UnknownLuaIv)?;
 
         let len = data.len();
 
@@ -49,7 +51,6 @@ impl WzLua {
 
         keys.decrypt_slice(&mut decoded);
 
-
         String::from_utf8(decoded).map_err(WzLuaParseError::from)
     }
 
@@ -58,12 +59,8 @@ impl WzLua {
         let len = std::cmp::min(64, self.length);
         let test_data = self.reader.get_slice(self.offset..self.offset + len);
 
-        let ivs = [
-            WZ_MSEAIV,
-            WZ_GMSIV,
-            [0, 0, 0, 0],
-        ];
-        
+        let ivs = [WZ_MSEAIV, WZ_GMSIV, [0, 0, 0, 0]];
+
         for iv in ivs {
             let mut decoded = test_data.to_vec();
             let mut keys = WzMutableKey::from_iv(iv);
@@ -83,10 +80,10 @@ impl WzLua {
 
 #[cfg(test)]
 mod test {
+    use super::*;
+    use memmap2::MmapMut;
     use std::fs::OpenOptions;
     use tempfile;
-    use memmap2::MmapMut;
-    use super::*;
 
     fn generate_encrypted_text(text: &str, iv: [u8; 4]) -> Vec<u8> {
         let mut keys = WzMutableKey::from_iv(iv);
@@ -123,7 +120,7 @@ mod test {
 
         Ok(WzLua::new(&reader, 0, len))
     }
-    
+
     #[test]
     fn should_guess_gms() {
         let lua = setup_lua(WZ_GMSIV).unwrap();

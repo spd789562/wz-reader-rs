@@ -1,5 +1,5 @@
-use scroll::{ctx, Endian, Pread, LE};
 use super::reader::Error;
+use scroll::{ctx, Endian, Pread, LE};
 
 type Result<T> = std::result::Result<T, Error>;
 
@@ -49,11 +49,14 @@ impl WzHeader<'_> {
 
         let offset = fstart - 17;
 
-        Ok((WzHeader {
-            ident,
-            fsize,
-            fstart,
-            copyright,
-        }, offset))
+        Ok((
+            WzHeader {
+                ident,
+                fsize,
+                fstart,
+                copyright,
+            },
+            offset,
+        ))
     }
 }

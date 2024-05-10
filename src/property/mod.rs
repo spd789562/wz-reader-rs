@@ -1,21 +1,21 @@
 #[cfg(feature = "serde")]
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 #[cfg(feature = "json")]
-use serde_json::{Value, Number};
+use serde_json::{Number, Value};
 
-pub mod vector;
-pub mod png;
-pub mod string;
-pub mod sound;
 pub mod lua;
+pub mod png;
 pub mod raw_data;
+pub mod sound;
+pub mod string;
+pub mod vector;
 
-pub use vector::*;
-pub use png::*;
-pub use string::*;
-pub use sound::*;
 pub use lua::*;
+pub use png::*;
 pub use raw_data::*;
+pub use sound::*;
+pub use string::*;
+pub use vector::*;
 
 // #[derive(Debug, Clone)]
 // pub enum WzPropertyType {
@@ -39,10 +39,8 @@ pub use raw_data::*;
 //   RawData,
 // }
 
-
 /// A WzProperty potentially contains childrens.
 #[derive(Debug, Clone)]
-
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[cfg_attr(feature = "serde", serde(tag = "type", content = "data"))]
 pub enum WzSubProperty {
@@ -63,7 +61,7 @@ pub enum WzValue {
     #[cfg_attr(feature = "serde", serde(skip))]
     Lua(WzLua),
     Short(i16),
-    #[cfg_attr(feature = "serde", serde(alias="number"))]
+    #[cfg_attr(feature = "serde", serde(alias = "number"))]
     Int(i32),
     Long(i64),
     Float(f32),
@@ -99,10 +97,10 @@ impl From<WzValue> for Value {
                 vec.insert("x".to_string(), x.into());
                 vec.insert("y".to_string(), y.into());
                 Value::Object(vec)
-            },
+            }
             WzValue::UOL(string) | WzValue::String(string) => {
                 string.get_string().unwrap_or_default().into()
-            },
+            }
             WzValue::ParsedString(string) => string.into(),
         }
     }
@@ -115,7 +113,7 @@ mod test {
 
     #[cfg(feature = "serde")]
     use serde_json;
-    
+
     #[cfg(feature = "serde")]
     #[test]
     fn test_serialize_wz_sub_property() {
@@ -130,7 +128,10 @@ mod test {
         let convex_json = serde_json::to_string(&convex).unwrap();
 
         assert_eq!(png_json, r#"{"type":"PNG","data":{"width":0,"height":0}}"#);
-        assert_eq!(sound_json, r#"{"type":"Sound","data":{"duration":0,"sound_type":"Binary"}}"#);
+        assert_eq!(
+            sound_json,
+            r#"{"type":"Sound","data":{"duration":0,"sound_type":"Binary"}}"#
+        );
         assert_eq!(property_json, r#"{"type":"Property"}"#);
         assert_eq!(convex_json, r#"{"type":"Convex"}"#);
     }
@@ -192,7 +193,10 @@ mod test {
         assert_eq!(vector_json, r#"{"type":"Vector","data":[1,1]}"#);
         assert_eq!(uol_json, r#"{"type":"UOL","data":"1/1"}"#);
         assert_eq!(string_json, r#"{"type":"String","data":"string"}"#);
-        assert_eq!(parsed_string_json, r#"{"type":"ParsedString","data":"string"}"#);
+        assert_eq!(
+            parsed_string_json,
+            r#"{"type":"ParsedString","data":"string"}"#
+        );
     }
 
     #[cfg(feature = "serde")]
@@ -273,14 +277,20 @@ mod test {
         assert_eq!(short_json, Value::Number(Number::from(1)));
         assert_eq!(int_json, Value::Number(Number::from(1)));
         assert_eq!(long_json, Value::Number(Number::from(1)));
-        assert_eq!(float_json, Value::Number(Number::from_f64((1.1_f32).into()).unwrap()));
+        assert_eq!(
+            float_json,
+            Value::Number(Number::from_f64((1.1_f32).into()).unwrap())
+        );
         assert_eq!(double_json, Value::Number(Number::from_f64(1.1).unwrap()));
-        assert_eq!(vector_json, Value::Object({
-            let mut map = serde_json::Map::new();
-            map.insert("x".to_string(), Value::Number(Number::from(1)));
-            map.insert("y".to_string(), Value::Number(Number::from(1)));
-            map
-        }));
+        assert_eq!(
+            vector_json,
+            Value::Object({
+                let mut map = serde_json::Map::new();
+                map.insert("x".to_string(), Value::Number(Number::from(1)));
+                map.insert("y".to_string(), Value::Number(Number::from(1)));
+                map
+            })
+        );
         assert_eq!(uol_json, Value::String("1/1".to_string()));
         assert_eq!(string_json, Value::String("string".to_string()));
         assert_eq!(parsed_string_json, Value::String("string".to_string()));

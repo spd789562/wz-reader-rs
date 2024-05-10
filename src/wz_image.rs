@@ -1,10 +1,10 @@
-use std::sync::Arc;
-use crate::{ reader, util, WzNode, WzNodeArc, WzNodeArcVec, WzNodeName, WzReader };
 use crate::property::WzLua;
-use crate::version::{verify_iv_from_wz_img, guess_iv_from_wz_img};
+use crate::version::{guess_iv_from_wz_img, verify_iv_from_wz_img};
+use crate::{reader, util, WzNode, WzNodeArc, WzNodeArcVec, WzNodeName, WzReader};
+use std::sync::Arc;
 
 #[cfg(feature = "serde")]
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -48,7 +48,12 @@ pub struct WzImage {
 }
 
 impl WzImage {
-    pub fn new(name: &WzNodeName, offset: usize, block_size: usize, reader: &Arc<WzReader>) -> Self {
+    pub fn new(
+        name: &WzNodeName,
+        offset: usize,
+        block_size: usize,
+        reader: &Arc<WzReader>,
+    ) -> Self {
         Self {
             reader: Arc::clone(reader),
             name: name.clone(),
@@ -57,10 +62,17 @@ impl WzImage {
             is_parsed: false,
         }
     }
-    pub fn from_file<P>(path: P, wz_iv: Option<[u8; 4]>) -> Result<Self, Error> 
-        where P: AsRef<std::path::Path>
+    pub fn from_file<P>(path: P, wz_iv: Option<[u8; 4]>) -> Result<Self, Error>
+    where
+        P: AsRef<std::path::Path>,
     {
-        let name = path.as_ref().file_name().unwrap().to_str().unwrap().to_string();
+        let name = path
+            .as_ref()
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string();
         let file = std::fs::File::open(path)?;
         let map = unsafe { memmap2::Mmap::map(&file)? };
 
@@ -81,7 +93,7 @@ impl WzImage {
             name: name.into(),
             offset: 0,
             block_size,
-            is_parsed: false
+            is_parsed: false,
         })
     }
 
@@ -126,41 +138,32 @@ impl WzImage {
                 if self.name.ends_with(".lua") {
                     let len = reader.read_wz_int()?;
                     let offset = reader.pos.get();
-    
+
                     let name: WzNodeName = String::from("Script").into();
 
-                    let wz_lua = WzLua::new(
-                        &self.reader,
-                        offset,
-                        len as usize
-                    );
+                    let wz_lua = WzLua::new(&self.reader, offset, len as usize);
 
-                    let lua_node = WzNode::new(
-                        &name, 
-                        wz_lua,
-                        Some(parent)
-                    );
+                    let lua_node = WzNode::new(&name, wz_lua, Some(parent));
 
                     childrens.push((name, lua_node.into_lock()));
 
                     return Ok(childrens);
                 }
-                return Err(Error::LuaParseError)
-            },
+                return Err(Error::LuaParseError);
+            }
             WZ_IMAGE_HEADER_BYTE_WITHOUT_OFFSET => {
                 let name = reader.read_wz_string()?;
                 let value = reader.read_u16()?;
                 if name != "Property" && value != 0 {
                     return Err(Error::WrongVersion);
                 }
-            },
+            }
             _ => {
                 return Err(Error::UnknownImageHeader(header_byte, reader.pos.get()));
             }
         }
 
-        util::parse_property_list(parent, &self.reader, &reader, self.offset)
-            .map_err(Error::from)
+        util::parse_property_list(parent, &self.reader, &reader, self.offset).map_err(Error::from)
     }
 }
 
@@ -168,5 +171,6 @@ pub fn is_lua_image(name: &str) -> bool {
     name.ends_with(".lua")
 }
 pub fn is_valid_wz_image(check_byte: u8) -> bool {
-    check_byte == WZ_IMAGE_HEADER_BYTE_WITH_OFFSET || check_byte == WZ_IMAGE_HEADER_BYTE_WITHOUT_OFFSET
+    check_byte == WZ_IMAGE_HEADER_BYTE_WITH_OFFSET
+        || check_byte == WZ_IMAGE_HEADER_BYTE_WITHOUT_OFFSET
 }
