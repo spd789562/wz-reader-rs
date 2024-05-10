@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use crate::{ reader, WzImage, WzNode, WzNodeArc, WzNodeArcVec, WzObjectType, WzReader, WzNodeName };
+use crate::{ reader, Reader, WzImage, WzNode, WzNodeArc, WzNodeArcVec, WzNodeName, WzObjectType, WzReader };
 
 #[cfg(feature = "serde")]
 use serde::{Serialize, Deserialize};
@@ -70,8 +70,56 @@ impl WzDirectory {
         self
     }
 
+    pub fn verify_hash(&self) -> Result<(), Error> {
+        let reader = self.reader.create_slice_reader();
+
+        reader.seek(self.offset);
+
+        let entry_count = reader.read_wz_int()?;
+
+        if !(0..=1000000).contains(&entry_count) {
+            return Err(Error::InvalidEntryCount);
+        }
+
+        for _ in 0..entry_count {
+            let dir_byte = reader.read_u8()?;
+            let dir_type = get_wz_directory_type_from_byte(dir_byte);
+        
+            match dir_type {
+                WzDirectoryType::UnknownType => {
+                    reader.skip(4 + 4 + 2);
+                    continue;
+                }
+                WzDirectoryType::RetrieveStringFromOffset => {
+                    // skip read string offset
+                    reader.skip(4);
+                }
+                WzDirectoryType::WzDirectory |
+                WzDirectoryType::WzImage => {
+                    reader.read_wz_string()?;
+                }
+                WzDirectoryType::NewUnknownType => {
+                    return Err(Error::UnknownWzDirectoryType(dir_byte, reader.pos.get()))
+                }
+            }
+
+            let fsize = reader.read_wz_int()?;
+            reader.read_wz_int()?;
+            let offset = reader.read_wz_offset(self.hash, None)?;
+            let buf_start = offset;
+            
+            let buf_end = buf_start + fsize as usize;
+    
+            if !reader.is_valid_pos(buf_end) {
+                return Err(Error::InvalidWzVersion);
+            }
+        }
+
+        Ok(())
+    }
+
     pub fn resolve_children(&self, parent: &WzNodeArc) -> Result<WzNodeArcVec, Error> {
-        let reader = self.reader.create_slice_reader_with_hash(self.hash);
+        let reader = self.reader.create_slice_reader();
 
         reader.seek(self.offset);
 
@@ -97,17 +145,11 @@ impl WzDirectory {
                 }
                 WzDirectoryType::RetrieveStringFromOffset => {
                     let str_offset = reader.read_i32()?;
-                    
-                    let pos = reader.pos.get();
     
                     let offset = reader.header.fstart + str_offset as usize;
     
-                    reader.seek(offset);
-    
-                    dir_type = get_wz_directory_type_from_byte(reader.read_u8()?);
-                    fname = reader.read_wz_string()?.into();
-    
-                    reader.seek(pos);
+                    dir_type = get_wz_directory_type_from_byte(reader.read_u8_at(offset)?);
+                    fname = reader.read_wz_string_at_offset(offset+1)?.into();
                 }
                 WzDirectoryType::WzDirectory |
                 WzDirectoryType::WzImage => {
@@ -121,7 +163,7 @@ impl WzDirectory {
 
             let fsize = reader.read_wz_int()?;
             let _checksum = reader.read_wz_int()?;
-            let offset = reader.read_wz_offset(None)?;
+            let offset = reader.read_wz_offset(self.hash, None)?;
             let buf_start = offset;
             
             let buf_end = buf_start + fsize as usize;
