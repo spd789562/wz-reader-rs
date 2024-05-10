@@ -16,7 +16,7 @@ pub struct ServerState {
     pub wz_root: Arc<RwLock<Option<WzNodeArc>>>,
 }
 
-// run example with `cargo run --package wz_reader --example with_axum --features json`
+// run example with `cargo run --package wz_reader --example with_axum --features "json image/default-formats"`
 // and open 127.0.0.1:3000 in your browser
 #[tokio::main]
 async fn main() {
@@ -240,6 +240,7 @@ async fn get_image(
         let img = property::get_image(&target).map_err(|_| NodeFindError::ServerError)?;
 
         let mut buf = BufWriter::new(Cursor::new(Vec::new()));
+        // maybe use ImageFormat::Webp is better it quicker and smaller.
         img.write_to(&mut buf, ImageFormat::Bmp).map_err(|_| NodeFindError::ServerError)?;
 
         let body = Body::from(buf.into_inner().unwrap().into_inner());
