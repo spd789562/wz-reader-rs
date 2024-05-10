@@ -375,6 +375,26 @@ fn should_success_walk_thorugh() {
     });
 }
 
+
+#[test]
+fn should_guessing_iv() -> Result<()> {
+    let wz_file = WzNode::from_wz_file(r"tests/test_need_iv.wz", None, None, None);
+    assert!(wz_file.is_ok());
+    
+    let wz_file = wz_file?.into_lock();
+    
+    assert!(wz_file.read().unwrap().try_as_file().map(|file| assert_eq!(file.reader.wz_iv, [0xB9, 0x7D, 0x63, 0xE9])).is_some());
+
+    make_sure_wz_file_version(&wz_file, -1);
+    
+    assert!(node::parse_node(&wz_file).is_ok());
+
+    make_sure_wz_file_version(&wz_file, 123);
+
+    Ok(())
+}
+
+
 #[test]
 fn should_success_walk_thorugh_with_iv() {
     let wz_file = WzNode::from_wz_file(r"tests/test_need_iv.wz", Some(WzMapleVersion::EMS), Some(123), None);

@@ -49,7 +49,6 @@ pub struct WzSliceReader<'a> {
     pub pos: Cell<usize>,
     _save_pos: Cell<usize>,
     pub header: WzHeader<'a>,
-    pub hash: usize,
     pub keys: Arc<RwLock<WzMutableKey>>,
 }
 
@@ -87,7 +86,7 @@ pub trait Reader {
 
         Ok(strvec)
     }
-    fn resolve_ascii_raw(&self, offset: usize, length: usize) ->Result< Vec<u8>> {
+    fn resolve_ascii_raw(&self, offset: usize, length: usize) ->Result<Vec<u8>> {
         let mut decrypted = self.get_decrypt_slice(offset..(offset + length))?;
 
         decrypted.iter_mut().enumerate()
@@ -158,6 +157,9 @@ impl WzReader {
         }
     }
     
+    pub fn try_header(&self) -> Result<WzHeader> {
+        self.map.pread::<WzHeader>(0)
+    }
     pub fn create_header(&self) -> WzHeader {
         self.map.pread::<WzHeader>(0).unwrap_or(WzHeader::default())
     }
@@ -175,9 +177,6 @@ impl WzReader {
     }
     pub fn create_slice_reader_without_hash(&self) -> WzSliceReader {
         WzSliceReader::new(&self.map, &self.keys).with_header(WzHeader::default())
-    }
-    pub fn create_slice_reader_with_hash(&self, hash: usize) -> WzSliceReader {
-        WzSliceReader::new(&self.map, &self.keys).with_header(self.create_header()).with_hash(hash)
     }
     pub fn create_slice_reader(&self) -> WzSliceReader {
         WzSliceReader::new(&self.map, &self.keys).with_header(self.create_header())
@@ -230,14 +229,7 @@ impl<'a> WzSliceReader<'a> {
             pos: Cell::new(0),
             _save_pos: Cell::new(0),
             header: Default::default(),
-            hash: 0,
             keys: Arc::clone(key)
-        }
-    }
-    pub fn with_hash(self, hash: usize) -> Self {
-        WzSliceReader {
-            hash,
-            ..self
         }
     }
     pub fn with_header(self, header: WzHeader<'a>) -> Self {
@@ -483,14 +475,14 @@ impl<'a> WzSliceReader<'a> {
     pub fn read_wz_long(&self) -> Result<i64> {
         self.read_wz_int64()
     }
-    pub fn read_wz_offset(&self, offset: Option<usize>) -> Result<usize> {
+    pub fn read_wz_offset(&self, hash: usize, offset: Option<usize>) -> Result<usize> {
         // let offset: usize = self.pos.get();
         let offset = offset.unwrap_or(self.pos.get());
 
         let fstart = self.header.fstart;
 
         let offset = (offset - fstart) ^ 0xFFFFFFFF;
-        let offset = (offset * self.hash) & 0xFFFFFFFF;
+        let offset = (offset * hash) & 0xFFFFFFFF;
         let offset = offset.overflowing_sub(WZ_OFFSET as usize).0;
         let offset = (offset as i32).rotate_left((offset as u32) & 0x1F) as usize & 0xFFFFFFFF;
         

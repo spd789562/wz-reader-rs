@@ -97,11 +97,11 @@ async fn init_wz_root(
     let base_path = body.get("path").and_then(|v| v.as_str());
     let version = body.get("version").and_then(|v| v.as_str());
 
-    if base_path.is_none() || version.is_none() {
+    if base_path.is_none() {
         return Err(InitWzError::MissingParam);
     }
 
-    let version = match version.unwrap() {
+    let version = match version.unwrap_or_default() {
         "BMS" => Some(WzMapleVersion::BMS),
         "GMS" => Some(WzMapleVersion::GMS),
         "EMS" => Some(WzMapleVersion::EMS),

@@ -1,7 +1,8 @@
 use std::fs::File;
 use std::sync::Arc;
+use std::ops::Range;
 use memmap2::Mmap;
-use crate::{reader, directory,Reader, WzDirectory, WzNodeArc, WzNodeArcVec, WzObjectType, WzReader, WzSliceReader};
+use crate::{reader, directory, version, Reader, WzDirectory, WzNodeArc, WzNodeArcVec, WzObjectType, WzReader, WzSliceReader};
 
 #[cfg(feature = "serde")]
 use serde::{Serialize, Deserialize};
@@ -22,6 +23,8 @@ pub enum Error {
     DirectoryError(#[from] directory::Error),
     #[error("[WzFile] New Wz image header found. checkByte = {0}, File Name = {1}")]
     UnknownImageHeader(u8, String),
+    #[error("Unable to guess version")]
+    UnableToGuessVersion,
 }
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -56,13 +59,21 @@ pub struct WzFile {
 }
 
 impl WzFile {
-    pub fn from_file<P>(path: P, wz_iv: [u8; 4], patch_version: Option<i32>) -> Result<WzFile, Error> 
+    pub fn from_file<P>(path: P, wz_iv: Option<[u8; 4]>, patch_version: Option<i32>) -> Result<WzFile, Error> 
         where P: AsRef<std::path::Path>
     {
         let file: File = File::open(&path)?;
         let map = unsafe { Mmap::map(&file)? };
 
         let block_size = map.len();
+
+        let wz_iv = if let Some(iv) = wz_iv {
+            // consider do version::verify_iv_from_wz_file here lie WzImage does, but feel like it's not necessary
+            iv
+        } else {
+            version::guess_iv_from_wz_file(&map).ok_or(Error::UnableToGuessVersion)?
+        };
+
         let reader = WzReader::new(map).with_iv(wz_iv);
 
         let offset = reader.get_wz_fstart().map_err(|_| Error::InvalidWzFile)? + 2;
@@ -107,24 +118,16 @@ impl WzFile {
         wz_file_meta.wz_with_encrypt_version_header = wz_with_encrypt_version_header;
     
         if wz_file_meta.patch_version == -1 {
-            /* not hold encver in wz_file, directly try 770 - 780 */
-            if !wz_with_encrypt_version_header {
-                for ver_to_decode in WZ_VERSION_HEADER_64BIT_START..WZ_VERSION_HEADER_64BIT_START + 10 {
-                    wz_file_meta.hash = check_and_get_version_hash(wz_file_meta.wz_version_header, ver_to_decode as i32) as usize;
-                    if let Ok(childs) = self.try_decode_with_wz_version_number(parent, &slice_reader, &wz_file_meta, ver_to_decode as i32) {
-                        wz_file_meta.patch_version = ver_to_decode as i32;
-                        self.update_wz_file_meta(wz_file_meta);
-                        self.is_parsed = true;
-                        return Ok(childs);
-                    }
-                }
-            }
+            let guess_range: Range<i32> = if wz_with_encrypt_version_header {
+                1..2000
+            } else {
+                /* not hold encver in wz_file, directly try 770 - 780 */
+                WZ_VERSION_HEADER_64BIT_START as i32..WZ_VERSION_HEADER_64BIT_START as i32 + 10
+            };
     
             /* there has code in maplelib to detect version from maplestory.exe here */
     
-            let max_patch_version = 2000;
-    
-            for ver_to_decode in 1..max_patch_version {
+            for ver_to_decode in guess_range {
                 wz_file_meta.hash = check_and_get_version_hash(wz_file_meta.wz_version_header, ver_to_decode) as usize;
                 if let Ok(childs) = self.try_decode_with_wz_version_number(parent, &slice_reader, &wz_file_meta, ver_to_decode) {
                     wz_file_meta.patch_version = ver_to_decode;
@@ -165,8 +168,9 @@ impl WzFile {
             )
             .with_hash(meta.hash);
 
+        node.verify_hash()?;
 
-        let childs = node.resolve_children(parent).map_err(Error::from)?;
+        let childs = node.resolve_children(parent)?;
 
         let first_image_node = childs.iter().find(|(_, node)| matches!(node.read().unwrap().object_type, WzObjectType::Image(_)));
 

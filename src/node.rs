@@ -59,13 +59,16 @@ impl WzNode {
     pub fn from_str(name: &str, object_type: impl Into<WzObjectType>, parent: Option<&WzNodeArc>) -> Self {
         Self::new(&name.into(), object_type, parent)
     }
-    /// Create a `WzNode` from a any `.wz` file.
+
+    /// Create a `WzNode` from a any `.wz` file. If version is not provided, it will try to detect the version.
+    /// 
+    /// # Errors
+    /// When not provid version and unable to detect it. Or it not valid WzFile(not contain valid header).
     pub fn from_wz_file<P>(path: P, version: Option<version::WzMapleVersion>, patch_version: Option<i32>, parent: Option<&WzNodeArc>) -> Result<Self, Error> 
         where P: AsRef<Path>
     {
         let name = path.as_ref().file_stem().unwrap().to_str().unwrap();
-        let version = version.unwrap_or(version::WzMapleVersion::BMS);
-        let wz_file = WzFile::from_file(&path, version::get_iv_by_maple_version(version), patch_version)?;
+        let wz_file = WzFile::from_file(&path, version.map(version::get_iv_by_maple_version), patch_version)?;
         Ok(WzNode::new(
             &name.into(), 
             wz_file, 
@@ -204,7 +207,7 @@ impl WzNode {
         if parent.is_none() {
             return String::new();
         }
-        
+
         let mut path = self.name.to_string();
         
         while let Some(parent_inner) = parent {
