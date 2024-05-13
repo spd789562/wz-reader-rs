@@ -760,14 +760,14 @@ mod test {
     type Result<T> = std::result::Result<T, Error>;
 
     fn generate_ascii_string(len: i32) -> Vec<u8> {
-        let mut buf = Vec::new();
+        let mut buf = Vec::with_capacity(len as usize);
         for i in 0..len {
             buf.push(((0xAA + i) ^ 97) as u8);
         }
         buf
     }
     fn generate_unicode_string(len: i32) -> Vec<u8> {
-        let mut buf = Vec::new();
+        let mut buf = Vec::with_capacity(len as usize);
         for i in 0..len {
             let encrypt_str = ((0xAAAA + i) ^ 97) as u16;
             buf.extend_from_slice(&encrypt_str.to_le_bytes());
@@ -779,7 +779,7 @@ mod test {
 
         key.ensure_key_size(len as usize)?;
 
-        let mut buf = Vec::new();
+        let mut buf = Vec::with_capacity(len as usize);
         for i in 0..len {
             let key: i32 = *(key.try_at(i as usize).unwrap_or(&0)) as i32;
             buf.push(((0xAA + i) ^ 97 ^ key) as u8);
@@ -792,7 +792,7 @@ mod test {
 
         key.ensure_key_size(len as usize)?;
 
-        let mut buf = Vec::new();
+        let mut buf = Vec::with_capacity(len as usize);
         for i in 0..len {
             let key1 = *(key.try_at((i * 2) as usize).unwrap_or(&0)) as i32;
             let key2 = *(key.try_at((i * 2) as usize + 1).unwrap_or(&0)) as i32;

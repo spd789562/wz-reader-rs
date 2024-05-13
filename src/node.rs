@@ -150,6 +150,8 @@ impl WzNode {
             _ => return Ok(()),
         };
 
+        self.children.reserve(childs.len());
+
         for (name, child) in childs {
             self.children.insert(name, child);
         }
@@ -402,6 +404,7 @@ impl WzNode {
     /// Transfer all children to another node. It will merge the children instead of replace to new one.
     pub fn transfer_childs(&mut self, to: &WzNodeArc) {
         let mut write = to.write().unwrap();
+        write.children.reserve(self.children.len());
         for (name, child) in self.children.drain() {
             if let Some(old) = write.children.get(&name) {
                 child.write().unwrap().transfer_childs(old);

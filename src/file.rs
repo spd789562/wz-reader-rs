@@ -1,6 +1,6 @@
 use crate::{
-    directory, reader, version, Reader, WzDirectory, WzNodeArc, WzNodeArcVec, WzObjectType,
-    WzReader, WzSliceReader,
+    directory, reader, version, Reader, WzDirectory, WzNodeArc, WzNodeArcVec, WzNodeCast,
+    WzObjectType, WzReader, WzSliceReader,
 };
 use memmap2::Mmap;
 use std::fs::File;
@@ -198,12 +198,12 @@ impl WzFile {
             .find(|(_, node)| matches!(node.read().unwrap().object_type, WzObjectType::Image(_)));
 
         if let Some((name, image_node)) = first_image_node {
-            let offset = if let WzObjectType::Image(node) = &image_node.read().unwrap().object_type
-            {
-                node.offset
-            } else {
-                return Err(Error::ErrorGameVerHash);
-            };
+            let offset = image_node
+                .read()
+                .unwrap()
+                .try_as_image()
+                .map(|node| node.offset)
+                .ok_or(Error::ErrorGameVerHash)?;
 
             let check_byte = reader
                 .read_u8_at(offset)

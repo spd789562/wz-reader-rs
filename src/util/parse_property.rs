@@ -171,6 +171,7 @@ pub fn parse_more(
 
             {
                 let mut node_write = node.write().unwrap();
+                node_write.children.reserve(childs.len());
                 for (name, child) in childs {
                     node_write.children.insert(name, child);
                 }
@@ -193,6 +194,7 @@ pub fn parse_more(
                 reader.skip(2);
                 let childs = parse_property_list(&node, org_reader, reader, origin_offset)?;
                 let mut node_write = node.write().unwrap();
+                node_write.children.reserve(childs.len());
                 for (name, child) in childs {
                     node_write.children.insert(name, child);
                 }
@@ -233,6 +235,7 @@ pub fn parse_more(
 
             {
                 let mut node_write = node.write().unwrap();
+                node_write.children.reserve(entry_count as usize);
                 for i in 0..entry_count {
                     let name: WzNodeName = i.to_string().into();
                     let parsed_node = parse_extended_prop(
@@ -370,63 +373,58 @@ pub fn get_node(
                 );
             }
 
-            if property_type == 9 {
-                if name == current_name {
-                    current_path = next_path;
-                    // skip block size
-                    reader.skip(4);
-                    get_extend_property_type_name(reader, origin_offset)?;
+            match property_type {
+                0 => { /* do nothing */ }
+                2 | 11 => {
                     reader.skip(2);
-                    break;
-                } else {
-                    let block_size = reader.read_u32()?;
-                    reader.skip(block_size as usize);
                 }
-            } else {
-                match property_type {
-                    0 => { /* do nothing */ }
-                    2 | 11 => {
-                        reader.skip(2);
-                    }
-                    3 | 19 => {
-                        reader.read_wz_int()?;
-                    }
-                    20 => {
-                        reader.read_wz_int64()?;
-                    }
-                    4 => {
-                        let float_type: u8 = reader.read_u8()?;
+                3 | 19 => {
+                    reader.read_wz_int()?;
+                }
+                20 => {
+                    reader.read_wz_int64()?;
+                }
+                4 => {
+                    let float_type: u8 = reader.read_u8()?;
 
-                        if float_type == 0x80 {
+                    if float_type == 0x80 {
+                        reader.skip(4);
+                    }
+                }
+                5 => {
+                    reader.skip(8);
+                }
+                8 => {
+                    let string_type = reader.read_u8()?;
+
+                    match string_type {
+                        0 | 0x73 => {
+                            reader.read_wz_string_meta()?;
+                        }
+                        1 | 0x1B => {
                             reader.skip(4);
                         }
+                        _ => {}
                     }
-                    5 => {
-                        reader.skip(8);
-                    }
-                    8 => {
-                        let string_type = reader.read_u8()?;
-
-                        match string_type {
-                            0 | 0x73 => {
-                                reader.read_wz_string_meta()?;
-                            }
-                            1 | 0x1B => {
-                                reader.skip(4);
-                            }
-                            _ => {}
-                        }
-                    }
-                    9 => {
+                }
+                9 => {
+                    if name == current_name {
+                        current_path = next_path;
+                        // skip block size
+                        reader.skip(4);
+                        get_extend_property_type_name(reader, origin_offset)?;
+                        reader.skip(2);
+                        break;
+                    } else {
                         let block_size = reader.read_u32()?;
                         reader.skip(block_size as usize);
                     }
-                    _ => {
-                        return Err(WzPropertyParseError::UnknownPropertyType(
-                            property_type,
-                            reader.pos.get(),
-                        ));
-                    }
+                }
+                _ => {
+                    return Err(WzPropertyParseError::UnknownPropertyType(
+                        property_type,
+                        reader.pos.get(),
+                    ));
                 }
             }
         }

@@ -130,7 +130,7 @@ impl WzDirectory {
             return Err(Error::InvalidEntryCount);
         }
 
-        let mut nodes: WzNodeArcVec = Vec::new();
+        let mut nodes: WzNodeArcVec = Vec::with_capacity(entry_count as usize);
 
         for _ in 0..entry_count {
             let dir_byte = reader.read_u8()?;

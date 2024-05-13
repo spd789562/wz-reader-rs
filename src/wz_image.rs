@@ -131,8 +131,6 @@ impl WzImage {
 
         let header_byte = reader.read_u8()?;
 
-        let mut childrens: WzNodeArcVec = Vec::new();
-
         match header_byte {
             0x1 => {
                 if self.name.ends_with(".lua") {
@@ -145,9 +143,7 @@ impl WzImage {
 
                     let lua_node = WzNode::new(&name, wz_lua, Some(parent));
 
-                    childrens.push((name, lua_node.into_lock()));
-
-                    return Ok(childrens);
+                    return Ok(vec![(name, lua_node.into_lock())]);
                 }
                 return Err(Error::LuaParseError);
             }
