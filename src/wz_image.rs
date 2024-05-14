@@ -124,7 +124,8 @@ impl WzImage {
         }
     }
 
-    pub fn resolve_children(&self, parent: &WzNodeArc) -> Result<WzNodeArcVec, Error> {
+    /// Parse the whole `WzImage` and return all children nodes. It can be directly used when you want to keep the original order of children.
+    pub fn resolve_children(&self, parent: Option<&WzNodeArc>) -> Result<WzNodeArcVec, Error> {
         let reader = self.reader.create_slice_reader_without_hash();
 
         reader.seek(self.offset);
@@ -141,7 +142,7 @@ impl WzImage {
 
                     let wz_lua = WzLua::new(&self.reader, offset, len as usize);
 
-                    let lua_node = WzNode::new(&name, wz_lua, Some(parent));
+                    let lua_node = WzNode::new(&name, wz_lua, parent);
 
                     return Ok(vec![(name, lua_node.into_lock())]);
                 }

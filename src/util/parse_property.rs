@@ -27,7 +27,7 @@ pub enum WzPropertyParseError {
 }
 
 pub fn parse_property_list(
-    parent: &WzNodeArc,
+    parent: Option<&WzNodeArc>,
     org_reader: &Arc<WzReader>,
     reader: &WzSliceReader,
     origin_offset: usize,
@@ -42,7 +42,7 @@ pub fn parse_property_list(
         let parsed_node = parse_property_node(
             name,
             property_type,
-            Some(parent),
+            parent,
             org_reader,
             reader,
             origin_offset,
@@ -167,7 +167,7 @@ pub fn parse_more(
             .into_lock();
 
             reader.skip(2);
-            let childs = parse_property_list(&node, org_reader, reader, origin_offset)?;
+            let childs = parse_property_list(Some(&node), org_reader, reader, origin_offset)?;
 
             {
                 let mut node_write = node.write().unwrap();
@@ -192,7 +192,7 @@ pub fn parse_more(
 
             if has_child {
                 reader.skip(2);
-                let childs = parse_property_list(&node, org_reader, reader, origin_offset)?;
+                let childs = parse_property_list(Some(&node), org_reader, reader, origin_offset)?;
                 let mut node_write = node.write().unwrap();
                 node_write.children.reserve(childs.len());
                 for (name, child) in childs {

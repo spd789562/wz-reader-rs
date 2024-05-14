@@ -145,7 +145,7 @@ impl WzNode {
                 if image.is_parsed {
                     return Ok(());
                 }
-                image.resolve_children(parent)?
+                image.resolve_children(Some(parent))?
             }
             _ => return Ok(()),
         };
