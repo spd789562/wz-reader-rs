@@ -31,6 +31,7 @@ pub trait WzNodeCast {
     fn try_as_lua(&self) -> Option<&WzLua>;
     fn try_as_raw_data(&self) -> Option<&WzRawData>;
 
+    fn is_null(&self) -> bool;
     fn try_as_vector2d(&self) -> Option<&Vector2D>;
     fn try_as_short(&self) -> Option<&i16>;
     fn try_as_int(&self) -> Option<&i32>;
@@ -101,6 +102,9 @@ impl WzNodeCast for WzNode {
             &self.object_type,
             WzObjectType::Property(WzSubProperty::Convex)
         )
+    }
+    fn is_null(&self) -> bool {
+        matches!(&self.object_type, WzObjectType::Value(WzValue::Null))
     }
 
     try_as_wz_value!(try_as_lua, Lua, WzLua);
@@ -261,6 +265,14 @@ mod test {
         let node = WzNode::from_str("test", WzObjectType::Property(WzSubProperty::Convex), None);
 
         assert!(node.is_convex());
+        assert!(!node.is_sub_property());
+    }
+
+    #[test]
+    fn is_null() {
+        let node = WzNode::from_str("test", WzObjectType::Value(WzValue::Null), None);
+
+        assert!(node.is_null());
         assert!(!node.is_sub_property());
     }
 

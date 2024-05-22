@@ -1,4 +1,6 @@
-use crate::{directory, file, version, wz_image, WzFile, WzImage, WzNodeName, WzObjectType};
+use crate::{
+    directory, file, property, version, wz_image, WzFile, WzImage, WzNodeName, WzObjectType,
+};
 use hashbrown::HashMap;
 use std::path::Path;
 use std::sync::{Arc, RwLock, Weak};
@@ -59,6 +61,16 @@ impl WzNode {
             children: HashMap::new(),
         }
     }
+
+    pub fn empty() -> Self {
+        Self {
+            name: WzNodeName::default(),
+            object_type: WzObjectType::Value(property::WzValue::Null),
+            parent: Weak::new(),
+            children: HashMap::new(),
+        }
+    }
+
     /// Create a `WzNode` use &str as name.
     pub fn from_str(
         name: &str,
