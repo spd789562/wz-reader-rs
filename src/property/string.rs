@@ -218,12 +218,14 @@ impl<'de> Deserialize<'de> for WzString {
     }
 }
 
-#[cfg(feature = "serde")]
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::WzNode;
     #[cfg(feature = "serde")]
     use serde_json;
+
+    type Result<T> = std::result::Result<T, WzStringParseError>;
 
     #[cfg(feature = "serde")]
     #[test]
@@ -259,5 +261,57 @@ mod test {
         let string: WzString = serde_json::from_str(r#""測試""#).unwrap();
         assert_eq!(string.string_type, WzStringType::Unicode);
         assert_eq!(string.get_string().unwrap(), "測試");
+    }
+
+    #[test]
+    fn test_wz_string_create_empty() -> Result<()> {
+        let wz_string = WzString::from_str("", [0, 0, 0, 0]);
+
+        assert_eq!(wz_string.length, 0);
+        assert_eq!(wz_string.string_type, WzStringType::Empty);
+        assert_eq!(wz_string.get_string()?, "");
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_wz_string_create_ascii() -> Result<()> {
+        let wz_string = WzString::from_str("test", [0, 0, 0, 0]);
+
+        assert_eq!(wz_string.length, 4);
+        assert_eq!(wz_string.string_type, WzStringType::Ascii);
+        assert_eq!(wz_string.get_string()?, "test");
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_wz_string_create_unicode() -> Result<()> {
+        let wz_string = WzString::from_str("測試", [0, 0, 0, 0]);
+
+        assert_eq!(wz_string.length, 4);
+        assert_eq!(wz_string.string_type, WzStringType::Unicode);
+        assert_eq!(wz_string.get_string()?, "測試");
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_resolve_from_node_success() -> Result<()> {
+        let node =
+            WzNode::from_str("root", WzString::from_str("test", [0, 0, 0, 0]), None).into_lock();
+
+        assert_eq!(resolve_string_from_node(&node)?, "test");
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_resolve_from_node_fail() -> Result<()> {
+        let node = WzNode::from_str("root", 1, None).into_lock();
+
+        assert!(resolve_string_from_node(&node).is_err());
+
+        Ok(())
     }
 }

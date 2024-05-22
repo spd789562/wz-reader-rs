@@ -198,8 +198,12 @@ impl<T: AsRef<[u8]>> WzBaseReader<T> {
 
 impl WzBaseReader<Mmap> {
     pub fn from_buff(buff: &[u8]) -> Self {
-        let mut memmap = memmap2::MmapMut::map_anon(buff.len()).unwrap();
-        memmap.copy_from_slice(buff);
+        let is_empty = buff.is_empty();
+        let len = if is_empty { 1 } else { buff.len() };
+        let mut memmap = memmap2::MmapMut::map_anon(len).unwrap();
+        if !is_empty {
+            memmap.copy_from_slice(buff);
+        }
         WzReader {
             map: memmap.make_read_only().unwrap(),
             keys: Arc::new(RwLock::new(WzMutableKey::new([0; 4], [0; 32]))),
@@ -721,10 +725,10 @@ pub fn read_ascii_string(buf: &[u8], sl: i8) -> Result<String> {
 }
 
 fn resolve_ascii_char(c: u8, i: i32) -> u8 {
-    (c as i32 ^ (0xAA + i)) as u8
+    c ^ (i as u8).overflowing_add(0xAA).0
 }
 fn resolve_unicode_char(c: u16, i: i32) -> u16 {
-    (c as i32 ^ (0xAAAA + i)) as u16
+    c ^ (i as u16).overflowing_add(0xAAAA).0
 }
 
 pub fn get_decrypt_slice(
