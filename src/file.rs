@@ -76,7 +76,7 @@ impl WzFile {
         let block_size = map.len();
 
         let wz_iv = if let Some(iv) = wz_iv {
-            // consider do version::verify_iv_from_wz_file here lie WzImage does, but feel like it's not necessary
+            // consider do version::verify_iv_from_wz_file here like WzImage does, but feel like it's not necessary
             iv
         } else {
             version::guess_iv_from_wz_file(&map).ok_or(Error::UnableToGuessVersion)?
