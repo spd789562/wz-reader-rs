@@ -1,5 +1,5 @@
-use crate::{reader, Reader, WzNodeArc, WzNodeCast, WzReader};
-use std::sync::Arc;
+use crate::{reader, util::WzMutableKey, Reader, WzNodeArc, WzNodeCast, WzReader};
+use std::sync::{Arc, RwLock};
 use thiserror::Error;
 
 #[cfg(feature = "serde")]
@@ -90,7 +90,7 @@ impl WzString {
     }
     /// Create a new `WzString` it will encrypt the string with the given iv.
     pub fn from_str(str: &str, iv: [u8; 4]) -> Self {
-        let reader = WzReader::default().with_iv(iv);
+        let mut mtbkeys = WzMutableKey::from_iv(iv.clone());
 
         let len;
 
@@ -105,9 +105,12 @@ impl WzString {
             WzStringType::Unicode
         };
 
-        let encrypted = reader.encrypt_str(str, &meta_type);
+        let encrypted = encrypt_str(&mut mtbkeys, str, &meta_type);
 
-        let reader = WzReader::from_buff(&encrypted).with_iv(iv);
+        let mut reader = WzReader::from_buff(&encrypted);
+
+        reader.wz_iv = iv;
+        reader.keys = Arc::new(RwLock::new(mtbkeys));
 
         WzString {
             reader: Arc::new(reader),
@@ -131,6 +134,48 @@ pub fn resolve_string_from_node(node: &WzNodeArc) -> Result<String, WzStringPars
         .try_as_string()
         .ok_or(WzStringParseError::NotStringProperty)
         .and_then(|string| string.get_string())
+}
+
+pub(crate) fn encrypt_str(
+    keys: &mut WzMutableKey,
+    str: &str,
+    string_type: &WzStringType,
+) -> Vec<u8> {
+    match string_type {
+        WzStringType::Empty => Vec::new(),
+        WzStringType::Unicode => {
+            let mut bytes = str.encode_utf16().collect::<Vec<_>>();
+
+            keys.ensure_key_size(bytes.len() * 2).unwrap();
+
+            bytes
+                .iter_mut()
+                .enumerate()
+                .flat_map(|(i, b)| {
+                    let key1 = *keys.try_at(i * 2).unwrap_or(&0) as u16;
+                    let key2 = *keys.try_at(i * 2 + 1).unwrap_or(&0) as u16;
+                    let i = (i + 0xAAAA) as u16;
+                    *b ^= i ^ key1 ^ (key2 << 8);
+
+                    b.to_le_bytes().to_vec()
+                })
+                .collect()
+        }
+        WzStringType::Ascii => {
+            let mut bytes = str.bytes().collect::<Vec<_>>();
+
+            keys.ensure_key_size(bytes.len()).unwrap();
+
+            for (i, b) in bytes.iter_mut().enumerate() {
+                let key = keys.try_at(i).unwrap_or(&0);
+                let i = (i + 0xAA) as u8;
+
+                *b ^= i ^ key;
+            }
+
+            bytes
+        }
+    }
 }
 
 #[cfg(feature = "serde")]

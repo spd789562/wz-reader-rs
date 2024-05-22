@@ -3,7 +3,7 @@ use scroll::{Pread, LE};
 use std::cell::Cell;
 use std::sync::{Arc, RwLock};
 
-use crate::property::{WzStringMeta, WzStringType};
+use crate::property::{encrypt_str, WzStringMeta, WzStringType};
 use crate::util::WzMutableKey;
 use crate::WzHeader;
 
@@ -20,22 +20,26 @@ pub enum Error {
 }
 
 type Result<T> = std::result::Result<T, Error>;
-/// A basic reader for reading data, it store original data(Mmap), and can't not
+
+/// A basic reader for reading data, it store original data, and can't not
 /// read data without provide offset of the data.
 #[derive(Debug)]
-pub struct WzReader {
-    pub map: Mmap,
+pub struct WzBaseReader<T: Sized + AsRef<[u8]>> {
+    pub map: T,
     pub wz_iv: [u8; 4],
     pub keys: Arc<RwLock<WzMutableKey>>,
 }
 
-impl Default for WzReader {
+/// the Mmap impl for WzBaseReader
+pub type WzReader = WzBaseReader<Mmap>;
+
+impl Default for WzBaseReader<Mmap> {
     fn default() -> Self {
         let memmap = memmap2::MmapMut::map_anon(1)
             .unwrap()
             .make_read_only()
             .unwrap();
-        WzReader {
+        WzBaseReader {
             map: memmap,
             wz_iv: [0; 4],
             keys: Arc::new(RwLock::new(WzMutableKey::new([0; 4], [0; 32]))),
@@ -139,21 +143,60 @@ pub trait Reader {
     }
 }
 
-impl WzReader {
-    pub fn new(map: Mmap) -> Self {
-        WzReader {
+impl<T: AsRef<[u8]>> WzBaseReader<T> {
+    pub fn new(map: T) -> Self {
+        WzBaseReader {
             map,
             keys: Arc::new(RwLock::new(WzMutableKey::new([0; 4], [0; 32]))),
             wz_iv: [0; 4],
         }
     }
     pub fn with_iv(self, iv: [u8; 4]) -> Self {
-        WzReader {
+        WzBaseReader {
             wz_iv: iv,
             keys: Arc::new(RwLock::new(WzMutableKey::from_iv(iv))),
             ..self
         }
     }
+
+    pub fn try_header(&self) -> Result<WzHeader> {
+        self.map.as_ref().pread::<WzHeader>(0)
+    }
+    pub fn create_header(&self) -> WzHeader {
+        self.map
+            .as_ref()
+            .pread::<WzHeader>(0)
+            .unwrap_or(WzHeader::default())
+    }
+    pub fn get_ref_slice(&self) -> &[u8] {
+        self.map.as_ref()
+    }
+    pub fn get_slice(&self, range: std::ops::Range<usize>) -> &[u8] {
+        &self.map.as_ref()[range]
+    }
+    pub fn get_wz_fstart(&self) -> Result<u32> {
+        WzHeader::get_wz_fstart(self.map.as_ref())
+    }
+    pub fn get_wz_fsize(&self) -> Result<u64> {
+        WzHeader::get_wz_fsize(self.map.as_ref())
+    }
+    pub fn create_slice_reader_without_hash(&self) -> WzSliceReader {
+        WzSliceReader::new(self.map.as_ref(), &self.keys).with_header(WzHeader::default())
+    }
+    pub fn create_slice_reader(&self) -> WzSliceReader {
+        WzSliceReader::new(self.map.as_ref(), &self.keys).with_header(self.create_header())
+    }
+    /// create a encrypt string from current `WzReader`
+    pub fn encrypt_str(&self, str: &str, meta_type: &WzStringType) -> Vec<u8> {
+        if meta_type == &WzStringType::Empty {
+            return Vec::new();
+        }
+        let mut keys = self.keys.write().unwrap();
+        return encrypt_str(&mut keys, str, meta_type);
+    }
+}
+
+impl WzBaseReader<Mmap> {
     pub fn from_buff(buff: &[u8]) -> Self {
         let mut memmap = memmap2::MmapMut::map_anon(buff.len()).unwrap();
         memmap.copy_from_slice(buff);
@@ -161,72 +204,6 @@ impl WzReader {
             map: memmap.make_read_only().unwrap(),
             keys: Arc::new(RwLock::new(WzMutableKey::new([0; 4], [0; 32]))),
             wz_iv: [0; 4],
-        }
-    }
-
-    pub fn try_header(&self) -> Result<WzHeader> {
-        self.map.pread::<WzHeader>(0)
-    }
-    pub fn create_header(&self) -> WzHeader {
-        self.map.pread::<WzHeader>(0).unwrap_or(WzHeader::default())
-    }
-    pub fn get_ref_slice(&self) -> &[u8] {
-        &self.map
-    }
-    pub fn get_slice(&self, range: std::ops::Range<usize>) -> &[u8] {
-        &self.map[range]
-    }
-    pub fn get_wz_fstart(&self) -> Result<u32> {
-        WzHeader::get_wz_fstart(&self.map)
-    }
-    pub fn get_wz_fsize(&self) -> Result<u64> {
-        WzHeader::get_wz_fsize(&self.map)
-    }
-    pub fn create_slice_reader_without_hash(&self) -> WzSliceReader {
-        WzSliceReader::new(&self.map, &self.keys).with_header(WzHeader::default())
-    }
-    pub fn create_slice_reader(&self) -> WzSliceReader {
-        WzSliceReader::new(&self.map, &self.keys).with_header(self.create_header())
-    }
-    /// create a encrypt string from current `WzReader`
-    pub fn encrypt_str(&self, str: &str, meta_type: &WzStringType) -> Vec<u8> {
-        match meta_type {
-            WzStringType::Empty => Vec::new(),
-            WzStringType::Unicode => {
-                let mut bytes = str.encode_utf16().collect::<Vec<_>>();
-                let mut keys = self.keys.write().unwrap();
-
-                keys.ensure_key_size(bytes.len() * 2).unwrap();
-
-                bytes
-                    .iter_mut()
-                    .enumerate()
-                    .flat_map(|(i, b)| {
-                        let key1 = *keys.try_at(i * 2).unwrap_or(&0) as u16;
-                        let key2 = *keys.try_at(i * 2 + 1).unwrap_or(&0) as u16;
-                        let i = (i + 0xAAAA) as u16;
-                        *b ^= i ^ key1 ^ (key2 << 8);
-
-                        b.to_le_bytes().to_vec()
-                    })
-                    .collect()
-            }
-            WzStringType::Ascii => {
-                let mut bytes = str.bytes().collect::<Vec<_>>();
-
-                let mut keys = self.keys.write().unwrap();
-
-                keys.ensure_key_size(bytes.len()).unwrap();
-
-                for (i, b) in bytes.iter_mut().enumerate() {
-                    let key = keys.try_at(i).unwrap_or(&0);
-                    let i = (i + 0xAA) as u8;
-
-                    *b ^= i ^ key;
-                }
-
-                bytes
-            }
         }
     }
 }
@@ -490,44 +467,74 @@ impl<'a> WzSliceReader<'a> {
     }
 }
 
-impl Reader for WzReader {
+impl<T: AsRef<[u8]>> Reader for WzBaseReader<T> {
     fn read_u8_at(&self, pos: usize) -> Result<u8> {
-        self.map.pread_with::<u8>(pos, LE).map_err(Error::from)
+        self.map
+            .as_ref()
+            .pread_with::<u8>(pos, LE)
+            .map_err(Error::from)
     }
     fn read_u16_at(&self, pos: usize) -> Result<u16> {
-        self.map.pread_with::<u16>(pos, LE).map_err(Error::from)
+        self.map
+            .as_ref()
+            .pread_with::<u16>(pos, LE)
+            .map_err(Error::from)
     }
     fn read_u32_at(&self, pos: usize) -> Result<u32> {
-        self.map.pread_with::<u32>(pos, LE).map_err(Error::from)
+        self.map
+            .as_ref()
+            .pread_with::<u32>(pos, LE)
+            .map_err(Error::from)
     }
     fn read_u64_at(&self, pos: usize) -> Result<u64> {
-        self.map.pread_with::<u64>(pos, LE).map_err(Error::from)
+        self.map
+            .as_ref()
+            .pread_with::<u64>(pos, LE)
+            .map_err(Error::from)
     }
     fn read_i8_at(&self, pos: usize) -> Result<i8> {
-        self.map.pread_with::<i8>(pos, LE).map_err(Error::from)
+        self.map
+            .as_ref()
+            .pread_with::<i8>(pos, LE)
+            .map_err(Error::from)
     }
     fn read_i16_at(&self, pos: usize) -> Result<i16> {
-        self.map.pread_with::<i16>(pos, LE).map_err(Error::from)
+        self.map
+            .as_ref()
+            .pread_with::<i16>(pos, LE)
+            .map_err(Error::from)
     }
     fn read_i32_at(&self, pos: usize) -> Result<i32> {
-        self.map.pread_with::<i32>(pos, LE).map_err(Error::from)
+        self.map
+            .as_ref()
+            .pread_with::<i32>(pos, LE)
+            .map_err(Error::from)
     }
     fn read_i64_at(&self, pos: usize) -> Result<i64> {
-        self.map.pread_with::<i64>(pos, LE).map_err(Error::from)
+        self.map
+            .as_ref()
+            .pread_with::<i64>(pos, LE)
+            .map_err(Error::from)
     }
     fn read_float_at(&self, pos: usize) -> Result<f32> {
-        self.map.pread_with::<f32>(pos, LE).map_err(Error::from)
+        self.map
+            .as_ref()
+            .pread_with::<f32>(pos, LE)
+            .map_err(Error::from)
     }
     fn read_double_at(&self, pos: usize) -> Result<f64> {
-        self.map.pread_with::<f64>(pos, LE).map_err(Error::from)
+        self.map
+            .as_ref()
+            .pread_with::<f64>(pos, LE)
+            .map_err(Error::from)
     }
 
     fn get_size(&self) -> usize {
-        self.map.len()
+        self.map.as_ref().len()
     }
     fn get_decrypt_slice(&self, range: std::ops::Range<usize>) -> Result<Vec<u8>> {
         let len = range.len();
-        get_decrypt_slice(&self.map[range], len, &self.keys)
+        get_decrypt_slice(&self.map.as_ref()[range], len, &self.keys)
     }
 }
 
@@ -752,12 +759,11 @@ mod test {
     use super::*;
     use crate::util::maple_crypto_constants::{WZ_GMSIV, WZ_MSEAIV};
     use crate::util::WzMutableKey;
-    use memmap2::MmapMut;
-    use std::fs::OpenOptions;
-    use tempfile;
 
     type Error = Box<dyn std::error::Error>;
     type Result<T> = std::result::Result<T, Error>;
+
+    type WzVecReader = WzBaseReader<Vec<u8>>;
 
     fn generate_ascii_string(len: i32) -> Vec<u8> {
         let mut buf = Vec::with_capacity(len as usize);
@@ -804,19 +810,8 @@ mod test {
         Ok(buf)
     }
 
-    fn setup() -> Result<Mmap> {
-        let dir = tempfile::tempdir()?;
-        let file_path = dir.path().join("test.wz");
-
-        let file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .open(file_path)?;
-
-        file.set_len(1024)?;
-
-        let mut map = unsafe { MmapMut::map_mut(&file)? };
+    fn setup() -> Result<Vec<u8>> {
+        let mut setup_vec = Vec::with_capacity(1024);
 
         let mock_wz_header = [
             0x50, 0x4b, 0x47, 0x31, // PKG1
@@ -844,96 +839,55 @@ mod test {
             0x80, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         ];
 
-        let pos = 0;
-        let mut end = 60;
+        // 60
+        setup_vec.extend_from_slice(&mock_wz_header);
 
-        (&mut map[pos..end]).copy_from_slice(&mock_wz_header);
-
-        let pos = end;
-        end += 58;
-        (&mut map[pos..end]).copy_from_slice(&mock_data);
+        //58
+        setup_vec.extend_from_slice(&mock_data);
 
         // empty string
-        let pos = end;
-        end += 1;
-        (&mut map[pos..end]).copy_from_slice(&[0x00]);
+        setup_vec.extend_from_slice(&[0x00]);
 
         // len = 20 ascii
-        let pos = end;
-        end += 1;
-        (&mut map[pos..end]).copy_from_slice(&(-20_i8).to_le_bytes());
-        let pos = end;
-        end += 20;
-        (&mut map[pos..end]).copy_from_slice(&generate_ascii_string(20));
+        setup_vec.extend_from_slice(&(-20_i8).to_le_bytes());
+        setup_vec.extend_from_slice(&generate_ascii_string(20));
 
         // len = 200 ascii
-        let pos = end;
-        end += 1;
-        (&mut map[pos..end]).copy_from_slice(&(i8::MIN).to_le_bytes());
-        let pos = end;
-        end += 4;
-        (&mut map[pos..end]).copy_from_slice(&200_i32.to_le_bytes());
-        let pos = end;
-        end += 200;
-        (&mut map[pos..end]).copy_from_slice(&generate_ascii_string(200));
+        setup_vec.extend_from_slice(&(i8::MIN).to_le_bytes());
+        setup_vec.extend_from_slice(&200_i32.to_le_bytes());
+        setup_vec.extend_from_slice(&generate_ascii_string(200));
 
         // len = 20 unicode
-        let pos = end;
-        end += 1;
-        (&mut map[pos..end]).copy_from_slice(&(20_i8).to_le_bytes());
-        let pos = end;
-        end += 40;
-        (&mut map[pos..end]).copy_from_slice(&generate_unicode_string(20));
+        setup_vec.extend_from_slice(&(20_i8).to_le_bytes());
+        setup_vec.extend_from_slice(&generate_unicode_string(20));
 
         // len = 200 unicode
-        let pos = end;
-        end += 1;
-        (&mut map[pos..end]).copy_from_slice(&(i8::MAX).to_le_bytes());
-        let pos = end;
-        end += 4;
-        (&mut map[pos..end]).copy_from_slice(&200_i32.to_le_bytes());
-        let pos = end;
-        end += 400;
-        (&mut map[pos..end]).copy_from_slice(&generate_unicode_string(200));
+        setup_vec.extend_from_slice(&(i8::MAX).to_le_bytes());
+        setup_vec.extend_from_slice(&200_i32.to_le_bytes());
+        setup_vec.extend_from_slice(&generate_unicode_string(200));
 
         // len = 20 encrypted(GMS_OLD) ascii
-        let pos = end;
-        end += 1;
-        (&mut map[pos..end]).copy_from_slice(&(-20_i8).to_le_bytes());
-        let pos = end;
-        end += 20;
-        (&mut map[pos..end]).copy_from_slice(&generate_encrypted_ascii_string(20, WZ_GMSIV)?);
+        setup_vec.extend_from_slice(&(-20_i8).to_le_bytes());
+        setup_vec.extend_from_slice(&generate_encrypted_ascii_string(20, WZ_GMSIV)?);
 
         // len = 20 encrypted(GMS_OLD) unicode
-        let pos = end;
-        end += 1;
-        (&mut map[pos..end]).copy_from_slice(&(20_i8).to_le_bytes());
-        let pos = end;
-        end += 40;
-        (&mut map[pos..end]).copy_from_slice(&generate_encrypted_unicode_string(20, WZ_GMSIV)?);
+        setup_vec.extend_from_slice(&(20_i8).to_le_bytes());
+        setup_vec.extend_from_slice(&generate_encrypted_unicode_string(20, WZ_GMSIV)?);
 
         // len = 20 encrypted(MSEA) ascii
-        let pos = end;
-        end += 1;
-        (&mut map[pos..end]).copy_from_slice(&(-20_i8).to_le_bytes());
-        let pos = end;
-        end += 20;
-        (&mut map[pos..end]).copy_from_slice(&generate_encrypted_ascii_string(20, WZ_MSEAIV)?);
+        setup_vec.extend_from_slice(&(-20_i8).to_le_bytes());
+        setup_vec.extend_from_slice(&generate_encrypted_ascii_string(20, WZ_MSEAIV)?);
 
         // len = 20 encrypted(MSEA) unicode
-        let pos = end;
-        end += 1;
-        (&mut map[pos..end]).copy_from_slice(&(20_i8).to_le_bytes());
-        let pos = end;
-        end += 40;
-        (&mut map[pos..end]).copy_from_slice(&generate_encrypted_unicode_string(20, WZ_MSEAIV)?);
+        setup_vec.extend_from_slice(&(20_i8).to_le_bytes());
+        setup_vec.extend_from_slice(&generate_encrypted_unicode_string(20, WZ_MSEAIV)?);
 
-        Ok(map.make_read_only()?)
+        Ok(setup_vec)
     }
 
     #[test]
     fn test_wz_header() -> Result<()> {
-        let reader = WzReader::new(setup()?);
+        let reader = WzVecReader::new(setup()?);
 
         let wz_header = reader.create_header();
         assert_eq!(wz_header.ident, "PKG1");
@@ -946,11 +900,9 @@ mod test {
 
     #[test]
     fn test_wz_create_encrypt_str_ascii() -> Result<()> {
-        let reader = WzReader::default();
+        let mut reader = WzVecReader::new(Vec::new());
         let test1 = "test1";
-        let encrypted = reader.encrypt_str(test1, &WzStringType::Ascii);
-
-        let reader = WzReader::from_buff(&encrypted);
+        reader.map = reader.encrypt_str(test1, &WzStringType::Ascii);
 
         assert_eq!(
             reader.resolve_wz_string_meta(&WzStringType::Ascii, 0, 5)?,
@@ -962,11 +914,9 @@ mod test {
 
     #[test]
     fn test_wz_create_encrypt_str_unicode() -> Result<()> {
-        let reader = WzReader::default();
+        let mut reader = WzVecReader::new(Vec::new());
         let test1 = "測試";
-        let encrypted = reader.encrypt_str(test1, &WzStringType::Unicode);
-
-        let reader = WzReader::from_buff(&encrypted);
+        reader.map = reader.encrypt_str(test1, &WzStringType::Unicode);
 
         assert_eq!(
             reader.resolve_wz_string_meta(&WzStringType::Unicode, 0, 4)?,
@@ -978,11 +928,9 @@ mod test {
 
     #[test]
     fn test_wz_create_encrypt_str_ascii_with_iv() -> Result<()> {
-        let reader = WzReader::default().with_iv(WZ_MSEAIV);
+        let mut reader = WzVecReader::new(Vec::new()).with_iv(WZ_MSEAIV);
         let test1 = "test1";
-        let encrypted = reader.encrypt_str(test1, &WzStringType::Ascii);
-
-        let reader = WzReader::from_buff(&encrypted).with_iv(WZ_MSEAIV);
+        reader.map = reader.encrypt_str(test1, &WzStringType::Ascii);
 
         assert_eq!(
             reader.resolve_wz_string_meta(&WzStringType::Ascii, 0, 5)?,
@@ -994,11 +942,9 @@ mod test {
 
     #[test]
     fn test_wz_create_encrypt_str_unicode_with_iv() -> Result<()> {
-        let reader = WzReader::default().with_iv(WZ_MSEAIV);
+        let mut reader = WzVecReader::new(Vec::new()).with_iv(WZ_MSEAIV);
         let test1 = "測試";
-        let encrypted = reader.encrypt_str(test1, &WzStringType::Unicode);
-
-        let reader = WzReader::from_buff(&encrypted).with_iv(WZ_MSEAIV);
+        reader.map = reader.encrypt_str(test1, &WzStringType::Unicode);
 
         assert_eq!(
             reader.resolve_wz_string_meta(&WzStringType::Unicode, 0, 4)?,
@@ -1010,7 +956,7 @@ mod test {
 
     #[test]
     fn test_wz_signed() -> Result<()> {
-        let reader = WzReader::new(setup()?);
+        let reader = WzVecReader::new(setup()?);
 
         assert_eq!(reader.read_i8_at(60)?, 1);
         assert_eq!(reader.read_i16_at(61)?, 2);
@@ -1031,7 +977,7 @@ mod test {
 
     #[test]
     fn test_wz_unsigned() -> Result<()> {
-        let reader = WzReader::new(setup()?);
+        let reader = WzVecReader::new(setup()?);
 
         assert_eq!(reader.read_u8_at(75)?, 1);
         assert_eq!(reader.read_u16_at(76)?, 2);
@@ -1052,7 +998,7 @@ mod test {
 
     #[test]
     fn test_wz_float() -> Result<()> {
-        let reader = WzReader::new(setup()?);
+        let reader = WzVecReader::new(setup()?);
 
         assert_eq!(reader.read_float_at(90)?, 1.1);
         assert_eq!(reader.read_double_at(94)?, 2.22);
@@ -1069,7 +1015,7 @@ mod test {
 
     #[test]
     fn test_wz_int() -> Result<()> {
-        let reader = WzReader::new(setup()?);
+        let reader = WzVecReader::new(setup()?);
 
         let slice_reader = reader.create_slice_reader();
 
@@ -1083,7 +1029,7 @@ mod test {
 
     #[test]
     fn test_wz_int64() -> Result<()> {
-        let reader = WzReader::new(setup()?);
+        let reader = WzVecReader::new(setup()?);
 
         let slice_reader = reader.create_slice_reader();
 
@@ -1097,7 +1043,7 @@ mod test {
 
     #[test]
     fn test_wz_empty_string() -> Result<()> {
-        let reader = WzReader::new(setup()?);
+        let reader = WzVecReader::new(setup()?);
 
         let slice_reader = reader.create_slice_reader();
 
@@ -1121,7 +1067,7 @@ mod test {
 
     #[test]
     fn test_wz_ascii_string() -> Result<()> {
-        let reader = WzReader::new(setup()?);
+        let reader = WzVecReader::new(setup()?);
 
         let slice_reader = reader.create_slice_reader();
 
@@ -1147,7 +1093,7 @@ mod test {
 
     #[test]
     fn test_wz_ascii_string_gt_128() -> Result<()> {
-        let reader = WzReader::new(setup()?);
+        let reader = WzVecReader::new(setup()?);
 
         let slice_reader = reader.create_slice_reader();
 
@@ -1173,7 +1119,7 @@ mod test {
 
     #[test]
     fn test_wz_unicode_string() -> Result<()> {
-        let reader = WzReader::new(setup()?);
+        let reader = WzVecReader::new(setup()?);
 
         let slice_reader = reader.create_slice_reader();
 
@@ -1199,7 +1145,7 @@ mod test {
 
     #[test]
     fn test_wz_unicode_string_gt_128() -> Result<()> {
-        let reader = WzReader::new(setup()?);
+        let reader = WzVecReader::new(setup()?);
 
         let slice_reader = reader.create_slice_reader();
 
@@ -1225,7 +1171,7 @@ mod test {
 
     #[test]
     fn test_wz_encrypted_gms_ascii_string() -> Result<()> {
-        let reader = WzReader::new(setup()?).with_iv(WZ_GMSIV);
+        let reader = WzVecReader::new(setup()?).with_iv(WZ_GMSIV);
 
         let slice_reader = reader.create_slice_reader();
 
@@ -1251,7 +1197,7 @@ mod test {
 
     #[test]
     fn test_wz_encrypted_gms_unicode_string() -> Result<()> {
-        let reader = WzReader::new(setup()?).with_iv(WZ_GMSIV);
+        let reader = WzVecReader::new(setup()?).with_iv(WZ_GMSIV);
 
         let slice_reader = reader.create_slice_reader();
 
@@ -1277,7 +1223,7 @@ mod test {
 
     #[test]
     fn test_wz_encrypted_msea_ascii_string() -> Result<()> {
-        let reader = WzReader::new(setup()?).with_iv(WZ_MSEAIV);
+        let reader = WzVecReader::new(setup()?).with_iv(WZ_MSEAIV);
 
         let slice_reader = reader.create_slice_reader();
 
@@ -1303,7 +1249,7 @@ mod test {
 
     #[test]
     fn test_wz_encrypted_msea_unicode_string() -> Result<()> {
-        let reader = WzReader::new(setup()?).with_iv(WZ_MSEAIV);
+        let reader = WzVecReader::new(setup()?).with_iv(WZ_MSEAIV);
 
         let slice_reader = reader.create_slice_reader();
 
