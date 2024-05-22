@@ -107,12 +107,21 @@ pub fn resolve_base(path: &str, version: Option<WzMapleVersion>) -> Result<WzNod
     {
         let mut base_write = base_node.write().unwrap();
 
-        let wz_root_path = Path::new(path).parent().unwrap().parent().unwrap();
+        let first_parent = Path::new(path).parent().unwrap();
+
+        // if a Base.wz in under Base folder, then should up to parent to find Map, Item and other stuff
+        // if not, the other stuff just at same folder as Base.wz
+        let wz_root_path = if first_parent.file_stem().unwrap() == "Base" {
+            first_parent.parent().unwrap()
+        } else {
+            first_parent
+        };
 
         for item in wz_root_path.read_dir()? {
             let dir = item?;
             let file_name = dir.file_name();
 
+            // we only allow the thing is listed in Base.wz
             let has_dir = base_write.at(file_name.to_str().unwrap()).is_some();
 
             if has_dir {
