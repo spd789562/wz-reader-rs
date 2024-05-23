@@ -89,10 +89,11 @@ fn fat_bench(c: &mut Criterion) {
 }
 
 fn parse_and_access_bench(c: &mut Criterion) {
-    let node = WzNode::from_wz_file(
+    let node = WzNode::from_wz_file_full(
         "./benches/benchmarks/test.wz",
         Some(WzMapleVersion::BMS),
         Some(123),
+        None,
         None,
     )
     .unwrap()
@@ -107,10 +108,11 @@ fn parse_and_access_bench(c: &mut Criterion) {
 }
 
 fn access_after_parsing_bench(c: &mut Criterion) {
-    let node = WzNode::from_wz_file(
+    let node = WzNode::from_wz_file_full(
         "./benches/benchmarks/test.wz",
         Some(WzMapleVersion::BMS),
         Some(123),
+        None,
         None,
     )
     .unwrap()
@@ -126,10 +128,11 @@ fn access_after_parsing_bench(c: &mut Criterion) {
 }
 
 fn direct_access_bench(c: &mut Criterion) {
-    let node = WzNode::from_wz_file(
+    let node = WzNode::from_wz_file_full(
         "./benches/benchmarks/test.wz",
         Some(WzMapleVersion::BMS),
         Some(123),
+        None,
         None,
     )
     .unwrap()

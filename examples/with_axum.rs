@@ -13,7 +13,7 @@ use std::io::{BufWriter, Cursor};
 use std::sync::{Arc, Mutex, RwLock};
 use wz_reader::{
     node, property,
-    util::{resolve_base, walk_node},
+    util::{node_util, resolve_base, walk_node},
     version::WzMapleVersion,
     WzNodeArc, WzNodeCast, WzNodeName,
 };
@@ -202,7 +202,7 @@ fn get_node_from_root(
     };
 
     if force_parse {
-        node::parse_node(&target)?;
+        node_util::parse_node(&target)?;
     }
 
     Ok(target)
@@ -473,7 +473,7 @@ async fn simple_browse(
 
         if target_read.name.as_str() == "_inlink" {
             let value = target_read.try_as_string().unwrap().get_string().unwrap();
-            match node::resolve_inlink(&value, &target) {
+            match node_util::resolve_inlink(&value, &target) {
                 Some(v) => {
                     let link_dest = v.read().unwrap().get_full_path();
                     result_string.push_str(&make_simple_browse_node_link(
@@ -489,7 +489,7 @@ async fn simple_browse(
             }
         } else if target_read.name.as_str() == "_outlink" {
             let value = target_read.try_as_string().unwrap().get_string().unwrap();
-            match node::resolve_outlink(&value, &target, true) {
+            match node_util::resolve_outlink(&value, &target, true) {
                 Some(v) => {
                     let link_dest = v.read().unwrap().get_full_path();
                     result_string.push_str(&make_simple_browse_node_link(

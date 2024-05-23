@@ -25,10 +25,9 @@ fn walk_node_and_to_json(node_arc: &WzNodeArc, json: &mut Map<String, Value>) {
 
 fn main() {
     /* resolve single wz file */
-    let node: WzNodeArc =
-        WzNode::from_wz_file(r"D:\MapleStory\Data\UI\UI_000.wz", None, None, None)
-            .unwrap()
-            .into();
+    let node: WzNodeArc = WzNode::from_wz_file(r"D:\MapleStory\Data\UI\UI_000.wz", None)
+        .unwrap()
+        .into();
 
     let mut node_write = node.write().unwrap();
 

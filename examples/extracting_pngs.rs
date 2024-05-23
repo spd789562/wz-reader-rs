@@ -15,14 +15,10 @@ fn main() {
     };
 
     /* resolve single wz file */
-    let node: WzNodeArc = WzNode::from_wz_file(
-        r"D:\MapleStory\Data\Npc\_Canvas\_Canvas000.wz",
-        None,
-        None,
-        None,
-    )
-    .unwrap()
-    .into();
+    let node: WzNodeArc =
+        WzNode::from_wz_file(r"D:\MapleStory\Data\Npc\_Canvas\_Canvas000.wz", None)
+            .unwrap()
+            .into();
 
     walk_node(&node, true, &save_image_fn);
 
@@ -33,13 +29,8 @@ fn main() {
     walk_node(&base_node, true, &save_image_fn);
 
     /* resolve whole wz folder */
-    let root_node = resolve_root_wz_file_dir(
-        r"D:\MapleStory\Data\Npc\_Canvas\_Canvas.wz",
-        None,
-        None,
-        None,
-    )
-    .unwrap();
+    let root_node =
+        resolve_root_wz_file_dir(r"D:\MapleStory\Data\Npc\_Canvas\_Canvas.wz", None).unwrap();
 
     walk_node(&root_node, true, &save_image_fn);
 }
