@@ -42,7 +42,13 @@ fn make_sure_wz_file_version(node: &WzNodeArc, version: i32) {
 
 #[test]
 fn should_guessing_patch_version() -> Result<()> {
-    let wz_file = WzNode::from_wz_file(r"tests/test.wz", Some(WzMapleVersion::BMS), None, None);
+    let wz_file = WzNode::from_wz_file_full(
+        r"tests/test.wz",
+        Some(WzMapleVersion::BMS),
+        None,
+        None,
+        None,
+    );
     assert!(wz_file.is_ok());
 
     let wz_file = wz_file?.into_lock();
@@ -58,8 +64,13 @@ fn should_guessing_patch_version() -> Result<()> {
 
 #[test]
 fn should_parsing_with_patch_version() -> Result<()> {
-    let wz_file =
-        WzNode::from_wz_file(r"tests/test.wz", Some(WzMapleVersion::BMS), Some(123), None);
+    let wz_file = WzNode::from_wz_file_full(
+        r"tests/test.wz",
+        Some(WzMapleVersion::BMS),
+        Some(123),
+        None,
+        None,
+    );
     assert!(wz_file.is_ok());
 
     let wz_file = wz_file?.into_lock();
@@ -236,8 +247,13 @@ fn check_sample_wz_img(wz_img: &WzNodeArc) -> Result<()> {
 
 #[test]
 fn should_parsing_wz_file_and_check_values() -> Result<()> {
-    let wz_file =
-        WzNode::from_wz_file(r"tests/test.wz", Some(WzMapleVersion::BMS), Some(123), None);
+    let wz_file = WzNode::from_wz_file_full(
+        r"tests/test.wz",
+        Some(WzMapleVersion::BMS),
+        Some(123),
+        None,
+        None,
+    );
     assert!(wz_file.is_ok());
 
     let wz_file = wz_file?.into_lock();
@@ -261,8 +277,13 @@ fn should_parsing_wz_file_and_check_values() -> Result<()> {
 
 #[test]
 fn should_success_using_wz_node_methods_on_childs() -> Result<()> {
-    let wz_file =
-        WzNode::from_wz_file(r"tests/test.wz", Some(WzMapleVersion::BMS), Some(123), None);
+    let wz_file = WzNode::from_wz_file_full(
+        r"tests/test.wz",
+        Some(WzMapleVersion::BMS),
+        Some(123),
+        None,
+        None,
+    );
     assert!(wz_file.is_ok());
 
     let wz_file = wz_file?.into_lock();
@@ -379,8 +400,13 @@ fn should_success_using_wz_node_methods_on_childs() -> Result<()> {
 
 #[test]
 fn should_success_walk_thorugh() {
-    let wz_file =
-        WzNode::from_wz_file(r"tests/test.wz", Some(WzMapleVersion::BMS), Some(123), None);
+    let wz_file = WzNode::from_wz_file_full(
+        r"tests/test.wz",
+        Some(WzMapleVersion::BMS),
+        Some(123),
+        None,
+        None,
+    );
     assert!(wz_file.is_ok());
 
     let wz_file = wz_file.unwrap().into_lock();
@@ -416,7 +442,7 @@ fn should_success_walk_thorugh() {
 
 #[test]
 fn should_guessing_iv() -> Result<()> {
-    let wz_file = WzNode::from_wz_file(r"tests/test_need_iv.wz", None, None, None);
+    let wz_file = WzNode::from_wz_file(r"tests/test_need_iv.wz", None);
     assert!(wz_file.is_ok());
 
     let wz_file = wz_file?.into_lock();
@@ -439,10 +465,11 @@ fn should_guessing_iv() -> Result<()> {
 
 #[test]
 fn should_success_walk_thorugh_with_iv() {
-    let wz_file = WzNode::from_wz_file(
+    let wz_file = WzNode::from_wz_file_full(
         r"tests/test_need_iv.wz",
         Some(WzMapleVersion::EMS),
         Some(123),
+        None,
         None,
     );
     assert!(wz_file.is_ok());

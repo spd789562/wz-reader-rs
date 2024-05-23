@@ -21,6 +21,8 @@ pub enum Error {
 
 type Result<T> = std::result::Result<T, Error>;
 
+pub type SharedWzMutableKey = Arc<RwLock<WzMutableKey>>;
+
 /// A basic reader for reading data, it store original data, and can't not
 /// read data without provide offset of the data.
 #[derive(Debug)]
@@ -156,6 +158,16 @@ impl<T: AsRef<[u8]>> WzBaseReader<T> {
             wz_iv: iv,
             keys: Arc::new(RwLock::new(WzMutableKey::from_iv(iv))),
             ..self
+        }
+    }
+
+    // using the existing keys if the iv is the same to save the memory
+    pub fn with_existing_keys(self, keys: Arc<RwLock<WzMutableKey>>) -> Self {
+        let keys_iv = keys.read().unwrap().iv;
+        if keys_iv != self.wz_iv {
+            self
+        } else {
+            WzBaseReader { keys, ..self }
         }
     }
 

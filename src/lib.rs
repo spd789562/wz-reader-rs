@@ -18,7 +18,7 @@ pub use node::{WzNode, WzNodeArc, WzNodeArcVec};
 pub use node_cast::*;
 pub use node_name::*;
 pub use object::*;
-pub use reader::{Reader, WzReader, WzSliceReader};
+pub use reader::{Reader, SharedWzMutableKey, WzReader, WzSliceReader};
 pub use wz_image::{
     WzImage, WZ_IMAGE_HEADER_BYTE_WITHOUT_OFFSET, WZ_IMAGE_HEADER_BYTE_WITH_OFFSET,
 };

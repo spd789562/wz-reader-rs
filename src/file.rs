@@ -1,6 +1,6 @@
 use crate::{
-    directory, reader, version, Reader, WzDirectory, WzNodeArc, WzNodeArcVec, WzNodeCast,
-    WzObjectType, WzReader, WzSliceReader,
+    directory, reader, version, Reader, SharedWzMutableKey, WzDirectory, WzNodeArc, WzNodeArcVec,
+    WzNodeCast, WzObjectType, WzReader, WzSliceReader,
 };
 use memmap2::Mmap;
 use std::fs::File;
@@ -66,6 +66,7 @@ impl WzFile {
         path: P,
         wz_iv: Option<[u8; 4]>,
         patch_version: Option<i32>,
+        existing_key: Option<&SharedWzMutableKey>,
     ) -> Result<WzFile, Error>
     where
         P: AsRef<std::path::Path>,
@@ -82,7 +83,13 @@ impl WzFile {
             version::guess_iv_from_wz_file(&map).ok_or(Error::UnableToGuessVersion)?
         };
 
-        let reader = WzReader::new(map).with_iv(wz_iv);
+        let reader = if let Some(keys) = existing_key {
+            WzReader::new(map)
+                .with_iv(wz_iv)
+                .with_existing_keys(keys.clone())
+        } else {
+            WzReader::new(map).with_iv(wz_iv)
+        };
 
         let offset = reader.get_wz_fstart().map_err(|_| Error::InvalidWzFile)? + 2;
 

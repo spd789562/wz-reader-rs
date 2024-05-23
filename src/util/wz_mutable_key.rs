@@ -8,7 +8,7 @@ const BATCH_SIZE: f64 = 4096_f64;
 /// A string decryption util.
 #[derive(Debug)]
 pub struct WzMutableKey {
-    iv: [u8; 4],
+    pub iv: [u8; 4],
     keys: Vec<u8>,
     aes_key: [u8; 32],
     /// iv == 0, without decrypt

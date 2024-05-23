@@ -1,5 +1,6 @@
 use crate::{
-    directory, file, property, version, wz_image, WzFile, WzImage, WzNodeName, WzObjectType,
+    directory, file, property, version, wz_image, SharedWzMutableKey, WzFile, WzImage, WzNodeName,
+    WzObjectType,
 };
 use hashbrown::HashMap;
 use std::path::Path;
@@ -84,11 +85,12 @@ impl WzNode {
     ///
     /// # Errors
     /// When not provid version and unable to detect it. Or it not valid WzFile(not contain valid header).
-    pub fn from_wz_file<P>(
+    pub fn from_wz_file_full<P>(
         path: P,
         version: Option<version::WzMapleVersion>,
         patch_version: Option<i32>,
         parent: Option<&WzNodeArc>,
+        existing_key: Option<&SharedWzMutableKey>,
     ) -> Result<Self, Error>
     where
         P: AsRef<Path>,
@@ -98,8 +100,20 @@ impl WzNode {
             &path,
             version.map(version::get_iv_by_maple_version),
             patch_version,
+            existing_key,
         )?;
         Ok(WzNode::new(&name.into(), wz_file, parent))
+    }
+
+    /// from_wz_file_full with less argements.
+    ///
+    /// # Errors
+    /// When unable to detect iv and patch version. Or it not valid WzFile(not contain valid header).
+    pub fn from_wz_file<P>(path: P, parent: Option<&WzNodeArc>) -> Result<Self, Error>
+    where
+        P: AsRef<Path>,
+    {
+        Self::from_wz_file_full(path, None, None, parent, None)
     }
     /// Create a `WzNode` from a any `.img` file. If version is not provided, it will try to detect the version.
     ///

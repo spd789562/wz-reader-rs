@@ -1,4 +1,4 @@
-use crate::{version::WzMapleVersion, WzNode, WzNodeArc, WzObjectType};
+use crate::{version::WzMapleVersion, SharedWzMutableKey, WzNode, WzNodeArc, WzNodeCast};
 use std::fs::DirEntry;
 use std::io;
 use std::path::Path;
@@ -18,15 +18,17 @@ pub fn get_root_wz_file_path(dir: &DirEntry) -> Option<String> {
 }
 
 /// Resolve series of wz files in a directory, and merge *_nnn.wz files into one WzFile.
-pub fn resolve_root_wz_file_dir(
+pub fn resolve_root_wz_file_dir_full(
     dir: &str,
     version: Option<WzMapleVersion>,
     patch_version: Option<i32>,
     parent: Option<&WzNodeArc>,
+    default_keys: Option<&SharedWzMutableKey>,
 ) -> Result<WzNodeArc, io::Error> {
-    let root_node: WzNodeArc = WzNode::from_wz_file(dir, version, patch_version, parent)
-        .unwrap()
-        .into();
+    let root_node: WzNodeArc =
+        WzNode::from_wz_file_full(dir, version, patch_version, parent, default_keys)
+            .unwrap()
+            .into();
     let wz_dir = Path::new(dir).parent().unwrap();
 
     {
@@ -41,11 +43,12 @@ pub fn resolve_root_wz_file_dir(
 
             if file_type.is_dir() && root_node_write.at(name.to_str().unwrap()).is_some() {
                 if let Some(file_path) = get_root_wz_file_path(&entry) {
-                    let dir_node = resolve_root_wz_file_dir(
+                    let dir_node = resolve_root_wz_file_dir_full(
                         &file_path,
                         version,
                         patch_version,
                         Some(&root_node),
+                        default_keys,
                     )?;
 
                     /* replace the original one */
@@ -68,10 +71,15 @@ pub fn resolve_root_wz_file_dir(
                     continue;
                 }
 
-                let node =
-                    WzNode::from_wz_file(file_path.to_str().unwrap(), version, patch_version, None)
-                        .unwrap()
-                        .into_lock();
+                let node = WzNode::from_wz_file_full(
+                    file_path.to_str().unwrap(),
+                    version,
+                    patch_version,
+                    None,
+                    default_keys,
+                )
+                .unwrap()
+                .into_lock();
 
                 let mut node_write = node.write().unwrap();
 
@@ -88,20 +96,28 @@ pub fn resolve_root_wz_file_dir(
     Ok(root_node)
 }
 
+/// resolve_root_wz_file_dir_full with less arguments for easier use
+pub fn resolve_root_wz_file_dir(
+    dir: &str,
+    parent: Option<&WzNodeArc>,
+) -> Result<WzNodeArc, io::Error> {
+    resolve_root_wz_file_dir_full(dir, None, None, parent, None)
+}
+
 /// Construct `WzNode` tree from `Base.wz`
 pub fn resolve_base(path: &str, version: Option<WzMapleVersion>) -> Result<WzNodeArc, io::Error> {
     if !path.ends_with("Base.wz") {
         return Err(io::Error::new(io::ErrorKind::InvalidInput, "not a Base.wz"));
     }
 
-    let base_node = resolve_root_wz_file_dir(path, version, None, None)?;
+    let base_node = resolve_root_wz_file_dir_full(path, version, None, None, None)?;
 
-    let patch_version = {
-        if let WzObjectType::File(file) = &base_node.read().unwrap().object_type {
-            file.wz_file_meta.patch_version
-        } else {
-            -1
-        }
+    let (patch_version, keys) = {
+        let node_read = base_node.read().unwrap();
+        let file = node_read.try_as_file().unwrap();
+
+        // reusing the keys from Base.wz
+        (file.wz_file_meta.patch_version, file.reader.keys.clone())
     };
 
     {
@@ -128,11 +144,13 @@ pub fn resolve_base(path: &str, version: Option<WzMapleVersion>) -> Result<WzNod
                 let wz_path = get_root_wz_file_path(&dir);
 
                 if let Some(file_path) = wz_path {
-                    let dir_node = resolve_root_wz_file_dir(
+                    let dir_node = resolve_root_wz_file_dir_full(
                         &file_path,
                         version,
                         Some(patch_version),
                         Some(&base_node),
+                        Some(&keys),
+                        // None,
                     )?;
 
                     /* replace the original one */
