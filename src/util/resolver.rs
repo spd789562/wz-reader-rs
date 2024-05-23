@@ -135,13 +135,18 @@ pub fn resolve_base(path: &str, version: Option<WzMapleVersion>) -> Result<WzNod
 
         for item in wz_root_path.read_dir()? {
             let dir = item?;
-            let file_name = dir.file_name();
+            let path = dir.path();
+            let file_name = path.file_stem().unwrap();
 
             // we only allow the thing is listed in Base.wz
             let has_dir = base_write.at(file_name.to_str().unwrap()).is_some();
 
             if has_dir {
-                let wz_path = get_root_wz_file_path(&dir);
+                let wz_path = if dir.file_type()?.is_dir() {
+                    get_root_wz_file_path(&dir)
+                } else {
+                    Some(path.to_str().unwrap().to_string())
+                };
 
                 if let Some(file_path) = wz_path {
                     let dir_node = resolve_root_wz_file_dir_full(
