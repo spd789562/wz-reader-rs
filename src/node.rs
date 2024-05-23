@@ -145,19 +145,25 @@ impl WzNode {
                 if directory.is_parsed {
                     return Ok(());
                 }
-                directory.resolve_children(parent)?
+                let childs = directory.resolve_children(parent)?;
+                directory.is_parsed = true;
+                childs
             }
             WzObjectType::File(ref mut file) => {
                 if file.is_parsed {
                     return Ok(());
                 }
-                file.parse(parent, None)?
+                let childs = file.parse(parent, None)?;
+                file.is_parsed = true;
+                childs
             }
             WzObjectType::Image(ref mut image) => {
                 if image.is_parsed {
                     return Ok(());
                 }
-                image.resolve_children(Some(parent))?
+                let childs = image.resolve_children(Some(parent))?;
+                image.is_parsed = true;
+                childs
             }
             _ => return Ok(()),
         };
@@ -481,38 +487,6 @@ impl WzNode {
     }
 }
 
-/// Just wrap around of `node.write().unwrap().parse(&node)`
-pub fn parse_node(node: &WzNodeArc) -> Result<(), Error> {
-    node.write().unwrap().parse(node)
-}
-
-/// Resolve a `_inlink` path, a `_inlink` path always start from a `WzImage`.
-pub fn resolve_inlink(path: &str, node: &WzNodeArc) -> Option<WzNodeArc> {
-    let parent_wz_image = node.read().unwrap().get_parent_wz_image()?;
-    let parent_wz_image = parent_wz_image.read().unwrap();
-    parent_wz_image.at_path(path)
-}
-
-/// Resolve a `_outlink` path, a `_outlink` path always start from Wz's data root(a.k.a `Base.wz`).
-pub fn resolve_outlink(path: &str, node: &WzNodeArc, force_parse: bool) -> Option<WzNodeArc> {
-    let parent_wz_base = node.read().unwrap().get_base_wz_file()?;
-
-    if force_parse {
-        parent_wz_base.write().unwrap().at_path_parsed(path).ok()
-    } else {
-        parent_wz_base.read().unwrap().at_path(path)
-    }
-}
-
-/// Make sure WzNode tree's all node has correct parent.
-pub fn resolve_childs_parent(node: &WzNodeArc) {
-    let node_read = node.read().unwrap();
-    for child in node_read.children.values() {
-        child.write().unwrap().parent = Arc::downgrade(node);
-        resolve_childs_parent(child);
-    }
-}
-
 #[cfg(feature = "serde")]
 mod arc_node_serde {
     use crate::WzNodeName;
@@ -554,6 +528,7 @@ mod arc_node_serde {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::util::node_util;
 
     #[cfg(feature = "serde")]
     use serde_json::json;
@@ -673,7 +648,7 @@ mod test {
         // should not be able to resolve parent
         assert!(node111.read().unwrap().parent.upgrade().is_none());
 
-        resolve_childs_parent(&root);
+        node_util::resolve_childs_parent(&root);
 
         // should able to get parent after resolved
         let node111_parent = node111.read().unwrap().parent.upgrade();

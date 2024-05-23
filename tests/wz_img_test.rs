@@ -1,7 +1,7 @@
 use wz_reader::property::{Vector2D, WzSubProperty, WzValue};
-use wz_reader::util;
+use wz_reader::util::{self, node_util};
 use wz_reader::version::WzMapleVersion;
-use wz_reader::{node, resolve_inlink, wz_image, WzNode, WzNodeArc, WzNodeCast, WzObjectType};
+use wz_reader::{node, wz_image, WzNode, WzNodeArc, WzNodeCast, WzObjectType};
 
 type Error = Box<dyn std::error::Error>;
 type Result<T> = std::result::Result<T, Error>;
@@ -33,7 +33,7 @@ fn should_parsing_with_default_version() -> Result<()> {
 
     let wz_img = wz_img?.into_lock();
 
-    assert!(node::parse_node(&wz_img).is_ok());
+    assert!(node_util::parse_node(&wz_img).is_ok());
 
     Ok(())
 }
@@ -45,7 +45,7 @@ fn should_parsing_with_correct_version() -> Result<()> {
 
     let wz_img = wz_img?.into_lock();
 
-    assert!(node::parse_node(&wz_img).is_ok());
+    assert!(node_util::parse_node(&wz_img).is_ok());
 
     Ok(())
 }
@@ -66,7 +66,7 @@ fn should_parsing_with_correct_iv() -> Result<()> {
 
     let wz_img = wz_img?.into_lock();
 
-    assert!(node::parse_node(&wz_img).is_ok());
+    assert!(node_util::parse_node(&wz_img).is_ok());
 
     Ok(())
 }
@@ -80,7 +80,7 @@ fn should_error_with_wrong_iv() -> Result<()> {
 }
 
 fn check_sample_wz_img(wz_img: &WzNodeArc) -> Result<()> {
-    assert!(node::parse_node(&wz_img).is_ok());
+    assert!(node_util::parse_node(&wz_img).is_ok());
 
     let wz_img_read = wz_img.read().unwrap();
 
@@ -235,7 +235,7 @@ fn should_success_using_wz_node_methods_on_childs() -> Result<()> {
 
     let wz_img = wz_img?.into_lock();
 
-    assert!(node::parse_node(&wz_img).is_ok());
+    assert!(node_util::parse_node(&wz_img).is_ok());
 
     let nil_node = wz_img.read().unwrap().at_path("2/nil");
     assert!(nil_node.is_some());
@@ -279,7 +279,7 @@ fn should_success_using_wz_node_methods_on_childs() -> Result<()> {
     assert!(inlink_string.is_ok());
 
     let inlink_string = inlink_string.unwrap();
-    let inlink_target = resolve_inlink(&inlink_string, &inlink);
+    let inlink_target = node_util::resolve_inlink(&inlink_string, &inlink);
     assert!(inlink_target.is_none());
 
     let parent_img = png_node.read().unwrap().get_parent_wz_image();

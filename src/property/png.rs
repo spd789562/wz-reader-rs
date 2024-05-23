@@ -1,8 +1,6 @@
 use crate::property::string::resolve_string_from_node;
 use crate::util::color::{SimpleColor, SimpleColorAlpha};
-use crate::{
-    property::WzSubProperty, reader, resolve_inlink, resolve_outlink, WzNodeArc, WzObjectType,
-};
+use crate::{property::WzSubProperty, reader, util::node_util, WzNodeArc, WzObjectType};
 use flate2::{Decompress, FlushDecompress};
 use image::{DynamicImage, ImageBuffer, Rgb, Rgba};
 use rayon::prelude::*;
@@ -47,7 +45,7 @@ pub fn get_image(node: &WzNodeArc) -> Result<DynamicImage, WzPngParseError> {
             let inlink_target = node_read
                 .at("_inlink")
                 .and_then(|node| resolve_string_from_node(&node).ok())
-                .and_then(|inlink| resolve_inlink(&inlink, node));
+                .and_then(|inlink| node_util::resolve_inlink(&inlink, node));
 
             if let Some(target) = inlink_target {
                 return get_image(&target);
@@ -56,7 +54,7 @@ pub fn get_image(node: &WzNodeArc) -> Result<DynamicImage, WzPngParseError> {
             let outlink_target = node_read
                 .at("_outlink")
                 .and_then(|node| resolve_string_from_node(&node).ok())
-                .and_then(|outlink| resolve_outlink(&outlink, node, true));
+                .and_then(|outlink| node_util::resolve_outlink(&outlink, node, true));
 
             if let Some(target) = outlink_target {
                 return get_image(&target);

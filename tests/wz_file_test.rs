@@ -1,7 +1,7 @@
 use wz_reader::property::{Vector2D, WzSubProperty, WzValue};
-use wz_reader::util;
+use wz_reader::util::{self, node_util};
 use wz_reader::version::WzMapleVersion;
-use wz_reader::{node, resolve_inlink, wz_image, WzNode, WzNodeArc, WzNodeCast, WzObjectType};
+use wz_reader::{node, wz_image, WzNode, WzNodeArc, WzNodeCast, WzObjectType};
 
 type Error = Box<dyn std::error::Error>;
 type Result<T> = std::result::Result<T, Error>;
@@ -49,7 +49,7 @@ fn should_guessing_patch_version() -> Result<()> {
 
     make_sure_wz_file_version(&wz_file, -1);
 
-    assert!(node::parse_node(&wz_file).is_ok());
+    assert!(node_util::parse_node(&wz_file).is_ok());
 
     make_sure_wz_file_version(&wz_file, 123);
 
@@ -64,7 +64,7 @@ fn should_parsing_with_patch_version() -> Result<()> {
 
     let wz_file = wz_file?.into_lock();
 
-    assert!(node::parse_node(&wz_file).is_ok());
+    assert!(node_util::parse_node(&wz_file).is_ok());
 
     make_sure_wz_file_version(&wz_file, 123);
 
@@ -81,7 +81,7 @@ fn check_sample_wz_dir(wz_dir: &WzNodeArc) -> Result<()> {
 
     assert!(sub_img.read().unwrap().try_as_image().is_some());
 
-    assert!(node::parse_node(&sub_img).is_ok());
+    assert!(node_util::parse_node(&sub_img).is_ok());
 
     let child = sub_img.read().unwrap().at("hi");
     assert!(child.is_some());
@@ -99,7 +99,7 @@ fn check_sample_wz_dir(wz_dir: &WzNodeArc) -> Result<()> {
 }
 
 fn check_sample_wz_img(wz_img: &WzNodeArc) -> Result<()> {
-    assert!(node::parse_node(wz_img).is_ok());
+    assert!(node_util::parse_node(wz_img).is_ok());
 
     let wz_img_read = wz_img.read().unwrap();
 
@@ -242,7 +242,7 @@ fn should_parsing_wz_file_and_check_values() -> Result<()> {
 
     let wz_file = wz_file?.into_lock();
 
-    assert!(node::parse_node(&wz_file).is_ok());
+    assert!(node_util::parse_node(&wz_file).is_ok());
 
     let wz_file_read = wz_file.read().unwrap();
 
@@ -267,7 +267,7 @@ fn should_success_using_wz_node_methods_on_childs() -> Result<()> {
 
     let wz_file = wz_file?.into_lock();
 
-    assert!(node::parse_node(&wz_file).is_ok());
+    assert!(node_util::parse_node(&wz_file).is_ok());
 
     let wz_file_read = wz_file.read().unwrap();
 
@@ -278,7 +278,7 @@ fn should_success_using_wz_node_methods_on_childs() -> Result<()> {
     assert!(wz_node_not_exist.is_none());
 
     let wz_img = wz_img.unwrap();
-    assert!(node::parse_node(&wz_img).is_ok());
+    assert!(node_util::parse_node(&wz_img).is_ok());
 
     let nil_node = wz_file_read.at_path("wz_img.img/2/nil");
     assert!(nil_node.is_some());
@@ -328,7 +328,7 @@ fn should_success_using_wz_node_methods_on_childs() -> Result<()> {
     assert!(inlink_string.is_ok());
 
     let inlink_string = inlink_string.unwrap();
-    let inlink_target = resolve_inlink(&inlink_string, &inlink);
+    let inlink_target = node_util::resolve_inlink(&inlink_string, &inlink);
     assert!(inlink_target.is_none());
 
     let parent_img = png_node.read().unwrap().get_parent_wz_image();
@@ -430,7 +430,7 @@ fn should_guessing_iv() -> Result<()> {
 
     make_sure_wz_file_version(&wz_file, -1);
 
-    assert!(node::parse_node(&wz_file).is_ok());
+    assert!(node_util::parse_node(&wz_file).is_ok());
 
     make_sure_wz_file_version(&wz_file, 123);
 

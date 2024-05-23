@@ -1,8 +1,8 @@
 use serde_json::{Map, Value};
-use wz_reader::{parse_node, WzNode, WzNodeArc, WzObjectType};
+use wz_reader::{util::node_util, WzNode, WzNodeArc, WzObjectType};
 
 fn walk_node_and_to_json(node_arc: &WzNodeArc, json: &mut Map<String, Value>) {
-    parse_node(node_arc).unwrap();
+    node_util::parse_node(node_arc).unwrap();
     let node = node_arc.read().unwrap();
     match &node.object_type {
         WzObjectType::Value(value_type) => {
