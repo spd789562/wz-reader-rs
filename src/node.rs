@@ -195,6 +195,8 @@ impl WzNode {
         self.children.clear();
     }
 
+    /// Add a child to the node. It just shorten the `node.write().unwrap().children.insert(name, child)`.
+    /// If you have a lot node need to add, consider mauanlly `let mut = node.write().unwrap()`.
     pub fn add(&mut self, node: &WzNodeArc) {
         self.children
             .insert(node.read().unwrap().name.clone(), Arc::clone(node));
