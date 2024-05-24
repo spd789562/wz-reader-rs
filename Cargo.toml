@@ -7,7 +7,7 @@ repository = "https://github.com/spd789562/wz-reader-rs"
 documentation = "https://docs.rs/wz_reader"
 categories = ["parsing"]
 keywords = ["wz", "maplestory", "wzlib"]
-version = "0.0.6"
+version = "0.0.7"
 edition = "2021"
 license-file = "LICENSE.txt"
 
