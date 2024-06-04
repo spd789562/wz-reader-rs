@@ -138,10 +138,12 @@ pub fn resolve_base(path: &str, version: Option<WzMapleVersion>) -> Result<WzNod
             let path = dir.path();
             let file_name = path.file_stem().unwrap();
 
+            let is_valid = path.extension().unwrap_or_default() == "wz" || path.is_dir();
+
             // we only allow the thing is listed in Base.wz
             let has_dir = base_write.at(file_name.to_str().unwrap()).is_some();
 
-            if has_dir {
+            if has_dir && is_valid {
                 let wz_path = if dir.file_type()?.is_dir() {
                     get_root_wz_file_path(&dir)
                 } else {
