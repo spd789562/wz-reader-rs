@@ -201,7 +201,12 @@ fn get_image_from_bgra4444(
         let a = pixel & 0xF0;
         let a = a | (a >> 4);
 
-        image::Rgba([r, g, b, a])
+        if r == g && g == b {
+            image::Rgba::transparent()
+        } else {
+            image::Rgba([r, g, b, a])
+        }
+
     });
 
     Ok(imgbuffer.into())

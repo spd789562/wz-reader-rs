@@ -34,15 +34,34 @@ pub fn resolve_childs_parent(node: &WzNodeArc) {
 }
 
 /// Get image node in the way, and return the rest of path.
-pub fn get_image_node_from_path(node: &WzNodeArc, path: &str) -> Option<(WzNodeArc, String)> {
+pub fn get_image_node_from_path<'a>(
+    node: &'_ WzNodeArc,
+    path: &'a str,
+) -> Option<(WzNodeArc, &'a str)> {
+    if path.is_empty() {
+        return None;
+    }
+
+    if path.contains(".img") {
+        let mut pathes = path.split_inclusive(".img");
+        let img_path = pathes.next()?;
+        let rest_path = pathes.next()?.strip_prefix("/")?;
+
+        let image_node = node.read().unwrap().at_path(img_path)?;
+
+        return Some((image_node, rest_path));
+    }
+
     let mut pathes = path.split('/');
     let mut node = node.clone();
-    while let Some(path) = pathes.next() {
-        let target = node.read().unwrap().at(path);
+    let mut slash_index = 0;
+    while let Some(split_path) = pathes.next() {
+        let target = node.read().unwrap().at(split_path);
         if let Some(target) = target {
             node = target;
+            slash_index += split_path.len() + 1;
             if node.read().unwrap().try_as_image().is_some() {
-                let rest = pathes.collect::<Vec<&str>>().join("/");
+                let rest = path.split_at(slash_index).1;
                 return Some((node, rest));
             }
         } else {
@@ -54,40 +73,14 @@ pub fn get_image_node_from_path(node: &WzNodeArc, path: &str) -> Option<(WzNodeA
 
 /// get a certain node without parsing all node in the way
 pub fn get_node_without_parse(root: &WzNodeArc, path: &str) -> Option<WzNodeArc> {
-    let has_img = path.contains(".img");
+    let (image_node, rest_path) = get_image_node_from_path(root, path)?;
+    let image_read = image_node.read().unwrap();
+    let image = image_read.try_as_image()?;
 
-    if has_img {
-        // get the node with name end with `.img`
-        // ex: a/b/c.img/d/e -> a/b/c.img
-        let mut pathes = path.split_inclusive(".img");
-        let img_path = pathes.next()?;
-        let rest_path = pathes.next()?.strip_prefix("/")?;
-
-        println!("img_path: {}, rest_path: {}", img_path, rest_path);
-
-        let image_node = root.read().unwrap().at_path(img_path)?;
-
-        let image_read = image_node.read().unwrap();
-
-        // verify the node is a image node
-        let image = image_read.try_as_image()?;
-
-        // if it already parsed, use the node method not image method
-        if image.is_parsed {
-            image_read.at_path(rest_path)
-        } else {
-            image.at_path(rest_path).ok()
-        }
+    if image.is_parsed {
+        image_read.at_path(&rest_path)
     } else {
-        let (image_node, rest_path) = get_image_node_from_path(root, path)?;
-        let image_read = image_node.read().unwrap();
-        let image = image_read.try_as_image()?;
-
-        if image.is_parsed {
-            image_read.at_path(&rest_path)
-        } else {
-            image.at_path(&rest_path).ok()
-        }
+        image.at_path(&rest_path).ok()
     }
 }
 
