@@ -19,17 +19,17 @@ pub fn get_root_wz_file_path(dir: &DirEntry) -> Option<String> {
 
 /// Resolve series of wz files in a directory, and merge *_nnn.wz files into one WzFile.
 pub fn resolve_root_wz_file_dir_full(
-    dir: &str,
+    dir: impl AsRef<Path>,
     version: Option<WzMapleVersion>,
     patch_version: Option<i32>,
     parent: Option<&WzNodeArc>,
     default_keys: Option<&SharedWzMutableKey>,
 ) -> Result<WzNodeArc, io::Error> {
     let root_node: WzNodeArc =
-        WzNode::from_wz_file_full(dir, version, patch_version, parent, default_keys)
+        WzNode::from_wz_file_full(&dir, version, patch_version, parent, default_keys)
             .unwrap()
             .into();
-    let wz_dir = Path::new(dir).parent().unwrap();
+    let wz_dir = dir.as_ref().parent().unwrap();
 
     {
         let mut root_node_write = root_node.write().unwrap();
@@ -98,19 +98,22 @@ pub fn resolve_root_wz_file_dir_full(
 
 /// resolve_root_wz_file_dir_full with less arguments for easier use
 pub fn resolve_root_wz_file_dir(
-    dir: &str,
+    dir: impl AsRef<Path>,
     parent: Option<&WzNodeArc>,
 ) -> Result<WzNodeArc, io::Error> {
     resolve_root_wz_file_dir_full(dir, None, None, parent, None)
 }
 
 /// Construct `WzNode` tree from `Base.wz`
-pub fn resolve_base(path: &str, version: Option<WzMapleVersion>) -> Result<WzNodeArc, io::Error> {
-    if !path.ends_with("Base.wz") {
+pub fn resolve_base(
+    path: impl AsRef<Path>,
+    version: Option<WzMapleVersion>,
+) -> Result<WzNodeArc, io::Error> {
+    if !path.as_ref().ends_with("Base.wz") {
         return Err(io::Error::new(io::ErrorKind::InvalidInput, "not a Base.wz"));
     }
 
-    let base_node = resolve_root_wz_file_dir_full(path, version, None, None, None)?;
+    let base_node = resolve_root_wz_file_dir_full(&path, version, None, None, None)?;
 
     let (patch_version, keys) = {
         let node_read = base_node.read().unwrap();
@@ -123,7 +126,7 @@ pub fn resolve_base(path: &str, version: Option<WzMapleVersion>) -> Result<WzNod
     {
         let mut base_write = base_node.write().unwrap();
 
-        let first_parent = Path::new(path).parent().unwrap();
+        let first_parent = path.as_ref().parent().unwrap();
 
         // if a Base.wz in under Base folder, then should up to parent to find Map, Item and other stuff
         // if not, the other stuff just at same folder as Base.wz
