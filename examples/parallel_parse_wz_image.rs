@@ -1,6 +1,9 @@
 use std::thread;
 use wz_reader::{WzNode, WzNodeArc};
 
+// usage:
+//   cargo run --example parallel_parse_wz_image -- "path/to/some.wz"
+//   cargo run --example parallel_parse_wz_image -- "D:\Path\To\some.wz"
 fn main() {
     let path = std::env::args_os()
         .nth(1)

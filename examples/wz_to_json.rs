@@ -23,13 +23,20 @@ fn walk_node_and_to_json(node_arc: &WzNodeArc, json: &mut Map<String, Value>) {
     }
 }
 
+// usage:
+//   cargo run --example wz_to_json -- "path/to/some.wz" "ouput/path"
+//   cargo run --example wz_to_json -- "D:\Path\To\some.wz" ".\output"
 fn main() {
+    let mut args = std::env::args_os().skip(1);
+    let path = args.next().expect("Need path to wz file as 1st arg");
+    let out = args.next().expect("Need out json dir as 2nd arg");
+
     /* resolve single wz file */
-    let node: WzNodeArc = WzNode::from_wz_file(r"D:\MapleStory\Data\UI\UI_000.wz", None)
-        .unwrap()
-        .into();
+    let node: WzNodeArc = WzNode::from_wz_file(&path, None).unwrap().into();
 
     let mut node_write = node.write().unwrap();
+
+    let file_name = node_write.name.to_string();
 
     node_write.parse(&node).unwrap();
 
@@ -41,5 +48,7 @@ fn main() {
 
     let json_string = serde_json::to_string_pretty(&Value::Object(json)).unwrap();
 
-    std::fs::write("UI_000.json", json_string).unwrap();
+    let out_path = std::path::Path::new(&out).join([file_name.as_str(), ".json"].concat());
+
+    std::fs::write(out_path, json_string).unwrap();
 }

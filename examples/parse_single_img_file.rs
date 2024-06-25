@@ -4,6 +4,9 @@ use wz_reader::property::get_image;
 use wz_reader::util::walk_node;
 use wz_reader::{WzNode, WzNodeArc, WzNodeCast};
 
+// usage:
+//   cargo run --example parse_single_img_file -- "path/to/some.img"
+//   cargo run --example parse_single_img_file -- "D:\Path\To\some.img"
 fn main() {
     let mut args = std::env::args_os().skip(1);
     let path = args.next().expect("Need .wz file as 1st argument");

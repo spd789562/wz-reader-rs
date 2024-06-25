@@ -8,9 +8,10 @@ use wz_reader::WzNodeCast;
 //   cargo run --example id_to_name -- "path/to/Base.wz" "id"
 //   cargo run --example id_to_name -- "D:\Path\To\Base.wz" "5000042"
 fn main() {
-    let args = std::env::args().collect::<Vec<_>>();
+    let args = std::env::args_os().collect::<Vec<_>>();
     let base_path = args.get(1).expect("missing base path");
     let target_id = args.get(2).expect("missing target id");
+    let target_id = target_id.to_str().expect("invalid target id format");
     let base_node = resolve_base(&base_path, None).unwrap();
 
     let start = std::time::Instant::now();

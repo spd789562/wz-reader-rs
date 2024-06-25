@@ -1,8 +1,13 @@
 use wz_reader::util::{resolve_base, resolve_root_wz_file_dir, walk_node};
 use wz_reader::{WzNode, WzNodeArc, WzNodeCast};
 
+// usage:
+//   cargo run --example extracting_sounds -- (single|base|folder) "path/to/Base.wz" "output/path"
+//   cargo run --example extracting_sounds -- single "D:\Path\To\Base.wz" "./output"
+//   cargo run --example extracting_sounds -- base "D:\Path\To\Base.wz" "./output"
+//   cargo run --example extracting_sounds -- folder "D:\Path\To\Base.wz" "./output"
 fn main() {
-    let mut args = std::env::args().skip(1);
+    let mut args = std::env::args_os().skip(1);
     let method = args
         .next()
         .expect("Need method (single/base/folder) as 1st arg");
@@ -18,14 +23,14 @@ fn main() {
         }
     };
 
-    match method.as_str() {
-        "single" => {
+    match method.as_encoded_bytes() {
+        b"single" => {
             /* resolve single wz file */
             let node: WzNodeArc = WzNode::from_wz_file(path, None).unwrap().into();
 
             walk_node(&node, true, &save_sound_fn);
         }
-        "base" => {
+        b"base" => {
             /* resolve from base.wz */
             let base_node = resolve_base(&path, None).unwrap();
 
@@ -33,7 +38,7 @@ fn main() {
             let sound_node = base_node.read().unwrap().at("Sound").unwrap();
             walk_node(&sound_node, true, &save_sound_fn);
         }
-        "folder" => {
+        b"folder" => {
             /* resolve whole wz folder */
             let root_node = resolve_root_wz_file_dir(&path, None).unwrap();
 
