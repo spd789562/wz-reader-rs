@@ -2,32 +2,43 @@ use wz_reader::util::{resolve_base, resolve_root_wz_file_dir, walk_node};
 use wz_reader::{WzNode, WzNodeArc, WzNodeCast};
 
 fn main() {
+    let mut args = std::env::args().skip(1);
+    let method = args
+        .next()
+        .expect("Need method (single/base/folder) as 1st arg");
+    let path = args.next().expect("Need path to wz file as 2nd arg");
+    let out = args.next().expect("Need out dir as 3rd arg");
     let save_sound_fn = |node: &WzNodeArc| {
         let node_read = node.read().unwrap();
         if let Some(sound) = node_read.try_as_sound() {
-            let path = std::path::Path::new("./sounds").join(node_read.name.as_str());
+            let path = std::path::Path::new(&out).join(node_read.name.as_str());
             if sound.save(path).is_err() {
                 println!("failed to extract sound: {}", node_read.get_full_path());
             }
         }
     };
 
-    /* resolve single wz file */
-    let node: WzNodeArc = WzNode::from_wz_file(r"D:\MapleStory\Data\Sound\Sound_000.wz", None)
-        .unwrap()
-        .into();
+    match method.as_str() {
+        "single" => {
+            /* resolve single wz file */
+            let node: WzNodeArc = WzNode::from_wz_file(path, None).unwrap().into();
 
-    walk_node(&node, true, &save_sound_fn);
+            walk_node(&node, true, &save_sound_fn);
+        }
+        "base" => {
+            /* resolve from base.wz */
+            let base_node = resolve_base(&path, None).unwrap();
 
-    /* resolve from base.wz */
-    let base_node = resolve_base(r"D:\MapleStory\Data\Base.wz", None).unwrap();
+            /* it's same as below method */
+            let sound_node = base_node.read().unwrap().at("Sound").unwrap();
+            walk_node(&sound_node, true, &save_sound_fn);
+        }
+        "folder" => {
+            /* resolve whole wz folder */
+            let root_node = resolve_root_wz_file_dir(&path, None).unwrap();
 
-    /* it't same as below method */
-    let sound_node = base_node.read().unwrap().at("Sound").unwrap();
-    walk_node(&sound_node, true, &save_sound_fn);
-
-    /* resolve whole wz folder */
-    let root_node = resolve_root_wz_file_dir(r"D:\MapleStory\Data\Sound\Sound.wz", None).unwrap();
-
-    walk_node(&root_node, true, &save_sound_fn);
+            walk_node(&root_node, true, &save_sound_fn);
+        }
+        _ => eprintln!("Invalid method"),
+    }
 }

@@ -46,3 +46,11 @@ required-features = ["json", "image/default-formats"]
 [[example]]
 name = "wz_to_json"
 required-features = ["json"]
+
+[[example]]
+name = "parse_single_img_file"
+required-features = ["image/png"]
+
+[[example]]
+name = "extracting_pngs"
+required-features = ["image/png"]

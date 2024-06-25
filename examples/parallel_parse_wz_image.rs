@@ -2,9 +2,10 @@ use std::thread;
 use wz_reader::{WzNode, WzNodeArc};
 
 fn main() {
-    let node: WzNodeArc = WzNode::from_wz_file(r"D:\MapleStory\Data\UI\UI_000.wz", None)
-        .unwrap()
-        .into();
+    let path = std::env::args_os()
+        .nth(1)
+        .expect("Need path to .wz as first argument");
+    let node: WzNodeArc = WzNode::from_wz_file(path, None).unwrap().into();
 
     let mut node_write = node.write().unwrap();
 
