@@ -33,6 +33,43 @@ pub fn resolve_childs_parent(node: &WzNodeArc) {
     }
 }
 
+/// Get resolved uol path, it will resolve `..` and `.` in path.
+pub fn get_resolved_uol_path(path: &str, uol_path: &str) -> String {
+    let mut pathes: Vec<&str> = path.split('/').collect();
+    /* uol path always start at parent */
+    pathes.pop();
+    for p in uol_path.split('/') {
+        if p == ".." && !pathes.is_empty() {
+            pathes.pop();
+        } else {
+            pathes.push(p);
+        }
+    }
+    pathes.join("/")
+}
+
+/// Make a uol node become valid node
+pub fn resolve_uol(node: &WzNodeArc) {
+    let parent = node.read().unwrap().parent.upgrade().unwrap();
+    if let Some(ref mut uol_target_path) = node
+        .read()
+        .unwrap()
+        .try_as_uol()
+        .map(|s| s.get_string().ok())
+        .flatten()
+    {
+        uol_target_path.insert_str(0, "../");
+        let uol_target = node.read().unwrap().at_path_relative(&uol_target_path);
+        if let Some(target_node) = uol_target {
+            let node_name = node.read().unwrap().name.clone();
+            if let Some(origin) = parent.write().unwrap().children.get_mut(&node_name) {
+                // _ will be old node and will be dropped later
+                let _ = std::mem::replace(origin, target_node);
+            }
+        }
+    }
+}
+
 /// Get image node in the way, and return the rest of path.
 pub fn get_image_node_from_path<'a>(
     node: &'_ WzNodeArc,
@@ -88,8 +125,8 @@ pub fn get_node_without_parse(root: &WzNodeArc, path: &str) -> Option<WzNodeArc>
 mod test {
     use super::*;
     use crate::{
-        property::{resolve_string_from_node, WzString},
-        WzDirectory, WzFile, WzImage, WzNode,
+        property::{resolve_string_from_node, WzString, WzValue},
+        WzDirectory, WzFile, WzImage, WzNode, WzObjectType,
     };
 
     fn setup_node_tree() -> WzNodeArc {
@@ -133,6 +170,15 @@ mod test {
             Some(&img1child21),
         )
         .into_lock();
+        let image1child21uol = WzNode::from_str(
+            "uol",
+            WzObjectType::Value(WzValue::UOL(WzString::from_str(
+                "../../1-dep1/1-dep2",
+                [0, 0, 0, 0],
+            ))),
+            Some(&img1child21),
+        )
+        .into_lock();
 
         let img2child1 = WzNode::from_str("child1", 1, Some(&img2)).into_lock();
         let img2child2 = WzNode::from_str("child2", 2, Some(&img2child1)).into_lock();
@@ -153,6 +199,7 @@ mod test {
         img1child2.write().unwrap().add(&img1child21);
         img1child21.write().unwrap().add(&img1child21inlink);
         img1child21.write().unwrap().add(&img1child21outlink);
+        img1child21.write().unwrap().add(&image1child21uol);
 
         img2.write().unwrap().add(&img2child1);
         img2child1.write().unwrap().add(&img2child2);
@@ -251,5 +298,40 @@ mod test {
         let target_node = target_node.unwrap();
 
         assert_eq!(target_node.read().unwrap().name.as_str(), "_outlink");
+    }
+
+    #[test]
+    fn test_get_resolved_uol_path() {
+        let path = "dir/test1.img/2-dep1/2-dep2";
+        let uol_path = "../1-dep1/1-dep2";
+
+        let resolved = get_resolved_uol_path(path, uol_path);
+
+        assert_eq!(&resolved, "dir/test1.img/1-dep1/1-dep2");
+    }
+
+    #[test]
+    fn test_resolve_uol() {
+        let root = setup_node_tree();
+
+        let uol_node = root
+            .read()
+            .unwrap()
+            .at_path("dir/test1.img/2-dep1/2-dep2/uol")
+            .unwrap();
+
+        resolve_uol(&uol_node);
+
+        let new_uol_node = root
+            .read()
+            .unwrap()
+            .at_path("dir/test1.img/2-dep1/2-dep2/uol")
+            .unwrap();
+
+        assert_eq!(new_uol_node.read().unwrap().name.as_str(), "1-dep2");
+        assert_eq!(
+            new_uol_node.read().unwrap().get_full_path(),
+            "Base/dir/test1.img/1-dep1/1-dep2"
+        );
     }
 }
