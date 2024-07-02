@@ -60,8 +60,31 @@ pub fn resolve_uol(node: &WzNodeArc, wz_image: Option<&mut WzNode>) {
         .map(|s| s.get_string().ok())
         .flatten()
     {
-        uol_target_path.insert_str(0, "../");
-        let uol_target = node.read().unwrap().at_path_relative(&uol_target_path);
+        let mut pathes = uol_target_path.split('/');
+
+        let first = if let Ok(node) = node.try_read() {
+            node.at_relative("..")
+        } else if let Some(image_node) = &wz_image {
+            image_node.at(pathes.next().unwrap())
+        } else {
+            None
+        };
+
+        let uol_target = if let Some(first) = first {
+            pathes.try_fold(first, |node, name| {
+                /* usually happen on parsing process, the WzImage is taking self a write lock
+                so just directly using wz_image here */
+                if let Ok(node) = node.try_read() {
+                    return node.at_relative(name);
+                } else if let Some(image_node) = &wz_image {
+                    return image_node.at(name);
+                }
+                None
+            })
+        } else {
+            None
+        };
+
         if let Some(target_node) = uol_target {
             let node_name = node.read().unwrap().name.clone();
 
