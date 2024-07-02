@@ -31,10 +31,11 @@ pub fn parse_property_list(
     org_reader: &Arc<WzReader>,
     reader: &WzSliceReader,
     origin_offset: usize,
-) -> Result<WzNodeArcVec, WzPropertyParseError> {
+) -> Result<(WzNodeArcVec, Vec<WzNodeArc>), WzPropertyParseError> {
     let entry_count = reader.read_wz_int()?;
 
     let mut childs: WzNodeArcVec = Vec::with_capacity(entry_count as usize);
+    let mut uol_nodes: Vec<WzNodeArc> = Vec::new();
 
     for _ in 0..entry_count {
         let name: WzNodeName = reader.read_wz_string_block(origin_offset)?.into();
@@ -47,10 +48,15 @@ pub fn parse_property_list(
             reader,
             origin_offset,
         )?;
-        childs.push(parsed_node);
+
+        if let Some(uol_node) = parsed_node.2 {
+            uol_nodes.extend(uol_node);
+        }
+
+        childs.push((parsed_node.0, parsed_node.1));
     }
 
-    Ok(childs)
+    Ok((childs, uol_nodes))
 }
 
 pub fn parse_property_node(
@@ -60,7 +66,7 @@ pub fn parse_property_node(
     org_reader: &Arc<WzReader>,
     reader: &WzSliceReader,
     origin_offset: usize,
-) -> Result<(WzNodeName, WzNodeArc), WzPropertyParseError> {
+) -> Result<(WzNodeName, WzNodeArc, Option<Vec<WzNodeArc>>), WzPropertyParseError> {
     let result: (WzNodeName, WzNodeArc);
 
     match property_type {
@@ -114,9 +120,9 @@ pub fn parse_property_node(
             let node =
                 parse_extended_prop(parent, org_reader, reader, next_pos, origin_offset, name)?;
 
-            result = node;
-
             reader.seek(next_pos);
+
+            return Ok(node);
         }
         _ => {
             return Err(WzPropertyParseError::UnknownPropertyType(
@@ -125,7 +131,7 @@ pub fn parse_property_node(
             ));
         }
     }
-    Ok(result)
+    Ok((result.0, result.1, None))
 }
 
 pub fn parse_extended_prop(
@@ -135,7 +141,7 @@ pub fn parse_extended_prop(
     end_of_block: usize,
     origin_offset: usize,
     property_name: WzNodeName,
-) -> Result<(WzNodeName, WzNodeArc), WzPropertyParseError> {
+) -> Result<(WzNodeName, WzNodeArc, Option<Vec<WzNodeArc>>), WzPropertyParseError> {
     let extend_property_type = reader.read_wz_string_block(origin_offset)?;
     parse_more(
         parent,
@@ -156,7 +162,7 @@ pub fn parse_more(
     origin_offset: usize,
     property_name: WzNodeName,
     extend_property_type: &str,
-) -> Result<(WzNodeName, WzNodeArc), WzPropertyParseError> {
+) -> Result<(WzNodeName, WzNodeArc, Option<Vec<WzNodeArc>>), WzPropertyParseError> {
     match extend_property_type {
         "Property" => {
             let node = WzNode::new(
@@ -167,7 +173,8 @@ pub fn parse_more(
             .into_lock();
 
             reader.skip(2);
-            let childs = parse_property_list(Some(&node), org_reader, reader, origin_offset)?;
+            let (childs, uol_nodes) =
+                parse_property_list(Some(&node), org_reader, reader, origin_offset)?;
 
             {
                 let mut node_write = node.write().unwrap();
@@ -177,7 +184,7 @@ pub fn parse_more(
                 }
             }
 
-            Ok((property_name, node))
+            Ok((property_name, node, Some(uol_nodes)))
         }
         "Canvas" => {
             reader.skip(1);
@@ -190,14 +197,18 @@ pub fn parse_more(
             )
             .into_lock();
 
+            let mut uol_nodes: Option<Vec<WzNodeArc>> = None;
+
             if has_child {
                 reader.skip(2);
-                let childs = parse_property_list(Some(&node), org_reader, reader, origin_offset)?;
+                let (childs, uols) =
+                    parse_property_list(Some(&node), org_reader, reader, origin_offset)?;
                 let mut node_write = node.write().unwrap();
                 node_write.children.reserve(childs.len());
                 for (name, child) in childs {
                     node_write.children.insert(name, child);
                 }
+                uol_nodes = Some(uols);
             }
 
             let width = reader.read_wz_int()?;
@@ -221,7 +232,7 @@ pub fn parse_more(
                 node.object_type = wz_png.into();
             }
 
-            Ok((property_name, node))
+            Ok((property_name, node, uol_nodes))
         }
         "Shape2D#Convex2D" => {
             let node = WzNode::new(
@@ -232,6 +243,7 @@ pub fn parse_more(
             .into_lock();
 
             let entry_count = reader.read_wz_int()?;
+            let mut uol_nodes: Vec<WzNodeArc> = Vec::new();
 
             {
                 let mut node_write = node.write().unwrap();
@@ -247,17 +259,21 @@ pub fn parse_more(
                         name,
                     )?;
 
+                    if let Some(uols) = parsed_node.2 {
+                        uol_nodes.extend(uols);
+                    }
+
                     node_write.children.insert(parsed_node.0, parsed_node.1);
                 }
             }
 
-            Ok((property_name, node))
+            Ok((property_name, node, Some(uol_nodes)))
         }
         "Shape2D#Vector2D" => {
             let vec2 = Vector2D(reader.read_wz_int()?, reader.read_wz_int()?);
             let node = WzNode::new(&property_name, vec2, parent);
 
-            Ok((property_name, node.into_lock()))
+            Ok((property_name, node.into_lock(), None))
         }
         "Sound_DX8" => {
             reader.skip(1);
@@ -287,7 +303,7 @@ pub fn parse_more(
 
             let node = WzNode::new(&property_name, sound, parent);
 
-            Ok((property_name, node.into_lock()))
+            Ok((property_name, node.into_lock(), None))
         }
         "UOL" => {
             reader.skip(1);
@@ -296,9 +312,12 @@ pub fn parse_more(
                 &property_name,
                 WzObjectType::Value(WzValue::UOL(WzString::from_meta(str_meta, org_reader))),
                 parent,
-            );
+            )
+            .into_lock();
 
-            Ok((property_name, node.into_lock()))
+            let uol_nodes = Some(vec![Arc::clone(&node)]);
+
+            Ok((property_name, node, uol_nodes))
         }
         "RawData" => {
             reader.skip(1);
@@ -310,7 +329,7 @@ pub fn parse_more(
                 parent,
             );
 
-            Ok((property_name, node.into_lock()))
+            Ok((property_name, node.into_lock(), None))
         }
         _ => Err(WzPropertyParseError::UnknownExtendedPropertyType(
             extend_property_type.to_string(),
@@ -341,14 +360,15 @@ pub fn get_node(
             let property_type = reader.read_u8()?;
 
             if name == current_name && next_path.is_none() {
-                return parse_property_node(
+                let result = parse_property_node(
                     name.into(),
                     property_type,
                     None,
                     org_reader,
                     reader,
                     origin_offset,
-                );
+                )?;
+                return Ok((result.0, result.1));
             }
 
             match property_type {

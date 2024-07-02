@@ -1,6 +1,6 @@
 use crate::{
-    directory, file, property, version, wz_image, SharedWzMutableKey, WzFile, WzImage, WzNodeName,
-    WzObjectType,
+    directory, file, property, util::node_util, version, wz_image, SharedWzMutableKey, WzFile,
+    WzImage, WzNodeCast, WzNodeName, WzObjectType,
 };
 use hashbrown::HashMap;
 use std::path::Path;
@@ -154,14 +154,14 @@ impl WzNode {
 
     /// Parse the node base on the object type.
     pub fn parse(&mut self, parent: &WzNodeArc) -> Result<(), Error> {
-        let childs: WzNodeArcVec = match self.object_type {
+        let (childs, uol_nodes): (WzNodeArcVec, Vec<WzNodeArc>) = match self.object_type {
             WzObjectType::Directory(ref mut directory) => {
                 if directory.is_parsed {
                     return Ok(());
                 }
                 let childs = directory.resolve_children(parent)?;
                 directory.is_parsed = true;
-                childs
+                (childs, vec![])
             }
             WzObjectType::File(ref mut file) => {
                 if file.is_parsed {
@@ -169,15 +169,15 @@ impl WzNode {
                 }
                 let childs = file.parse(parent, None)?;
                 file.is_parsed = true;
-                childs
+                (childs, vec![])
             }
             WzObjectType::Image(ref mut image) => {
                 if image.is_parsed {
                     return Ok(());
                 }
-                let childs = image.resolve_children(Some(parent))?;
+                let result = image.resolve_children(Some(parent))?;
                 image.is_parsed = true;
-                childs
+                result
             }
             _ => return Ok(()),
         };
@@ -186,6 +186,10 @@ impl WzNode {
 
         for (name, child) in childs {
             self.children.insert(name, child);
+        }
+
+        for node in uol_nodes {
+            node_util::resolve_uol(&node);
         }
 
         Ok(())
@@ -271,6 +275,48 @@ impl WzNode {
             }
         }
         path
+    }
+
+    /// Returns the path of the WzNode but start from WzImage.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use wz_reader::{WzObjectType, WzNode, WzImage};
+    /// # use wz_reader::property::WzValue;
+    /// let root = WzNode::from_str("root", 1, None).into_lock();
+    /// let child = WzNode::from_str("1", WzImage::default(), Some(&root)).into_lock();
+    /// let grandchild = WzNode::from_str("2", 1, Some(&child)).into_lock();
+    ///
+    /// assert_eq!(grandchild.read().unwrap().get_path_from_image(), "2");
+    /// assert!(root.read().unwrap().get_path_from_image().is_empty());
+    /// ```
+    pub fn get_path_from_image(&self) -> String {
+        let mut parent = self.parent.upgrade();
+
+        if parent.is_none() {
+            return String::new();
+        }
+
+        let mut path = self.name.to_string();
+
+        while let Some(parent_inner) = parent {
+            let read = parent_inner.read().unwrap();
+
+            if read.try_as_image().is_some() {
+                return path;
+            }
+
+            parent = read.parent.upgrade();
+
+            if parent.is_none() {
+                return String::new();
+            } else {
+                path = format!("{}/{}", &read.name, path);
+            }
+        }
+
+        String::new()
     }
 
     /// A alias to get child.

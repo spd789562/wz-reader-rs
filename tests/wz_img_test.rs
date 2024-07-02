@@ -1,4 +1,4 @@
-use wz_reader::property::{Vector2D, WzSubProperty, WzValue};
+use wz_reader::property::{Vector2D, WzValue};
 use wz_reader::util::{self, node_util};
 use wz_reader::version::WzMapleVersion;
 use wz_reader::{node, wz_image, WzNode, WzNodeArc, WzNodeCast, WzObjectType};
@@ -87,10 +87,7 @@ fn check_sample_wz_img(wz_img: &WzNodeArc) -> Result<()> {
     if let Some(first_folder) = wz_img_read.at("1") {
         let first_folder = first_folder.read().unwrap();
 
-        assert!(matches!(
-            first_folder.object_type,
-            WzObjectType::Property(WzSubProperty::Property)
-        ));
+        assert!(first_folder.is_sub_property());
 
         let int = first_folder.at("int");
         assert!(int.is_some());
@@ -131,20 +128,14 @@ fn check_sample_wz_img(wz_img: &WzNodeArc) -> Result<()> {
     if let Some(second_folder) = wz_img_read.at("2") {
         let second_folder = second_folder.read().unwrap();
 
-        assert!(matches!(
-            second_folder.object_type,
-            WzObjectType::Property(WzSubProperty::Property)
-        ));
+        assert!(second_folder.is_sub_property());
 
         let nil = second_folder.at("nil");
         assert!(nil.is_some());
 
         let nil = nil.unwrap();
         let nil = nil.read().unwrap();
-        assert!(matches!(
-            nil.object_type,
-            WzObjectType::Value(WzValue::Null)
-        ));
+        assert!(nil.is_null());
 
         let string = second_folder.at("string");
         assert!(string.is_some());
@@ -162,20 +153,21 @@ fn check_sample_wz_img(wz_img: &WzNodeArc) -> Result<()> {
 
         let uol = uol.unwrap();
         let uol = uol.read().unwrap();
-        if let WzObjectType::Value(WzValue::UOL(string)) = &uol.object_type {
-            let s = string.get_string();
+
+        // uol node should be resolved
+        assert!(uol.try_as_uol().is_none());
+
+        if let Some(str) = uol.try_as_string() {
+            let s = str.get_string();
             assert!(s.is_ok());
-            assert_eq!(&s?, "string");
+            assert_eq!(&s?, "foo");
         }
     }
 
     if let Some(convex_folder) = wz_img_read.at("conv") {
         let convex_folder = convex_folder.read().unwrap();
 
-        assert!(matches!(
-            convex_folder.object_type,
-            WzObjectType::Property(WzSubProperty::Convex)
-        ));
+        assert!(convex_folder.is_convex());
 
         let vector = convex_folder.at("0");
         assert!(vector.is_some());

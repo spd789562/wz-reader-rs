@@ -2,7 +2,7 @@ pub mod node_util;
 pub mod color;
 pub mod maple_crypto_constants;
 pub mod parse_property;
-pub mod resolver;
+pub(crate) mod resolver;
 pub mod walk;
 pub mod wz_mutable_key;
 
