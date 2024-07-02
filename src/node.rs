@@ -189,7 +189,7 @@ impl WzNode {
         }
 
         for node in uol_nodes {
-            node_util::resolve_uol(&node);
+            node_util::resolve_uol(&node, Some(self));
         }
 
         Ok(())

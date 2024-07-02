@@ -1,4 +1,4 @@
-use crate::{node::Error, WzNodeArc, WzNodeCast};
+use crate::{node::Error, wz_image, WzNode, WzNodeArc, WzNodeCast};
 use std::sync::Arc;
 
 /// Just wrap around of `node.write().unwrap().parse(&node)`
@@ -48,9 +48,11 @@ pub fn get_resolved_uol_path(path: &str, uol_path: &str) -> String {
     pathes.join("/")
 }
 
-/// Make a uol node become valid node
-pub fn resolve_uol(node: &WzNodeArc) {
-    let parent = node.read().unwrap().parent.upgrade().unwrap();
+/// Make a uol node become valid node, second argument is optional,
+/// it prevent the parent is the WzImage while it currently parsing causing the deadlock.
+pub fn resolve_uol(node: &WzNodeArc, wz_image: Option<&mut WzNode>) {
+    let node_parent = node.read().unwrap().parent.upgrade().unwrap();
+
     if let Some(ref mut uol_target_path) = node
         .read()
         .unwrap()
@@ -62,9 +64,18 @@ pub fn resolve_uol(node: &WzNodeArc) {
         let uol_target = node.read().unwrap().at_path_relative(&uol_target_path);
         if let Some(target_node) = uol_target {
             let node_name = node.read().unwrap().name.clone();
-            if let Some(origin) = parent.write().unwrap().children.get_mut(&node_name) {
-                // _ will be old node and will be dropped later
-                let _ = std::mem::replace(origin, target_node);
+
+            /* when parent is locked, it means it's parent is WzImage, and it currently parsing */
+            if let Ok(mut parent) = node_parent.try_write() {
+                if let Some(origin) = parent.children.get_mut(&node_name) {
+                    let _ = std::mem::replace(origin, target_node);
+                }
+            } else if let Some(wz_image) = wz_image {
+                if let Some(origin) = wz_image.children.get_mut(&node_name) {
+                    let _ = std::mem::replace(origin, target_node);
+                }
+            } else {
+                return;
             }
         }
     }
@@ -320,7 +331,7 @@ mod test {
             .at_path("dir/test1.img/2-dep1/2-dep2/uol")
             .unwrap();
 
-        resolve_uol(&uol_node);
+        resolve_uol(&uol_node, None);
 
         let new_uol_node = root
             .read()
