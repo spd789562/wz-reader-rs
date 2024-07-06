@@ -149,9 +149,9 @@ pub fn get_node_without_parse(root: &WzNodeArc, path: &str) -> Option<WzNodeArc>
     let image = image_read.try_as_image()?;
 
     if image.is_parsed {
-        image_read.at_path(&rest_path)
+        image_read.at_path(rest_path)
     } else {
-        image.at_path(&rest_path).ok()
+        image.at_path(rest_path).ok()
     }
 }
 
