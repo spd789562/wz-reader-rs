@@ -123,10 +123,9 @@ pub fn get_image_node_from_path<'a>(
         return Some((image_node, rest_path));
     }
 
-    let mut pathes = path.split('/');
     let mut node = node.clone();
     let mut slash_index = 0;
-    while let Some(split_path) = pathes.next() {
+    for split_path in path.split('/') {
         let target = node.read().unwrap().at(split_path);
         if let Some(target) = target {
             node = target;
