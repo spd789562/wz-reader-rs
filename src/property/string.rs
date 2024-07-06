@@ -90,7 +90,7 @@ impl WzString {
     }
     /// Create a new `WzString` it will encrypt the string with the given iv.
     pub fn from_str(str: &str, iv: [u8; 4]) -> Self {
-        let mut mtbkeys = WzMutableKey::from_iv(iv.clone());
+        let mut mtbkeys = WzMutableKey::from_iv(iv);
 
         let len;
 
