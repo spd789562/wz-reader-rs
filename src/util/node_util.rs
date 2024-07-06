@@ -1,4 +1,4 @@
-use crate::{node::Error, wz_image, WzNode, WzNodeArc, WzNodeCast};
+use crate::{node::Error, WzNode, WzNodeArc, WzNodeCast};
 use std::sync::Arc;
 
 /// Just wrap around of `node.write().unwrap().parse(&node)`
