@@ -1,4 +1,4 @@
-use crate::{node::Error, wz_image, WzNode, WzNodeArc, WzNodeCast};
+use crate::{node::Error, WzNode, WzNodeArc, WzNodeCast};
 use std::sync::Arc;
 
 /// Just wrap around of `node.write().unwrap().parse(&node)`
@@ -57,8 +57,7 @@ pub fn resolve_uol(node: &WzNodeArc, wz_image: Option<&mut WzNode>) {
         .read()
         .unwrap()
         .try_as_uol()
-        .map(|s| s.get_string().ok())
-        .flatten()
+        .and_then(|s| s.get_string().ok())
     {
         let mut pathes = uol_target_path.split('/');
 
@@ -123,10 +122,9 @@ pub fn get_image_node_from_path<'a>(
         return Some((image_node, rest_path));
     }
 
-    let mut pathes = path.split('/');
     let mut node = node.clone();
     let mut slash_index = 0;
-    while let Some(split_path) = pathes.next() {
+    for split_path in path.split('/') {
         let target = node.read().unwrap().at(split_path);
         if let Some(target) = target {
             node = target;
@@ -149,9 +147,9 @@ pub fn get_node_without_parse(root: &WzNodeArc, path: &str) -> Option<WzNodeArc>
     let image = image_read.try_as_image()?;
 
     if image.is_parsed {
-        image_read.at_path(&rest_path)
+        image_read.at_path(rest_path)
     } else {
-        image.at_path(&rest_path).ok()
+        image.at_path(rest_path).ok()
     }
 }
 

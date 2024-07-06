@@ -204,7 +204,7 @@ impl<T: AsRef<[u8]>> WzBaseReader<T> {
             return Vec::new();
         }
         let mut keys = self.keys.write().unwrap();
-        return encrypt_str(&mut keys, str, meta_type);
+        encrypt_str(&mut keys, str, meta_type)
     }
 }
 
