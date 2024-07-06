@@ -97,7 +97,7 @@ impl WzString {
         let meta_type = if str.is_empty() {
             len = 0;
             WzStringType::Empty
-        } else if str.chars().all(|c| c.is_ascii()) {
+        } else if str.is_ascii() {
             len = str.len();
             WzStringType::Ascii
         } else {
