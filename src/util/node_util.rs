@@ -57,8 +57,7 @@ pub fn resolve_uol(node: &WzNodeArc, wz_image: Option<&mut WzNode>) {
         .read()
         .unwrap()
         .try_as_uol()
-        .map(|s| s.get_string().ok())
-        .flatten()
+        .and_then(|s| s.get_string().ok())
     {
         let mut pathes = uol_target_path.split('/');
 
