@@ -115,7 +115,7 @@ pub fn get_image_node_from_path<'a>(
     if path.contains(".img") {
         let mut pathes = path.split_inclusive(".img");
         let img_path = pathes.next()?;
-        let rest_path = pathes.next()?.strip_prefix("/")?;
+        let rest_path = pathes.next()?.strip_prefix('/')?;
 
         let image_node = node.read().unwrap().at_path(img_path)?;
 
