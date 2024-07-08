@@ -1,6 +1,11 @@
 use crate::property::string::resolve_string_from_node;
 use crate::util::color::{SimpleColor, SimpleColorAlpha};
-use crate::{property::WzSubProperty, reader, util::node_util, WzNodeArc, WzObjectType};
+use crate::{
+    property::WzSubProperty,
+    reader::{self, Reader},
+    util::node_util,
+    WzNodeArc, WzObjectType,
+};
 use flate2::{Decompress, FlushDecompress};
 use image::{DynamicImage, ImageBuffer, Rgb, Rgba};
 use rayon::prelude::*;
@@ -108,11 +113,11 @@ impl WzPng {
     pub fn format(&self) -> u32 {
         self.format1 + self.format2
     }
-    fn list_wz_used(&self) -> bool {
-        self.header != 0x9C78
-            && self.header != 0xDA78
-            && self.header != 0x0178
-            && self.header != 0x5E78
+    fn has_zlib_header(&self) -> bool {
+        self.header == 0x9C78
+            || self.header == 0xDA78
+            || self.header == 0x0178
+            || self.header == 0x5E78
     }
     pub fn extract_png(&self) -> Result<DynamicImage, WzPngParseError> {
         let data = self
@@ -135,40 +140,58 @@ impl WzPng {
             _ => Err(WzPngParseError::UnknownFormat(self.format())),
         }
     }
-    fn get_raw_data(&self, data: &[u8]) -> Result<Vec<u8>, WzPngParseError> {
-        if self.list_wz_used() {
-            return Err(WzPngParseError::UnsupportedHeader(self.header));
-        }
-
+    fn get_buff_size(&self) -> Result<usize, WzPngParseError> {
         match self.format() {
-            1 | 257 | 513 => {
-                let size = (self.width * self.height * 2) as usize;
-                inflate(data, size)
-            }
-            2 => {
-                let size = (self.width * self.height * 4) as usize;
-                inflate(data, size)
-            }
-            3 => {
-                let size = (self.width * self.height * 4) as usize;
-                inflate(data, size)
-            }
-            1026 | 2050 => {
-                let size = (self.width * self.height) as usize;
-                inflate(data, size)
-            }
+            1 | 257 | 513 => Ok((self.width * self.height * 2) as usize),
+            2 => Ok((self.width * self.height * 4) as usize),
+            3 => Ok((self.width * self.height * 4) as usize),
+            1026 | 2050 => Ok((self.width * self.height) as usize),
             517 => {
                 /* 128 = 16 * 16 / 2 */
-                let size = (self.width * self.height / 128) as usize;
-                inflate(data, size)
+                Ok((self.width * self.height / 128) as usize)
             }
             _ => Err(WzPngParseError::UnknownFormat(self.format())),
         }
     }
+    fn get_raw_data(&self, data: &[u8]) -> Result<Vec<u8>, WzPngParseError> {
+        let capacity = self.get_buff_size()?;
+
+        if self.has_zlib_header() {
+            inflate(true, data, capacity)
+        } else {
+            let mut keys = self.reader.keys.write().unwrap();
+
+            let total_end = self.offset + self.block_size;
+
+            let mut offset = self.offset;
+            let mut end = 0;
+
+            let mut decrypted = Vec::with_capacity(self.block_size);
+
+            while offset < total_end {
+                let block_size = self.reader.read_i32_at(offset).unwrap() as usize;
+                offset += 4;
+
+                let data = self.reader.get_slice(offset..(offset + block_size));
+                offset += block_size;
+
+                decrypted.extend_from_slice(data);
+
+                keys.ensure_key_size(data.len()).unwrap();
+
+                keys.decrypt_slice(&mut decrypted[end..(end + block_size)]);
+
+                end += block_size;
+            }
+
+            /* the total chunk shoud start decryption at index 2 */
+            inflate(false, &decrypted[2..], capacity)
+        }
+    }
 }
 
-fn inflate(data: &[u8], capacity: usize) -> Result<Vec<u8>, WzPngParseError> {
-    let mut deflater = Decompress::new(true);
+fn inflate(with_header: bool, data: &[u8], capacity: usize) -> Result<Vec<u8>, WzPngParseError> {
+    let mut deflater = Decompress::new(with_header);
     let mut result = Vec::with_capacity(capacity);
 
     if let Err(e) = deflater.decompress_vec(data, &mut result, FlushDecompress::Sync) {
