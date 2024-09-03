@@ -4,7 +4,7 @@ use wz_reader::version::WzMapleVersion;
 use wz_reader::{property::WzSubProperty, WzImage, WzNode, WzNodeArc, WzNodeCast, WzObjectType};
 
 fn create_int_node(num: i32, parent: &WzNodeArc) -> WzNodeArc {
-    WzNode::new(&format!("{}", num).into(), num, Some(parent)).into_lock()
+    WzNode::new(&format!("{}", num).into(), num, Some(parent)).into_arc()
 }
 
 fn thin_setup() -> (WzNodeArc, String) {
@@ -13,7 +13,7 @@ fn thin_setup() -> (WzNodeArc, String) {
         WzObjectType::Property(WzSubProperty::Property),
         None,
     )
-    .into_lock();
+    .into_arc();
 
     let (_, mut path) = (0..99).fold((Arc::clone(&root), String::from("")), |node, num| {
         let child = create_int_node(num, &node.0);
@@ -36,7 +36,7 @@ fn fat_setup() -> (WzNodeArc, String) {
         WzObjectType::Property(WzSubProperty::Property),
         None,
     )
-    .into_lock();
+    .into_arc();
 
     let (_, mut path) = (0..=500).fold((Arc::clone(&root), String::from("")), |node, _| {
         let first = create_int_node(0, &node.0);
@@ -97,7 +97,7 @@ fn parse_and_access_bench(c: &mut Criterion) {
         None,
     )
     .unwrap()
-    .into_lock();
+    .into_arc();
     assert!(node.parse(&node).is_ok());
     let image_node = node.at("wz_img.img").unwrap();
     c.bench_function("parse and access lookup", |b| {
@@ -116,7 +116,7 @@ fn access_after_parsing_bench(c: &mut Criterion) {
         None,
     )
     .unwrap()
-    .into_lock();
+    .into_arc();
     assert!(node.parse(&node).is_ok());
     let image_node = node.at("wz_img.img").unwrap();
     image_node.parse(&image_node).unwrap();
@@ -136,7 +136,7 @@ fn direct_access_bench(c: &mut Criterion) {
         None,
     )
     .unwrap()
-    .into_lock();
+    .into_arc();
     assert!(node.parse(&node).is_ok());
     let image_node = node.at("wz_img.img").unwrap();
     let image_node = image_node;

@@ -79,7 +79,7 @@ pub fn resolve_root_wz_file_dir_full(
                     default_keys,
                 )
                 .unwrap()
-                .into_lock();
+                .into_arc();
 
                 let mut root_node_children = root_node.children.write().unwrap();
 

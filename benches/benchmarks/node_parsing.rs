@@ -12,7 +12,7 @@ fn bench(c: &mut Criterion) {
                 None,
             )
             .unwrap()
-            .into_lock();
+            .into_arc();
             assert!(node.parse(&node).is_ok());
         })
     });

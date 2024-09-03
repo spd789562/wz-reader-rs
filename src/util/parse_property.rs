@@ -170,7 +170,7 @@ pub fn parse_more(
                 WzObjectType::Property(WzSubProperty::Property),
                 parent,
             )
-            .into_lock();
+            .into_arc();
 
             reader.skip(2);
             let (childs, uol_nodes) =
@@ -242,7 +242,7 @@ pub fn parse_more(
                 WzObjectType::Property(WzSubProperty::Convex),
                 parent,
             )
-            .into_lock();
+            .into_arc();
 
             let entry_count = reader.read_wz_int()?;
             let mut uol_nodes: Vec<WzNodeArc> = Vec::new();
@@ -315,7 +315,7 @@ pub fn parse_more(
                 WzObjectType::Value(WzValue::UOL(WzString::from_meta(str_meta, org_reader))),
                 parent,
             )
-            .into_lock();
+            .into_arc();
 
             let uol_nodes = Some(vec![Arc::clone(&node)]);
 

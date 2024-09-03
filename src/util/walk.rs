@@ -32,16 +32,16 @@ mod test {
             WzObjectType::Property(WzSubProperty::Property),
             None,
         )
-        .into_lock();
+        .into_arc();
 
-        let child1 = WzNode::from_str("child1", 1, Some(&root)).into_lock();
-        let child2 = WzNode::from_str("child2", 2, Some(&root)).into_lock();
+        let child1 = WzNode::from_str("child1", 1, Some(&root)).into_arc();
+        let child2 = WzNode::from_str("child2", 2, Some(&root)).into_arc();
 
-        WzNode::from_str("child11", 11, Some(&child1)).into_lock();
-        WzNode::from_str("child12", 12, Some(&child1)).into_lock();
+        WzNode::from_str("child11", 11, Some(&child1)).into_arc();
+        WzNode::from_str("child12", 12, Some(&child1)).into_arc();
 
-        WzNode::from_str("child21", 21, Some(&child2)).into_lock();
-        WzNode::from_str("child22", 22, Some(&child2)).into_lock();
+        WzNode::from_str("child21", 21, Some(&child2)).into_arc();
+        WzNode::from_str("child22", 22, Some(&child2)).into_arc();
 
         root
     }

@@ -152,46 +152,46 @@ mod test {
     ///       |- orphan1
     ///       |- orphan2
     fn setup_node_tree() -> WzNodeArc {
-        let root = WzNode::from_str("Base", WzFile::default(), None).into_lock();
-        let dir = WzNode::from_str("dir", WzDirectory::default(), Some(&root)).into_lock();
+        let root = WzNode::from_str("Base", WzFile::default(), None).into_arc();
+        let dir = WzNode::from_str("dir", WzDirectory::default(), Some(&root)).into_arc();
 
         let img1 = {
             let img = WzImage::default();
             *img.is_parsed.lock().unwrap() = true;
             WzNode::from_str("test1.img", img, Some(&dir))
         }
-        .into_lock();
+        .into_arc();
 
         let img2 = {
             let img = WzImage::default();
             *img.is_parsed.lock().unwrap() = true;
             WzNode::from_str("test2.img", img, Some(&dir))
         }
-        .into_lock();
+        .into_arc();
 
         let img3 = {
             let img = WzImage::default();
             *img.is_parsed.lock().unwrap() = true;
             WzNode::from_str("test3.img", img, Some(&dir))
         }
-        .into_lock();
+        .into_arc();
 
-        let img1child1 = WzNode::from_str("1-dep1", 1, Some(&img1)).into_lock();
-        let img1child11 = WzNode::from_str("1-dep2", 2, Some(&img1child1)).into_lock();
-        let img1child2 = WzNode::from_str("2-dep1", 1, Some(&img1)).into_lock();
-        let img1child21 = WzNode::from_str("2-dep2", 1, Some(&img1child2)).into_lock();
+        let img1child1 = WzNode::from_str("1-dep1", 1, Some(&img1)).into_arc();
+        let img1child11 = WzNode::from_str("1-dep2", 2, Some(&img1child1)).into_arc();
+        let img1child2 = WzNode::from_str("2-dep1", 1, Some(&img1)).into_arc();
+        let img1child21 = WzNode::from_str("2-dep2", 1, Some(&img1child2)).into_arc();
         let img1child21inlink = WzNode::from_str(
             "_inlink",
             WzString::from_str("1-dep1/1-dep2", [0, 0, 0, 0]),
             Some(&img1child21),
         )
-        .into_lock();
+        .into_arc();
         let img1child21outlink = WzNode::from_str(
             "_outlink",
             WzString::from_str("dir/test2.img/child1/child2", [0, 0, 0, 0]),
             Some(&img1child21),
         )
-        .into_lock();
+        .into_arc();
         let image1child21uol = WzNode::from_str(
             "uol",
             WzObjectType::Value(WzValue::UOL(WzString::from_str(
@@ -200,14 +200,14 @@ mod test {
             ))),
             Some(&img1child21),
         )
-        .into_lock();
+        .into_arc();
 
-        let img2child1 = WzNode::from_str("child1", 1, Some(&img2)).into_lock();
-        let img2child2 = WzNode::from_str("child2", 2, Some(&img2child1)).into_lock();
+        let img2child1 = WzNode::from_str("child1", 1, Some(&img2)).into_arc();
+        let img2child2 = WzNode::from_str("child2", 2, Some(&img2child1)).into_arc();
 
         // make those orphan but also is test3.img's child
-        let img3child1 = WzNode::from_str("orphan1", 1, None).into_lock();
-        let img3child2 = WzNode::from_str("orphan2", 1, None).into_lock();
+        let img3child1 = WzNode::from_str("orphan1", 1, None).into_arc();
+        let img3child2 = WzNode::from_str("orphan2", 1, None).into_arc();
 
         root.add(&dir);
 

@@ -49,7 +49,7 @@ fn should_guessing_patch_version() -> Result<()> {
     );
     assert!(wz_file.is_ok());
 
-    let wz_file = wz_file?.into_lock();
+    let wz_file = wz_file?.into_arc();
 
     make_sure_wz_file_version(&wz_file, -1);
 
@@ -71,7 +71,7 @@ fn should_parsing_with_patch_version() -> Result<()> {
     );
     assert!(wz_file.is_ok());
 
-    let wz_file = wz_file?.into_lock();
+    let wz_file = wz_file?.into_arc();
 
     assert!(node_util::parse_node(&wz_file).is_ok());
 
@@ -241,7 +241,7 @@ fn should_parsing_wz_file_and_check_values() -> Result<()> {
     );
     assert!(wz_file.is_ok());
 
-    let wz_file = wz_file?.into_lock();
+    let wz_file = wz_file?.into_arc();
 
     assert!(node_util::parse_node(&wz_file).is_ok());
 
@@ -269,7 +269,7 @@ fn should_success_using_wz_node_methods_on_childs() -> Result<()> {
     );
     assert!(wz_file.is_ok());
 
-    let wz_file = wz_file?.into_lock();
+    let wz_file = wz_file?.into_arc();
 
     assert!(node_util::parse_node(&wz_file).is_ok());
 
@@ -375,7 +375,7 @@ fn should_success_walk_thorugh() {
     );
     assert!(wz_file.is_ok());
 
-    let wz_file = wz_file.unwrap().into_lock();
+    let wz_file = wz_file.unwrap().into_arc();
 
     let pathes = std::collections::HashSet::from([
         "test",
@@ -410,7 +410,7 @@ fn should_guessing_iv() -> Result<()> {
     let wz_file = WzNode::from_wz_file(r"tests/test_need_iv.wz", None);
     assert!(wz_file.is_ok());
 
-    let wz_file = wz_file?.into_lock();
+    let wz_file = wz_file?.into_arc();
 
     assert!(wz_file
         .try_as_file()
@@ -437,7 +437,7 @@ fn should_success_walk_thorugh_with_iv() {
     );
     assert!(wz_file.is_ok());
 
-    let wz_file = wz_file.unwrap().into_lock();
+    let wz_file = wz_file.unwrap().into_arc();
 
     let pathes = std::collections::HashSet::from([
         "test_need_iv",

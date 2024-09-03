@@ -297,7 +297,7 @@ mod test {
     #[test]
     fn test_resolve_from_node_success() -> Result<()> {
         let node =
-            WzNode::from_str("root", WzString::from_str("test", [0, 0, 0, 0]), None).into_lock();
+            WzNode::from_str("root", WzString::from_str("test", [0, 0, 0, 0]), None).into_arc();
 
         assert_eq!(resolve_string_from_node(&node)?, "test");
 
@@ -306,7 +306,7 @@ mod test {
 
     #[test]
     fn test_resolve_from_node_fail() -> Result<()> {
-        let node = WzNode::from_str("root", 1, None).into_lock();
+        let node = WzNode::from_str("root", 1, None).into_arc();
 
         assert!(resolve_string_from_node(&node).is_err());
 

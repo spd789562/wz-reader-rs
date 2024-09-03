@@ -31,7 +31,7 @@ fn should_parsing_with_default_version() -> Result<()> {
     let wz_img = WzNode::from_img_file(r"tests/test.img", None, None);
     assert!(wz_img.is_ok());
 
-    let wz_img = wz_img?.into_lock();
+    let wz_img = wz_img?.into_arc();
 
     assert!(node_util::parse_node(&wz_img).is_ok());
 
@@ -43,7 +43,7 @@ fn should_parsing_with_correct_version() -> Result<()> {
     let wz_img = WzNode::from_img_file(r"tests/test.img", Some(WzMapleVersion::BMS), None);
     assert!(wz_img.is_ok());
 
-    let wz_img = wz_img?.into_lock();
+    let wz_img = wz_img?.into_arc();
 
     assert!(node_util::parse_node(&wz_img).is_ok());
 
@@ -64,7 +64,7 @@ fn should_parsing_with_correct_iv() -> Result<()> {
     let wz_img = WzNode::from_img_file_with_iv(r"tests/test.img", [0, 0, 0, 0], None);
     assert!(wz_img.is_ok());
 
-    let wz_img = wz_img?.into_lock();
+    let wz_img = wz_img?.into_arc();
 
     assert!(node_util::parse_node(&wz_img).is_ok());
 
@@ -199,7 +199,7 @@ fn should_parsing_wz_img_and_check_values() -> Result<()> {
 
     assert!(wz_img.is_ok());
 
-    assert!(check_sample_wz_img(&wz_img?.into_lock()).is_ok());
+    assert!(check_sample_wz_img(&wz_img?.into_arc()).is_ok());
 
     Ok(())
 }
@@ -209,7 +209,7 @@ fn should_success_using_wz_node_methods_on_childs() -> Result<()> {
     let wz_img = WzNode::from_img_file(r"tests/test.img", Some(WzMapleVersion::BMS), None);
     assert!(wz_img.is_ok());
 
-    let wz_img = wz_img?.into_lock();
+    let wz_img = wz_img?.into_arc();
 
     assert!(node_util::parse_node(&wz_img).is_ok());
 
@@ -300,7 +300,7 @@ fn should_success_walk_thorugh() {
     let wz_img = WzNode::from_img_file(r"tests/test.img", Some(WzMapleVersion::BMS), None);
     assert!(wz_img.is_ok());
 
-    let wz_img = wz_img.unwrap().into_lock();
+    let wz_img = wz_img.unwrap().into_arc();
 
     let pathes = std::collections::HashSet::from([
         "test.img",
