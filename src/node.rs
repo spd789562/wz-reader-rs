@@ -200,25 +200,24 @@ impl WzNode {
 
     /// Clear the node childrens and set the node to unparsed.
     pub fn unparse(&self) {
-        // TODO: fix thouse need to take immmutable self
-        // match &mut self.object_type {
-        //     WzObjectType::Directory(directory) => {
-        //         directory.is_parsed = false;
-        //     }
-        //     WzObjectType::File(file) => {
-        //         file.is_parsed = false;
-        //     }
-        //     WzObjectType::Image(image) => {
-        //         image.is_parsed = false;
-        //     }
-        //     _ => return,
-        // }
+        match &self.object_type {
+            WzObjectType::Directory(directory) => {
+                *directory.is_parsed.lock().unwrap() = false;
+            }
+            WzObjectType::File(file) => {
+                *file.is_parsed.lock().unwrap() = false;
+            }
+            WzObjectType::Image(image) => {
+                *image.is_parsed.lock().unwrap() = false;
+            }
+            _ => return,
+        }
 
         self.children.write().unwrap().clear();
     }
 
-    /// Add a child to the node. It just shorten the `node.write().unwrap().children.insert(name, child)`.
-    /// If you have a lot node need to add, consider mauanlly `let mut = node.write().unwrap()`.
+    /// Add a child to the node. It just shorten the `node.children.write().unwrap().insert(name, child)`.
+    /// If you have a lot node need to add, consider mauanlly `let mut children = node.children.write().unwrap().
     pub fn add(&self, node: &WzNodeArc) {
         self.children
             .write()
@@ -237,7 +236,7 @@ impl WzNode {
     /// let child = WzNode::from_str("1", 1, Some(&root)).into_lock();
     /// let grandchild = WzNode::from_str("2", 1, Some(&child)).into_lock();
     ///
-    /// assert_eq!(grandchild.read().unwrap().get_full_path(), "root/1/2");
+    /// assert_eq!(grandchild.get_full_path(), "root/1/2");
     /// ```
     pub fn get_full_path(&self) -> String {
         let mut path = self.name.to_string();
@@ -260,8 +259,8 @@ impl WzNode {
     /// let child = WzNode::from_str("1", 1, Some(&root)).into_lock();
     /// let grandchild = WzNode::from_str("2", 1, Some(&child)).into_lock();
     ///
-    /// assert_eq!(grandchild.read().unwrap().get_path_from_root(), "1/2");
-    /// assert!(root.read().unwrap().get_path_from_root().is_empty());
+    /// assert_eq!(grandchild.get_path_from_root(), "1/2");
+    /// assert!(root.get_path_from_root().is_empty());
     /// ```
     pub fn get_path_from_root(&self) -> String {
         let mut parent = self.parent.upgrade();
@@ -292,8 +291,8 @@ impl WzNode {
     /// let child = WzNode::from_str("1", WzImage::default(), Some(&root)).into_lock();
     /// let grandchild = WzNode::from_str("2", 1, Some(&child)).into_lock();
     ///
-    /// assert_eq!(grandchild.read().unwrap().get_path_from_image(), "2");
-    /// assert!(root.read().unwrap().get_path_from_image().is_empty());
+    /// assert_eq!(grandchild.get_path_from_image(), "2");
+    /// assert!(root.get_path_from_image().is_empty());
     /// ```
     pub fn get_path_from_image(&self) -> String {
         let mut parent = self.parent.upgrade();
@@ -332,7 +331,6 @@ impl WzNode {
     /// let child1 = WzNode::from_str("1", 1, Some(&root)).into_lock();
     /// let child2 = WzNode::from_str("2", 1, Some(&root)).into_lock();
     ///
-    /// let mut root =  root.write().unwrap();
     /// root.add(&child1);
     /// root.add(&child2);
     ///
@@ -355,7 +353,6 @@ impl WzNode {
     /// let child1 = WzNode::from_str("1", 1, Some(&root)).into_lock();
     /// let child2 = WzNode::from_str("2", 1, Some(&root)).into_lock();
     ///
-    /// let mut root =  root.write().unwrap();
     /// root.add(&child1);
     /// root.add(&child2);
     ///
@@ -380,8 +377,8 @@ impl WzNode {
     /// let child1 = WzNode::from_str("1", 1, Some(&root)).into_lock();
     /// let child2 = WzNode::from_str("2", 1, Some(&child1)).into_lock();
     ///
-    /// root.write().unwrap().add(&child1);
-    /// child1.write().unwrap().add(&child2);
+    /// root.add(&child1);
+    /// child1.add(&child2);
     ///
     /// assert!(root.at_path("1/2").is_some());
     /// assert!(root.at_path("1/3").is_none());
@@ -420,8 +417,8 @@ impl WzNode {
     /// let child1 = WzNode::from_str("1", 1, Some(&root)).into_lock();
     /// let child2 = WzNode::from_str("2", 1, Some(&child1)).into_lock();
     ///
-    /// root.write().unwrap().add(&child1);
-    /// child1.write().unwrap().add(&child2);
+    /// root.add(&child1);
+    /// child1.add(&child2);
     ///
     /// assert!(child2.at_path_relative("../..").is_some());
     /// assert!(child2.at_path_relative("../3").is_none());
@@ -447,10 +444,10 @@ impl WzNode {
     /// let child1 = WzNode::from_str("1", 1, Some(&root)).into_lock();
     /// let child2 = WzNode::from_str("2", 1, Some(&child1)).into_lock();
     ///
-    /// root.write().unwrap().add(&child1);
-    /// child1.write().unwrap().add(&child2);
+    /// root.add(&child1);
+    /// child1.add(&child2);
     ///
-    /// let target = child2.read().unwrap().filter_parent(|node| node.name.as_str() == "root");
+    /// let target = child2.filter_parent(|node| node.name.as_str() == "root");
     /// assert!(target.is_some());
     /// ```
     pub fn filter_parent<F>(&self, cb: F) -> Option<WzNodeArc>
@@ -585,16 +582,16 @@ mod test {
         let root = WzNode::from_str("root", 1, None).into_lock();
         let child1 = WzNode::from_str("1", 1, Some(&root)).into_lock();
         let child2 = WzNode::from_str("2", 1, Some(&root)).into_lock();
-        root.write().unwrap().add(&child1);
-        root.write().unwrap().add(&child2);
+        root.add(&child1);
+        root.add(&child2);
         let child11 = WzNode::from_str("1-1", 1, Some(&child1)).into_lock();
         let child12 = WzNode::from_str("1-2", 1, Some(&child1)).into_lock();
-        child1.write().unwrap().add(&child11);
-        child1.write().unwrap().add(&child12);
+        child1.add(&child11);
+        child1.add(&child12);
         let child111 = WzNode::from_str("1-1-1", 1, Some(&child11)).into_lock();
-        child11.write().unwrap().add(&child111);
+        child11.add(&child111);
 
-        let json = serde_json::to_value(&*root.read().unwrap()).unwrap();
+        let json = serde_json::to_value(&*root).unwrap();
 
         let result = json!({
             "name": "root",
@@ -685,25 +682,25 @@ mod test {
             .unwrap()
             .into_lock();
 
-        let node111 = root.read().unwrap().at_path("1/1-1/1-1-1");
+        let node111 = root.at_path("1/1-1/1-1-1");
 
         assert!(node111.is_some());
 
         let node111 = node111.unwrap();
 
-        assert_eq!(node111.read().unwrap().name.as_str(), "1-1-1");
+        assert_eq!(node111.name.as_str(), "1-1-1");
         // should not be able to resolve parent
-        assert!(node111.read().unwrap().parent.upgrade().is_none());
+        assert!(node111.parent.upgrade().is_none());
 
         node_util::resolve_childs_parent(&root);
 
         // should able to get parent after resolved
-        let node111_parent = node111.read().unwrap().parent.upgrade();
+        let node111_parent = node111.parent.upgrade();
         assert!(node111_parent.is_some());
 
         let node111_parent = node111_parent.unwrap();
 
-        assert_eq!(node111_parent.read().unwrap().name.as_str(), "1-1");
+        assert_eq!(node111_parent.name.as_str(), "1-1");
     }
 
     #[cfg(feature = "json")]
@@ -714,25 +711,25 @@ mod test {
         let root = WzNode::from_str("root", 1, None).into_lock();
         let child1 = WzNode::from_str("1", 1, Some(&root)).into_lock();
         let child2 = WzNode::from_str("2", 1, Some(&root)).into_lock();
-        root.write().unwrap().add(&child1);
-        root.write().unwrap().add(&child2);
+        root.add(&child1);
+        root.add(&child2);
         let child11 = WzNode::from_str("1-1", 1, Some(&child1)).into_lock();
         let child12 = WzNode::from_str("1-2", 1, Some(&child1)).into_lock();
-        child1.write().unwrap().add(&child11);
-        child1.write().unwrap().add(&child12);
+        child1.add(&child11);
+        child1.add(&child12);
         let child111 = WzNode::from_str("1-1-1", 1, Some(&child11)).into_lock();
         let child112 = WzNode::from_str("1-1-2", 2, Some(&child11)).into_lock();
         let child11png = WzNode::from_str("1-1-png", WzPng::default(), Some(&child11)).into_lock();
         let child11sound =
             WzNode::from_str("1-1-sound", WzSound::default(), Some(&child11)).into_lock();
-        child11.write().unwrap().add(&child111);
-        child11.write().unwrap().add(&child112);
-        child11.write().unwrap().add(&child11png);
-        child11.write().unwrap().add(&child11sound);
+        child11.add(&child111);
+        child11.add(&child112);
+        child11.add(&child11png);
+        child11.add(&child11sound);
         let child11pngz = WzNode::from_str("1-1-png-z", 2, Some(&child11png)).into_lock();
-        child11png.write().unwrap().add(&child11pngz);
+        child11png.add(&child11pngz);
 
-        let json = root.read().unwrap().to_simple_json().unwrap();
+        let json = root.to_simple_json().unwrap();
 
         let result = json!({
             "1": {
