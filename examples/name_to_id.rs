@@ -18,7 +18,6 @@ fn main() {
 
     let string_nodes = {
         let mut nodes = vec![];
-        let base_node = base_node.read().unwrap();
 
         base_node
             .at_path("String/Cash.img")
@@ -54,36 +53,25 @@ fn main() {
     let result = Mutex::new(Vec::new());
 
     string_nodes.par_iter().for_each(|node| {
-        let parse_success = {
-            let mut node_write = node.write().unwrap();
-            node_write.parse(node).is_ok()
-        };
+        let parse_success = { node.parse(node).is_ok() };
 
         if parse_success {
-            node.read()
+            node.children
+                .read()
                 .unwrap()
-                .children
                 .values()
                 .collect::<Vec<_>>()
                 .par_iter()
                 .for_each(|node| {
                     walk_node(node, false, &|node| {
-                        let node_read = node.read().unwrap();
                         /* name are always string node */
-                        if node_read.try_as_string().is_some() {
+                        if node.try_as_string().is_some() {
                             let name = string::resolve_string_from_node(&node);
                             if let Ok(name) = name {
                                 if &name == item_name {
                                     let mut result = result.lock().unwrap();
                                     /* get actual id */
-                                    let id = node_read
-                                        .parent
-                                        .upgrade()
-                                        .unwrap()
-                                        .read()
-                                        .unwrap()
-                                        .name
-                                        .clone();
+                                    let id = node.parent.upgrade().unwrap().name.clone();
                                     result.push(id);
                                 }
                             }

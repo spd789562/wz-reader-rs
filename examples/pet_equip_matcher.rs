@@ -16,19 +16,16 @@ fn main() {
     let start = std::time::Instant::now();
 
     let pet_equip = base_node
-        .read()
-        .unwrap()
         .at_path("Character/PetEquip")
         .expect("pet equip path not found");
 
-    let pet_equip_read = pet_equip.read().unwrap();
+    let childrens = pet_equip.children.read().unwrap();
 
-    let pet_equip_items = pet_equip_read.children.values().collect::<Vec<_>>();
+    let pet_equip_items = childrens.values().collect::<Vec<_>>();
 
     let result_items: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
     pet_equip_items.par_iter().for_each(|node| {
-        let node = node.read().unwrap();
         if let Some(image) = node.try_as_image() {
             if image.at_path(target_pet_id).is_ok() {
                 let name = node.name.clone().replace(".img", "");
@@ -51,14 +48,10 @@ fn main() {
     ids.sort();
 
     let string_node = base_node
-        .read()
-        .unwrap()
         .at_path("String/Eqp.img")
         .expect("string node not found");
 
-    let string_node_read = string_node.read().unwrap();
-
-    let string_img_node = string_node_read
+    let string_img_node = string_node
         .try_as_image()
         .expect("string node is not wz image");
 
@@ -69,11 +62,9 @@ fn main() {
     let names: Vec<_> = ids
         .par_iter()
         .map(|id| {
-            let pet_equip_node = pet_equip_node.read().unwrap();
             let pet_equip_item = pet_equip_node
                 .at(id)
                 .expect(format!("pet equip item {} not found", id).as_str());
-            let pet_equip_item = pet_equip_item.read().unwrap();
             let name = pet_equip_item.at("name").expect("name not found");
             string::resolve_string_from_node(&name)
         })

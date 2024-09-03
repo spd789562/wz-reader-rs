@@ -14,11 +14,10 @@ fn main() {
     let path = args.next().expect("Need path to wz file as 2nd arg");
     let out = args.next().expect("Need out dir as 3rd arg");
     let save_sound_fn = |node: &WzNodeArc| {
-        let node_read = node.read().unwrap();
-        if let Some(sound) = node_read.try_as_sound() {
-            let path = std::path::Path::new(&out).join(node_read.name.as_str());
+        if let Some(sound) = node.try_as_sound() {
+            let path = std::path::Path::new(&out).join(node.name.as_str());
             if sound.save(path).is_err() {
-                println!("failed to extract sound: {}", node_read.get_full_path());
+                println!("failed to extract sound: {}", node.get_full_path());
             }
         }
     };
@@ -35,7 +34,7 @@ fn main() {
             let base_node = resolve_base(&path, None).unwrap();
 
             /* it's same as below method */
-            let sound_node = base_node.read().unwrap().at("Sound").unwrap();
+            let sound_node = base_node.at("Sound").unwrap();
             walk_node(&sound_node, true, &save_sound_fn);
         }
         b"folder" => {

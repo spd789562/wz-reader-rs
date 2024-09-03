@@ -10,17 +10,17 @@ fn main() {
         .expect("Need path to .wz as first argument");
     let node: WzNodeArc = WzNode::from_wz_file(path, None).unwrap().into();
 
-    let mut node_write = node.write().unwrap();
+    node.parse(&node).unwrap();
 
-    node_write.parse(&node).unwrap();
-
-    let handles = node_write
+    let handles = node
         .children
+        .read()
+        .unwrap()
         .values()
         .map(|node| {
             let node = node.clone();
             thread::spawn(move || {
-                node.write().unwrap().parse(&node).unwrap();
+                node.parse(&node).unwrap();
             })
         })
         .collect::<Vec<_>>();

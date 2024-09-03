@@ -18,7 +18,6 @@ fn main() {
 
     let string_nodes = {
         let mut nodes = vec![];
-        let base_node = base_node.read().unwrap();
 
         base_node
             .at_path("String/Cash.img")
@@ -54,21 +53,17 @@ fn main() {
     let result = Mutex::new(Vec::new());
 
     string_nodes.par_iter().for_each(|node| {
-        let parse_success = {
-            let mut node_write = node.write().unwrap();
-            node_write.parse(node).is_ok()
-        };
+        let parse_success = { node.parse(node).is_ok() };
 
         if parse_success {
-            node.read()
+            node.children
+                .read()
                 .unwrap()
-                .children
                 .values()
                 .collect::<Vec<_>>()
                 .par_iter()
                 .for_each(|node| {
                     walk_node(node, false, &|node| {
-                        let node = node.read().unwrap();
                         /* the id of item always be sub_property, so just ignore other node */
                         if node.try_as_sub_property().is_none() {
                             return;

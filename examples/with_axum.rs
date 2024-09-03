@@ -193,8 +193,6 @@ fn get_node_from_root(
         return Ok(wz_root.clone());
     }
 
-    let wz_root = wz_root.read().unwrap();
-
     let target = if force_parse {
         wz_root.at_path_parsed(&path)?
     } else {
@@ -228,9 +226,9 @@ async fn get_json(
     let target = get_node_from_root(wz_root, &path, force_parse)?;
 
     let json = if is_simple {
-        target.read().unwrap().to_simple_json()
+        target.to_simple_json()
     } else {
-        target.read().unwrap().to_json()
+        target.to_json()
     };
 
     let json = json.map_err(|_| NodeFindError::ServerError)?;
@@ -253,9 +251,7 @@ async fn get_image(
 
     let target = get_node_from_root(wz_root, &path, force_parse)?;
 
-    let target_read = target.read().unwrap();
-
-    if let Some(_) = target_read.try_as_png() {
+    if let Some(_) = target.try_as_png() {
         let img = property::get_image(&target).map_err(|_| NodeFindError::ServerError)?;
 
         let mut buf = BufWriter::new(Cursor::new(Vec::new()));
@@ -290,9 +286,8 @@ async fn get_image_urls(
     let urls = Mutex::new(Vec::new());
 
     walk_node(&target, force_parse, &|node| {
-        let node_read = node.read().unwrap();
-        if let Some(_) = node_read.try_as_png() {
-            let path = node_read.get_full_path().replace("Base/", "");
+        if let Some(_) = node.try_as_png() {
+            let path = node.get_full_path().replace("Base/", "");
             let mut urls = urls.lock().unwrap();
             urls.push(path);
         }
@@ -320,9 +315,7 @@ async fn get_sound(
 
     let target = get_node_from_root(wz_root, &path, force_parse)?;
 
-    let target_read = target.read().unwrap();
-
-    if let Some(sound) = target_read.try_as_sound() {
+    if let Some(sound) = target.try_as_sound() {
         let sound_buf = sound.get_buffer();
 
         let mini = match sound.sound_type {
@@ -347,7 +340,6 @@ fn make_simple_browse_node_link(
     force_parse: bool,
     name: Option<&str>,
 ) -> Result<String, NodeFindError> {
-    let node = node.read().unwrap();
     let mut url = node.get_path_from_root();
 
     if let Some(uol_string) = node.try_as_uol() {
@@ -357,7 +349,6 @@ fn make_simple_browse_node_link(
         uol_target_path.insert_str(0, "../");
         let uol_target = node.at_path_relative(&uol_target_path);
         if let Some(uol_target) = uol_target {
-            let uol_target = uol_target.read().unwrap();
             url = uol_target.get_path_from_root();
         }
     }
@@ -399,12 +390,10 @@ fn make_node_children_ul(
     sort: bool,
     force_parse: bool,
 ) -> Result<String, NodeFindError> {
-    let node_read = node.read().unwrap();
     let mut name_and_urls: Vec<(WzNodeName, String)> = vec![];
 
-    for item in node_read.children.values() {
-        let item_read = item.read().unwrap();
-        let name = item_read.name.clone();
+    for item in node.children.read().unwrap().values() {
+        let name = item.name.clone();
         let html = make_simple_browse_node_link(item, force_parse, None)?;
         name_and_urls.push((name, html));
     }
@@ -415,7 +404,7 @@ fn make_node_children_ul(
 
     let mut result_string = String::new();
 
-    if let Some(parent) = node_read.parent.upgrade() {
+    if let Some(parent) = node.parent.upgrade() {
         result_string.push_str(&make_simple_browse_node_link(
             &parent,
             force_parse,
@@ -459,23 +448,21 @@ async fn simple_browse(
 
     let target = get_node_from_root(wz_root, &path, force_parse)?;
 
-    let target_read = target.read().unwrap();
-
     let mut result_string = String::new();
 
     result_string.push_str(&format!(
         "<h2>Node Info:</h2><pre>{}</pre>",
-        serde_json::to_string(&target_read.object_type).map_err(|_| NodeFindError::ServerError)?
+        serde_json::to_string(&target.object_type).map_err(|_| NodeFindError::ServerError)?
     ));
 
-    if target_read.children.is_empty() {
-        let value = target_read.to_simple_json().unwrap().to_string();
+    if target.children.read().unwrap().is_empty() {
+        let value = target.to_simple_json().unwrap().to_string();
 
-        if target_read.name.as_str() == "_inlink" {
-            let value = target_read.try_as_string().unwrap().get_string().unwrap();
+        if target.name.as_str() == "_inlink" {
+            let value = target.try_as_string().unwrap().get_string().unwrap();
             match node_util::resolve_inlink(&value, &target) {
                 Some(v) => {
-                    let link_dest = v.read().unwrap().get_full_path();
+                    let link_dest = v.get_full_path();
                     result_string.push_str(&make_simple_browse_node_link(
                         &v,
                         force_parse,
@@ -487,11 +474,11 @@ async fn simple_browse(
                         .push_str(&format!("can't not resolve _inlink <pre>{}</pre>", &value));
                 }
             }
-        } else if target_read.name.as_str() == "_outlink" {
-            let value = target_read.try_as_string().unwrap().get_string().unwrap();
+        } else if target.name.as_str() == "_outlink" {
+            let value = target.try_as_string().unwrap().get_string().unwrap();
             match node_util::resolve_outlink(&value, &target, true) {
                 Some(v) => {
-                    let link_dest = v.read().unwrap().get_full_path();
+                    let link_dest = v.get_full_path();
                     result_string.push_str(&make_simple_browse_node_link(
                         &v,
                         force_parse,
@@ -503,21 +490,21 @@ async fn simple_browse(
                         .push_str(&format!("can't not resolve _outlink <pre>{}</pre>", &value));
                 }
             }
-        } else if target_read.name.ends_with(".json") {
-            let content = target_read.try_as_string().unwrap().get_string().unwrap();
+        } else if target.name.ends_with(".json") {
+            let content = target.try_as_string().unwrap().get_string().unwrap();
             return Ok((
                 StatusCode::OK,
                 [(header::CONTENT_TYPE, "application/json;charset=utf-8")],
                 Body::from(content),
             ));
-        } else if target_read.name.ends_with(".atlas") {
-            let content = target_read.try_as_string().unwrap().get_string().unwrap();
+        } else if target.name.ends_with(".atlas") {
+            let content = target.try_as_string().unwrap().get_string().unwrap();
             return Ok((
                 StatusCode::OK,
                 [(header::CONTENT_TYPE, "text/plain;charset=utf-8")],
                 Body::from(content),
             ));
-        } else if let Some(lua) = target_read.try_as_lua() {
+        } else if let Some(lua) = target.try_as_lua() {
             let content = lua.extract_lua().map_err(|_| NodeFindError::ServerError)?;
             return Ok((
                 StatusCode::OK,

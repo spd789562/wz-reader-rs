@@ -15,6 +15,6 @@ fn main() {
     let node: WzNodeArc = WzNode::from_wz_file(path, None).unwrap().into();
 
     walk_node(&node, true, &|node: &WzNodeArc| {
-        println!("{}", node.read().unwrap().get_full_path());
+        println!("{}", node.get_full_path());
     });
 }
