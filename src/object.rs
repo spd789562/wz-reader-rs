@@ -21,7 +21,7 @@ use serde::{Deserialize, Serialize};
 /// ```
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[cfg_attr(feature = "serde", serde(tag = "type", content = "data"))]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum WzObjectType {
     File(Box<WzFile>),
     Image(Box<WzImage>),

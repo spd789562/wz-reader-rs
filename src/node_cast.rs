@@ -127,7 +127,7 @@ mod test {
     use crate::WzReader;
     use memmap2::Mmap;
     use std::fs::OpenOptions;
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex};
 
     fn setup_wz_reader() -> Result<WzReader, std::io::Error> {
         let dir = tempfile::tempdir()?;
@@ -152,7 +152,7 @@ mod test {
         let file = WzFile {
             offset: 0,
             block_size: 0,
-            is_parsed: false,
+            is_parsed: Mutex::new(false),
             reader: Arc::new(reader),
             wz_file_meta: Default::default(),
         };

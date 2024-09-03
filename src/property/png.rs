@@ -44,10 +44,9 @@ type ImageBufferRgbChunk = ImageBuffer<Rgb<u8>, Vec<u8>>;
 
 /// A helper get image from `WzNodeArc`, will also resolve `_inlink` or `_outlink`
 pub fn get_image(node: &WzNodeArc) -> Result<DynamicImage, WzPngParseError> {
-    let node_read = node.read().unwrap();
-    match &node_read.object_type {
+    match &node.object_type {
         WzObjectType::Property(WzSubProperty::PNG(png)) => {
-            let inlink_target = node_read
+            let inlink_target = node
                 .at("_inlink")
                 .and_then(|node| resolve_string_from_node(&node).ok())
                 .and_then(|inlink| node_util::resolve_inlink(&inlink, node));
@@ -56,7 +55,7 @@ pub fn get_image(node: &WzNodeArc) -> Result<DynamicImage, WzPngParseError> {
                 return get_image(&target);
             }
 
-            let outlink_target = node_read
+            let outlink_target = node
                 .at("_outlink")
                 .and_then(|node| resolve_string_from_node(&node).ok())
                 .and_then(|outlink| node_util::resolve_outlink(&outlink, node, true));

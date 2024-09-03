@@ -1,7 +1,7 @@
 use crate::{
     reader, Reader, WzImage, WzNode, WzNodeArc, WzNodeArcVec, WzNodeName, WzObjectType, WzReader,
 };
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -43,7 +43,7 @@ fn get_wz_directory_type_from_byte(byte: u8) -> WzDirectoryType {
 }
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default)]
 pub struct WzDirectory {
     #[cfg_attr(feature = "serde", serde(skip))]
     pub reader: Arc<WzReader>,
@@ -54,7 +54,7 @@ pub struct WzDirectory {
     #[cfg_attr(feature = "serde", serde(skip))]
     pub hash: usize,
     #[cfg_attr(feature = "serde", serde(skip))]
-    pub is_parsed: bool,
+    pub is_parsed: Mutex<bool>,
 }
 
 impl WzDirectory {
@@ -64,7 +64,7 @@ impl WzDirectory {
             offset,
             block_size,
             hash: 0,
-            is_parsed,
+            is_parsed: Mutex::new(is_parsed),
         }
     }
     pub fn with_hash(mut self, hash: usize) -> Self {
@@ -179,14 +179,14 @@ impl WzDirectory {
 
                     let obj_node = WzNode::new(&fname, wz_dir, Some(parent));
 
-                    nodes.push((fname, obj_node.into_lock()));
+                    nodes.push((fname, Arc::new(obj_node)));
                 }
                 WzDirectoryType::WzImage => {
                     let wz_image = WzImage::new(&fname, offset, fsize as usize, &self.reader);
 
                     let obj_node = WzNode::new(&fname, wz_image, Some(parent));
 
-                    nodes.push((fname, obj_node.into_lock()));
+                    nodes.push((fname, Arc::new(obj_node)));
                 }
                 _ => {
                     // should never be here
@@ -195,12 +195,13 @@ impl WzDirectory {
         }
 
         for (_, node) in nodes.iter() {
-            let mut write = node.write().unwrap();
-            if let WzObjectType::Directory(dir) = &mut write.object_type {
+            if let WzObjectType::Directory(dir) = &node.object_type {
                 let children = dir.resolve_children(node)?;
 
+                let mut node_children = node.children.write().unwrap();
+                node_children.reserve(children.len());
                 for (name, child) in children {
-                    write.children.insert(name, child);
+                    node_children.insert(name, child);
                 }
             }
         }

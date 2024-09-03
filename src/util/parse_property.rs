@@ -72,22 +72,22 @@ pub fn parse_property_node(
     match property_type {
         0 => {
             let node = WzNode::new(&name, WzObjectType::Value(WzValue::Null), parent);
-            result = (name, node.into_lock());
+            result = (name, Arc::new(node));
         }
         2 | 11 => {
             let num = reader.read_i16()?;
             let node = WzNode::new(&name, num, parent);
-            result = (name, node.into_lock());
+            result = (name, Arc::new(node));
         }
         3 | 19 => {
             let num = reader.read_wz_int()?;
             let node = WzNode::new(&name, num, parent);
-            result = (name, node.into_lock());
+            result = (name, Arc::new(node));
         }
         20 => {
             let num = reader.read_wz_int64()?;
             let node = WzNode::new(&name, num, parent);
-            result = (name, node.into_lock());
+            result = (name, Arc::new(node));
         }
         4 => {
             let float_type: u8 = reader.read_u8()?;
@@ -95,23 +95,23 @@ pub fn parse_property_node(
                 0x80 => {
                     let num = reader.read_float()?;
                     let node = WzNode::new(&name, num, parent);
-                    result = (name, node.into_lock());
+                    result = (name, Arc::new(node));
                 }
                 _ => {
                     let node = WzNode::new(&name, float_type as f32, parent);
-                    result = (name, node.into_lock());
+                    result = (name, Arc::new(node));
                 }
             }
         }
         5 => {
             let num = reader.read_double()?;
             let node = WzNode::new(&name, num, parent);
-            result = (name, node.into_lock());
+            result = (name, Arc::new(node));
         }
         8 => {
             let str_meta = reader.read_wz_string_block_meta(origin_offset)?;
             let node = WzNode::new(&name, WzString::from_meta(str_meta, org_reader), parent);
-            result = (name, node.into_lock());
+            result = (name, Arc::new(node));
         }
         9 => {
             let block_size = reader.read_u32()?;
@@ -177,10 +177,10 @@ pub fn parse_more(
                 parse_property_list(Some(&node), org_reader, reader, origin_offset)?;
 
             {
-                let mut node_write = node.write().unwrap();
-                node_write.children.reserve(childs.len());
+                let mut node_children = node.children.write().unwrap();
+                node_children.reserve(childs.len());
                 for (name, child) in childs {
-                    node_write.children.insert(name, child);
+                    node_children.insert(name, child);
                 }
             }
 
@@ -190,12 +190,11 @@ pub fn parse_more(
             reader.skip(1);
             let has_child = reader.read_u8()? == 1;
 
-            let node = WzNode::new(
+            let node = Arc::new(WzNode::new(
                 &property_name,
                 WzObjectType::Property(WzSubProperty::Property),
                 parent,
-            )
-            .into_lock();
+            ));
 
             let mut uol_nodes: Option<Vec<WzNodeArc>> = None;
 
@@ -203,10 +202,10 @@ pub fn parse_more(
                 reader.skip(2);
                 let (childs, uols) =
                     parse_property_list(Some(&node), org_reader, reader, origin_offset)?;
-                let mut node_write = node.write().unwrap();
-                node_write.children.reserve(childs.len());
+                let mut node_children = node.children.write().unwrap();
+                node_children.reserve(childs.len());
                 for (name, child) in childs {
-                    node_write.children.insert(name, child);
+                    node_children.insert(name, child);
                 }
                 uol_nodes = Some(uols);
             }
@@ -228,8 +227,11 @@ pub fn parse_more(
                 canvas_header as i32,
             );
 
-            if let Ok(mut node) = node.write() {
-                node.object_type = wz_png.into();
+            // Safety: seens the node is constructed in this function, and there is no other thread access the children
+            // also we only modify the object_type field, so it's safe to mut the object_type field
+            unsafe {
+                let mut_node = { &mut *(Arc::as_ptr(&node) as *mut WzNode) };
+                mut_node.object_type = wz_png.into();
             }
 
             Ok((property_name, node, uol_nodes))
@@ -246,8 +248,8 @@ pub fn parse_more(
             let mut uol_nodes: Vec<WzNodeArc> = Vec::new();
 
             {
-                let mut node_write = node.write().unwrap();
-                node_write.children.reserve(entry_count as usize);
+                let mut node_children = node.children.write().unwrap();
+                node_children.reserve(entry_count as usize);
                 for i in 0..entry_count {
                     let name: WzNodeName = i.to_string().into();
                     let parsed_node = parse_extended_prop(
@@ -263,7 +265,7 @@ pub fn parse_more(
                         uol_nodes.extend(uols);
                     }
 
-                    node_write.children.insert(parsed_node.0, parsed_node.1);
+                    node_children.insert(parsed_node.0, parsed_node.1);
                 }
             }
 
@@ -273,7 +275,7 @@ pub fn parse_more(
             let vec2 = Vector2D(reader.read_wz_int()?, reader.read_wz_int()?);
             let node = WzNode::new(&property_name, vec2, parent);
 
-            Ok((property_name, node.into_lock(), None))
+            Ok((property_name, Arc::new(node), None))
         }
         "Sound_DX8" => {
             reader.skip(1);
@@ -303,7 +305,7 @@ pub fn parse_more(
 
             let node = WzNode::new(&property_name, sound, parent);
 
-            Ok((property_name, node.into_lock(), None))
+            Ok((property_name, Arc::new(node), None))
         }
         "UOL" => {
             reader.skip(1);
@@ -329,7 +331,7 @@ pub fn parse_more(
                 parent,
             );
 
-            Ok((property_name, node.into_lock(), None))
+            Ok((property_name, Arc::new(node), None))
         }
         _ => Err(WzPropertyParseError::UnknownExtendedPropertyType(
             extend_property_type.to_string(),

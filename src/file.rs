@@ -5,7 +5,7 @@ use crate::{
 use memmap2::Mmap;
 use std::fs::File;
 use std::ops::Range;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, RwLock};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -47,7 +47,7 @@ pub struct WzFileMeta {
 
 /// Root of the `WzNode`, represents the Wz file itself and contains `WzFileMeta`
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default)]
 pub struct WzFile {
     #[cfg_attr(feature = "serde", serde(skip))]
     pub reader: Arc<WzReader>,
@@ -56,9 +56,9 @@ pub struct WzFile {
     #[cfg_attr(feature = "serde", serde(skip))]
     pub block_size: usize,
     #[cfg_attr(feature = "serde", serde(skip))]
-    pub is_parsed: bool,
+    pub is_parsed: Mutex<bool>,
     #[cfg_attr(feature = "serde", serde(flatten))]
-    pub wz_file_meta: WzFileMeta,
+    pub wz_file_meta: Arc<RwLock<WzFileMeta>>,
 }
 
 impl WzFile {
@@ -104,13 +104,13 @@ impl WzFile {
         Ok(WzFile {
             offset: offset as usize,
             block_size,
-            is_parsed: false,
+            is_parsed: Mutex::new(false),
             reader: Arc::new(reader),
-            wz_file_meta,
+            wz_file_meta: Arc::new(RwLock::new(wz_file_meta)),
         })
     }
     pub fn parse(
-        &mut self,
+        &self,
         parent: &WzNodeArc,
         patch_version: Option<i32>,
     ) -> Result<WzNodeArcVec, Error> {
@@ -118,7 +118,7 @@ impl WzFile {
 
         let mut wz_file_meta = WzFileMeta {
             path: "".to_string(),
-            patch_version: patch_version.unwrap_or(self.wz_file_meta.patch_version),
+            patch_version: patch_version.unwrap_or(self.wz_file_meta.read().unwrap().patch_version),
             wz_version_header: 0,
             wz_with_encrypt_version_header: true,
             hash: 0,
@@ -158,7 +158,6 @@ impl WzFile {
                 ) {
                     wz_file_meta.patch_version = ver_to_decode;
                     self.update_wz_file_meta(wz_file_meta);
-                    self.is_parsed = true;
                     return Ok(childs);
                 }
             }
@@ -177,7 +176,6 @@ impl WzFile {
             wz_file_meta.patch_version,
         )?;
         self.update_wz_file_meta(wz_file_meta);
-        self.is_parsed = true;
 
         Ok(childs)
     }
@@ -202,12 +200,10 @@ impl WzFile {
 
         let first_image_node = childs
             .iter()
-            .find(|(_, node)| matches!(node.read().unwrap().object_type, WzObjectType::Image(_)));
+            .find(|(_, node)| matches!(node.object_type, WzObjectType::Image(_)));
 
         if let Some((name, image_node)) = first_image_node {
             let offset = image_node
-                .read()
-                .unwrap()
                 .try_as_image()
                 .map(|node| node.offset)
                 .ok_or(Error::ErrorGameVerHash)?;
@@ -237,9 +233,10 @@ impl WzFile {
         Ok(childs)
     }
 
-    fn update_wz_file_meta(&mut self, wz_file_meta: WzFileMeta) {
-        self.wz_file_meta = WzFileMeta {
-            path: std::mem::take(&mut self.wz_file_meta.path),
+    fn update_wz_file_meta(&self, wz_file_meta: WzFileMeta) {
+        let mut old_meta = self.wz_file_meta.write().unwrap();
+        *old_meta = WzFileMeta {
+            path: std::mem::take(&mut old_meta.path),
             ..wz_file_meta
         };
     }

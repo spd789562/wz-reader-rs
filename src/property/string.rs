@@ -129,9 +129,7 @@ impl WzString {
 
 /// A helper function to resolve string from `WzNodeArc`.
 pub fn resolve_string_from_node(node: &WzNodeArc) -> Result<String, WzStringParseError> {
-    node.read()
-        .unwrap()
-        .try_as_string()
+    node.try_as_string()
         .ok_or(WzStringParseError::NotStringProperty)
         .and_then(|string| string.get_string())
 }

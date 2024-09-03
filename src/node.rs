@@ -3,6 +3,7 @@ use crate::{
     WzImage, WzNodeCast, WzNodeName, WzObjectType,
 };
 use hashbrown::HashMap;
+
 use std::path::Path;
 use std::sync::{Arc, RwLock, Weak};
 
@@ -35,19 +36,13 @@ pub struct WzNode {
     #[cfg_attr(feature = "serde", serde(flatten))]
     pub object_type: WzObjectType,
     #[cfg_attr(feature = "serde", serde(skip))]
-    pub parent: Weak<RwLock<WzNode>>,
+    pub parent: Weak<WzNode>,
     #[cfg_attr(feature = "serde", serde(with = "arc_node_serde"))]
-    pub children: HashMap<WzNodeName, Arc<RwLock<WzNode>>>,
+    pub children: RwLock<HashMap<WzNodeName, Arc<WzNode>>>,
 }
 
-pub type WzNodeArc = Arc<RwLock<WzNode>>;
+pub type WzNodeArc = Arc<WzNode>;
 pub type WzNodeArcVec = Vec<(WzNodeName, WzNodeArc)>;
-
-impl From<WzNode> for WzNodeArc {
-    fn from(node: WzNode) -> Self {
-        node.into_lock()
-    }
-}
 
 impl WzNode {
     pub fn new(
@@ -59,7 +54,7 @@ impl WzNode {
             name: name.clone(),
             object_type: object_type.into(),
             parent: parent.map(Arc::downgrade).unwrap_or_default(),
-            children: HashMap::new(),
+            children: RwLock::new(HashMap::new()),
         }
     }
 
@@ -68,7 +63,7 @@ impl WzNode {
             name: WzNodeName::default(),
             object_type: WzObjectType::Value(property::WzValue::Null),
             parent: Weak::new(),
-            children: HashMap::new(),
+            children: RwLock::new(HashMap::new()),
         }
     }
 
@@ -149,43 +144,51 @@ impl WzNode {
 
     /// A quicker way to turn `WzNode` to `WzNodeArc`.
     pub fn into_lock(self) -> WzNodeArc {
-        Arc::new(RwLock::new(self))
+        self.into()
     }
 
     /// Parse the node base on the object type.
-    pub fn parse(&mut self, parent: &WzNodeArc) -> Result<(), Error> {
+    pub fn parse(&self, parent: &WzNodeArc) -> Result<(), Error> {
+        // we need to make sure when parse been call concurrently, we only parse once and all caller will wait for the first one to finish.
         let (childs, uol_nodes): (WzNodeArcVec, Vec<WzNodeArc>) = match self.object_type {
-            WzObjectType::Directory(ref mut directory) => {
-                if directory.is_parsed {
+            WzObjectType::Directory(ref directory) => {
+                let mut is_dir_parsed = directory.is_parsed.lock().unwrap();
+                if *is_dir_parsed {
                     return Ok(());
                 }
                 let childs = directory.resolve_children(parent)?;
-                directory.is_parsed = true;
+                *is_dir_parsed = true;
                 (childs, vec![])
             }
-            WzObjectType::File(ref mut file) => {
-                if file.is_parsed {
+            WzObjectType::File(ref file) => {
+                let mut is_file_parsed = file.is_parsed.lock().unwrap();
+                if *is_file_parsed {
                     return Ok(());
                 }
                 let childs = file.parse(parent, None)?;
-                file.is_parsed = true;
+                *is_file_parsed = true;
                 (childs, vec![])
             }
-            WzObjectType::Image(ref mut image) => {
-                if image.is_parsed {
+            WzObjectType::Image(ref image) => {
+                let mut is_image_parsed = image.is_parsed.lock().unwrap();
+                if *is_image_parsed {
                     return Ok(());
                 }
                 let result = image.resolve_children(Some(parent))?;
-                image.is_parsed = true;
+                *is_image_parsed = true;
                 result
             }
             _ => return Ok(()),
         };
 
-        self.children.reserve(childs.len());
+        {
+            let mut children = self.children.write().unwrap();
 
-        for (name, child) in childs {
-            self.children.insert(name, child);
+            children.reserve(childs.len());
+
+            for (name, child) in childs {
+                children.insert(name, child);
+            }
         }
 
         for node in uol_nodes {
@@ -196,28 +199,31 @@ impl WzNode {
     }
 
     /// Clear the node childrens and set the node to unparsed.
-    pub fn unparse(&mut self) {
-        match &mut self.object_type {
-            WzObjectType::Directory(directory) => {
-                directory.is_parsed = false;
-            }
-            WzObjectType::File(file) => {
-                file.is_parsed = false;
-            }
-            WzObjectType::Image(image) => {
-                image.is_parsed = false;
-            }
-            _ => return,
-        }
+    pub fn unparse(&self) {
+        // TODO: fix thouse need to take immmutable self
+        // match &mut self.object_type {
+        //     WzObjectType::Directory(directory) => {
+        //         directory.is_parsed = false;
+        //     }
+        //     WzObjectType::File(file) => {
+        //         file.is_parsed = false;
+        //     }
+        //     WzObjectType::Image(image) => {
+        //         image.is_parsed = false;
+        //     }
+        //     _ => return,
+        // }
 
-        self.children.clear();
+        self.children.write().unwrap().clear();
     }
 
     /// Add a child to the node. It just shorten the `node.write().unwrap().children.insert(name, child)`.
     /// If you have a lot node need to add, consider mauanlly `let mut = node.write().unwrap()`.
-    pub fn add(&mut self, node: &WzNodeArc) {
+    pub fn add(&self, node: &WzNodeArc) {
         self.children
-            .insert(node.read().unwrap().name.clone(), Arc::clone(node));
+            .write()
+            .unwrap()
+            .insert(node.name.clone(), Arc::clone(node));
     }
 
     /// Returns the full path of the WzNode.
@@ -237,9 +243,8 @@ impl WzNode {
         let mut path = self.name.to_string();
         let mut parent = self.parent.upgrade();
         while let Some(parent_inner) = parent {
-            let read = parent_inner.read().unwrap();
-            path = format!("{}/{}", &read.name, path);
-            parent = read.parent.upgrade();
+            path = format!("{}/{}", &parent_inner.name, path);
+            parent = parent_inner.parent.upgrade();
         }
         path
     }
@@ -268,10 +273,9 @@ impl WzNode {
         let mut path = self.name.to_string();
 
         while let Some(parent_inner) = parent {
-            let read = parent_inner.read().unwrap();
-            parent = read.parent.upgrade();
+            parent = parent_inner.parent.upgrade();
             if parent.is_some() {
-                path = format!("{}/{}", &read.name, path);
+                path = format!("{}/{}", &parent_inner.name, path);
             }
         }
         path
@@ -301,18 +305,16 @@ impl WzNode {
         let mut path = self.name.to_string();
 
         while let Some(parent_inner) = parent {
-            let read = parent_inner.read().unwrap();
-
-            if read.try_as_image().is_some() {
+            if parent_inner.try_as_image().is_some() {
                 return path;
             }
 
-            parent = read.parent.upgrade();
+            parent = parent_inner.parent.upgrade();
 
             if parent.is_none() {
                 return String::new();
             } else {
-                path = format!("{}/{}", &read.name, path);
+                path = format!("{}/{}", &parent_inner.name, path);
             }
         }
 
@@ -338,7 +340,7 @@ impl WzNode {
     /// assert!(root.at("3").is_none());
     /// ```
     pub fn at(&self, name: &str) -> Option<WzNodeArc> {
-        self.children.get(name).cloned()
+        self.children.read().unwrap().get(name).cloned()
     }
 
     /// A relative path version of `at` able to use `..` to get parent node.
@@ -357,7 +359,7 @@ impl WzNode {
     /// root.add(&child1);
     /// root.add(&child2);
     ///
-    /// assert!(child1.read().unwrap().at_relative("..").is_some());
+    /// assert!(child1.at_relative("..").is_some());
     /// assert!(root.at_relative("..").is_none());
     /// ```
     pub fn at_relative(&self, path: &str) -> Option<WzNodeArc> {
@@ -381,14 +383,14 @@ impl WzNode {
     /// root.write().unwrap().add(&child1);
     /// child1.write().unwrap().add(&child2);
     ///
-    /// assert!(root.read().unwrap().at_path("1/2").is_some());
-    /// assert!(root.read().unwrap().at_path("1/3").is_none());
+    /// assert!(root.at_path("1/2").is_some());
+    /// assert!(root.at_path("1/3").is_none());
     /// ```
     pub fn at_path(&self, path: &str) -> Option<WzNodeArc> {
         let mut pathes = path.split('/');
         let first = self.at(pathes.next().unwrap());
         if let Some(first) = first {
-            pathes.try_fold(first, |node, name| node.read().unwrap().at(name))
+            pathes.try_fold(first, |node, name| node.at(name))
         } else {
             None
         }
@@ -400,9 +402,8 @@ impl WzNode {
         let first = self.at(pathes.next().unwrap());
         if let Some(first) = first {
             pathes.try_fold(first, |node, name| {
-                let mut write = node.write().unwrap();
-                write.parse(&node)?;
-                write.at(name).ok_or(Error::NodeNotFound)
+                node.parse(&node)?;
+                node.at(name).ok_or(Error::NodeNotFound)
             })
         } else {
             Err(Error::NodeNotFound)
@@ -422,14 +423,14 @@ impl WzNode {
     /// root.write().unwrap().add(&child1);
     /// child1.write().unwrap().add(&child2);
     ///
-    /// assert!(child2.read().unwrap().at_path_relative("../..").is_some());
-    /// assert!(child2.read().unwrap().at_path_relative("../3").is_none());
+    /// assert!(child2.at_path_relative("../..").is_some());
+    /// assert!(child2.at_path_relative("../3").is_none());
     /// ```
     pub fn at_path_relative(&self, path: &str) -> Option<WzNodeArc> {
         let mut pathes = path.split('/');
         let first = self.at_relative(pathes.next().unwrap());
         if let Some(first) = first {
-            pathes.try_fold(first, |node, name| node.read().unwrap().at_relative(name))
+            pathes.try_fold(first, |node, name| node.at_relative(name))
         } else {
             None
         }
@@ -459,11 +460,10 @@ impl WzNode {
         let mut parent = self.parent.upgrade();
         loop {
             if let Some(parent_inner) = parent {
-                let read = parent_inner.read().unwrap();
-                if cb(&read) {
+                if cb(&parent_inner) {
                     break Some(Arc::clone(&parent_inner));
                 } else {
-                    parent = read.parent.upgrade();
+                    parent = parent_inner.parent.upgrade();
                 }
             } else {
                 break None;
@@ -481,20 +481,6 @@ impl WzNode {
         })
     }
 
-    /// Transfer all children to another node. It will merge the children instead of replace to new one.
-    pub fn transfer_childs(&mut self, to: &WzNodeArc) {
-        let mut write = to.write().unwrap();
-        write.children.reserve(self.children.len());
-        for (name, child) in self.children.drain() {
-            if let Some(old) = write.children.get(&name) {
-                child.write().unwrap().transfer_childs(old);
-            } else {
-                child.write().unwrap().parent = Arc::downgrade(to);
-                write.children.insert(name, child);
-            }
-        }
-    }
-
     /// Generate full json that can deserialize back to `WzNode`.
     #[cfg(feature = "json")]
     pub fn to_json(&self) -> Result<serde_json::Value, serde_json::Error> {
@@ -507,7 +493,7 @@ impl WzNode {
         use crate::property::WzSubProperty;
         use serde_json::{to_value, Map, Value};
 
-        if self.children.is_empty() {
+        if self.children.read().unwrap().is_empty() {
             match &self.object_type {
                 WzObjectType::Value(value_type) => return Ok(value_type.clone().into()),
                 WzObjectType::Property(WzSubProperty::PNG(inner)) => return to_value(inner),
@@ -540,9 +526,8 @@ impl WzNode {
             _ => {}
         }
 
-        for (name, value) in self.children.iter() {
-            let child = value.read().unwrap();
-            json.insert(name.to_string(), child.to_simple_json()?);
+        for (name, value) in self.children.read().unwrap().iter() {
+            json.insert(name.to_string(), value.to_simple_json()?);
         }
 
         Ok(Value::Object(json))
@@ -551,7 +536,7 @@ impl WzNode {
 
 #[cfg(feature = "serde")]
 mod arc_node_serde {
-    use crate::WzNodeName;
+    use crate::{WzNode, WzNodeName};
     use hashbrown::HashMap;
     use serde::de::Deserializer;
     use serde::ser::{SerializeMap, Serializer};
@@ -559,30 +544,30 @@ mod arc_node_serde {
     use std::sync::{Arc, RwLock};
 
     pub fn serialize<S, T>(
-        val: &HashMap<WzNodeName, Arc<RwLock<T>>>,
+        val: &RwLock<HashMap<WzNodeName, Arc<T>>>,
         s: S,
     ) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
         T: Serialize,
     {
+        let val = val.read().unwrap();
         let mut map = s.serialize_map(Some(val.len()))?;
-        for (k, v) in val {
-            map.serialize_entry(k, &*v.read().unwrap())?;
+        for (k, v) in val.iter() {
+            map.serialize_entry(k, v)?;
         }
         map.end()
     }
 
-    pub fn deserialize<'de, D, T>(d: D) -> Result<HashMap<WzNodeName, Arc<RwLock<T>>>, D::Error>
+    pub fn deserialize<'de, D, T>(d: D) -> Result<RwLock<HashMap<WzNodeName, Arc<T>>>, D::Error>
     where
         D: Deserializer<'de>,
         T: Deserialize<'de>,
     {
         let map = HashMap::<WzNodeName, T>::deserialize(d)?;
-        Ok(map
-            .into_iter()
-            .map(|(k, v)| (k, Arc::new(RwLock::new(v))))
-            .collect())
+        Ok(RwLock::new(
+            map.into_iter().map(|(k, v)| (k, Arc::new(v))).collect(),
+        ))
     }
 }
 

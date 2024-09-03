@@ -5,21 +5,19 @@ use crate::{WzNodeArc, WzObjectType};
 /// and only unparse `WzImage` after `f` is called to release memory.
 pub fn walk_node(node: &WzNodeArc, force_parse: bool, f: &dyn Fn(&WzNodeArc)) {
     if force_parse {
-        node.write().unwrap().parse(node).unwrap();
+        node.parse(node).unwrap();
     }
 
     f(node);
 
-    for child in node.read().unwrap().children.values() {
+    for child in node.children.read().unwrap().values() {
         walk_node(child, force_parse, f);
     }
 
-    let is_wz_image = matches!(node.read().unwrap().object_type, WzObjectType::Image(_));
+    let is_wz_image = matches!(node.object_type, WzObjectType::Image(_));
 
     if force_parse && is_wz_image {
-        if let Ok(mut node) = node.write() {
-            node.unparse();
-        }
+        node.unparse();
     }
 }
 
@@ -63,8 +61,7 @@ mod test {
         ]);
 
         walk_node(&root, false, &|node| {
-            let node_read = node.read().unwrap();
-            assert!(pathes.contains(node_read.get_full_path().as_str()));
+            assert!(pathes.contains(node.get_full_path().as_str()));
         });
     }
 }

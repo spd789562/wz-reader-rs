@@ -32,16 +32,14 @@ pub fn resolve_root_wz_file_dir_full(
     let wz_dir = dir.as_ref().parent().unwrap();
 
     {
-        let mut root_node_write = root_node.write().unwrap();
-
-        root_node_write.parse(&root_node).unwrap();
+        root_node.parse(&root_node).unwrap();
 
         for entry in wz_dir.read_dir()? {
             let entry = entry?;
             let file_type = entry.file_type()?;
             let name = entry.file_name();
 
-            if file_type.is_dir() && root_node_write.at(name.to_str().unwrap()).is_some() {
+            if file_type.is_dir() && root_node.at(name.to_str().unwrap()).is_some() {
                 if let Some(file_path) = get_root_wz_file_path(&entry) {
                     let dir_node = resolve_root_wz_file_dir_full(
                         &file_path,
@@ -52,8 +50,10 @@ pub fn resolve_root_wz_file_dir_full(
                     )?;
 
                     /* replace the original one */
-                    root_node_write
+                    root_node
                         .children
+                        .write()
+                        .unwrap()
                         .insert(name.to_str().unwrap().into(), dir_node);
                 }
             } else if file_type.is_file() {
@@ -81,12 +81,13 @@ pub fn resolve_root_wz_file_dir_full(
                 .unwrap()
                 .into_lock();
 
-                let mut node_write = node.write().unwrap();
+                let mut root_node_children = root_node.children.write().unwrap();
 
-                if node_write.parse(&root_node).is_ok() {
-                    root_node_write.children.reserve(node_write.children.len());
-                    for (name, child) in node_write.children.drain() {
-                        root_node_write.children.insert(name, child);
+                if node.parse(&root_node).is_ok() {
+                    let mut node_children = node.children.write().unwrap();
+                    root_node_children.reserve(node_children.len());
+                    for (name, child) in node_children.drain() {
+                        root_node_children.insert(name, child);
                     }
                 }
             }
@@ -116,16 +117,16 @@ pub fn resolve_base(
     let base_node = resolve_root_wz_file_dir_full(&path, version, None, None, None)?;
 
     let (patch_version, keys) = {
-        let node_read = base_node.read().unwrap();
-        let file = node_read.try_as_file().unwrap();
+        let file = base_node.try_as_file().unwrap();
 
         // reusing the keys from Base.wz
-        (file.wz_file_meta.patch_version, file.reader.keys.clone())
+        (
+            file.wz_file_meta.read().unwrap().patch_version,
+            file.reader.keys.clone(),
+        )
     };
 
     {
-        let mut base_write = base_node.write().unwrap();
-
         let first_parent = path.as_ref().parent().unwrap();
 
         // if a Base.wz in under Base folder, then should up to parent to find Map, Item and other stuff
@@ -144,7 +145,7 @@ pub fn resolve_base(
             let is_valid = path.extension().unwrap_or_default() == "wz" || path.is_dir();
 
             // we only allow the thing is listed in Base.wz
-            let has_dir = base_write.at(file_name.to_str().unwrap()).is_some();
+            let has_dir = base_node.at(file_name.to_str().unwrap()).is_some();
 
             if has_dir && is_valid {
                 let wz_path = if dir.file_type()?.is_dir() {
@@ -164,8 +165,10 @@ pub fn resolve_base(
                     )?;
 
                     /* replace the original one */
-                    base_write
+                    base_node
                         .children
+                        .write()
+                        .unwrap()
                         .insert(file_name.to_str().unwrap().into(), dir_node);
                 }
             }

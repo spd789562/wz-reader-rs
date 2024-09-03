@@ -1,7 +1,7 @@
 use crate::property::WzLua;
 use crate::version::{guess_iv_from_wz_img, verify_iv_from_wz_img};
 use crate::{reader, util, WzNode, WzNodeArc, WzNodeArcVec, WzNodeName, WzReader};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -33,7 +33,7 @@ pub const WZ_IMAGE_HEADER_BYTE_WITH_OFFSET: u8 = 0x1B;
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[cfg_attr(feature = "serde", serde(default))]
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default)]
 pub struct WzImage {
     #[cfg_attr(feature = "serde", serde(skip))]
     pub reader: Arc<WzReader>,
@@ -44,7 +44,7 @@ pub struct WzImage {
     #[cfg_attr(feature = "serde", serde(skip))]
     pub block_size: usize,
     #[cfg_attr(feature = "serde", serde(skip))]
-    pub is_parsed: bool,
+    pub is_parsed: Mutex<bool>,
 }
 
 impl WzImage {
@@ -59,7 +59,7 @@ impl WzImage {
             name: name.clone(),
             offset,
             block_size,
-            is_parsed: false,
+            is_parsed: Mutex::new(false),
         }
     }
     pub fn from_file<P>(path: P, wz_iv: Option<[u8; 4]>) -> Result<Self, Error>
@@ -93,7 +93,7 @@ impl WzImage {
             name: name.into(),
             offset: 0,
             block_size,
-            is_parsed: false,
+            is_parsed: Mutex::new(false),
         })
     }
 
@@ -147,7 +147,7 @@ impl WzImage {
 
                     let lua_node = WzNode::new(&name, wz_lua, parent);
 
-                    return Ok((vec![(name, lua_node.into_lock())], vec![]));
+                    return Ok((vec![(name, Arc::new(lua_node))], vec![]));
                 }
                 return Err(Error::LuaParseError);
             }
