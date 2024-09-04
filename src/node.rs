@@ -182,15 +182,7 @@ impl WzNode {
             _ => return Ok(()),
         };
 
-        {
-            let mut children = self.children.write().unwrap();
-
-            children.reserve(childs.len());
-
-            for (name, child) in childs {
-                children.insert(name, child);
-            }
-        }
+        self.children.write().unwrap().extend(childs);
 
         for node in uol_nodes {
             node_util::resolve_uol(&node, None);
@@ -409,26 +401,18 @@ impl WzNode {
     /// ```
     pub fn at_path(&self, path: &str) -> Option<WzNodeArc> {
         let mut pathes = path.split('/');
-        let first = self.at(pathes.next().unwrap());
-        if let Some(first) = first {
-            pathes.try_fold(first, |node, name| node.at(name))
-        } else {
-            None
-        }
+        let first = self.at(pathes.next().unwrap())?;
+        pathes.try_fold(first, |node, name| node.at(name))
     }
     /// Get node by path like `a/b/c` and parse all nodes in the path.
     pub fn at_path_parsed(&self, path: &str) -> Result<WzNodeArc, Error> {
         let mut pathes = path.split('/');
 
-        let first = self.at(pathes.next().unwrap());
-        if let Some(first) = first {
-            pathes.try_fold(first, |node, name| {
-                node.parse(&node)?;
-                node.at(name).ok_or(Error::NodeNotFound)
-            })
-        } else {
-            Err(Error::NodeNotFound)
-        }
+        let first = self.at(pathes.next().unwrap()).ok_or(Error::NodeNotFound)?;
+        pathes.try_fold(first, |node, name| {
+            node.parse(&node)?;
+            node.at(name).ok_or(Error::NodeNotFound)
+        })
     }
     /// Get node by path that include relative path like `../../b/c`.
     ///
@@ -449,12 +433,8 @@ impl WzNode {
     /// ```
     pub fn at_path_relative(&self, path: &str) -> Option<WzNodeArc> {
         let mut pathes = path.split('/');
-        let first = self.at_relative(pathes.next().unwrap());
-        if let Some(first) = first {
-            pathes.try_fold(first, |node, name| node.at_relative(name))
-        } else {
-            None
-        }
+        let first = self.at_relative(pathes.next()?)?;
+        pathes.try_fold(first, |node, name| node.at_relative(name))
     }
 
     /// Get parent node by filter.
@@ -557,7 +537,7 @@ impl WzNode {
 
 #[cfg(feature = "serde")]
 mod arc_node_serde {
-    use crate::{WzNode, WzNodeName};
+    use crate::WzNodeName;
     use hashbrown::HashMap;
     use serde::de::Deserializer;
     use serde::ser::{SerializeMap, Serializer};

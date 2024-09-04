@@ -24,12 +24,14 @@ pub fn resolve_outlink(path: &str, node: &WzNodeArc, force_parse: bool) -> Optio
 
 /// Make sure WzNode tree's all node has correct parent.
 ///
-/// Safety: If any child is trying to get parent during this process, it might be a undefined behavior.
+/// # Safety
+///
+/// If any child is trying to get parent during this process, it might be a undefined behavior. Cause this function will change parent of all child.
 pub unsafe fn resolve_childs_parent(node: &WzNodeArc) {
     for child in node.children.write().unwrap().values_mut() {
-        // Safety:
+        // Safety: we only modify the parent here, so the WzNode will still valid.
         unsafe {
-            let child_inner = { &mut *(Arc::as_ptr(&child) as *mut WzNode) };
+            let child_inner = { &mut *(Arc::as_ptr(child) as *mut WzNode) };
             child_inner.parent = Arc::downgrade(node);
         }
         resolve_childs_parent(child);
@@ -74,7 +76,7 @@ pub fn resolve_uol(node: &WzNodeArc, wz_childs: Option<&mut WzNodeChilds>) -> Op
         let _ = std::mem::replace(origin, target_node);
     }
 
-    return Some(());
+    Some(())
 }
 
 /// Get image node in the way, and return the rest of path.
@@ -99,16 +101,12 @@ pub fn get_image_node_from_path<'a>(
     let mut node = node.clone();
     let mut slash_index = 0;
     for split_path in path.split('/') {
-        let target = node.at(split_path);
-        if let Some(target) = target {
-            node = target;
-            slash_index += split_path.len() + 1;
-            if node.try_as_image().is_some() {
-                let rest = path.split_at(slash_index).1;
-                return Some((node, rest));
-            }
-        } else {
-            return None;
+        let target = node.at(split_path)?;
+        node = target;
+        slash_index += split_path.len() + 1;
+        if node.try_as_image().is_some() {
+            let rest = path.split_at(slash_index).1;
+            return Some((node, rest));
         }
     }
     None
