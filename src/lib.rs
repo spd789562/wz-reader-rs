@@ -14,7 +14,7 @@ pub mod wz_image;
 pub use directory::WzDirectory;
 pub use file::WzFile;
 pub use header::*;
-pub use node::{WzNode, WzNodeArc, WzNodeArcVec};
+pub use node::{WzNode, WzNodeArc, WzNodeArcVec, WzNodeChilds};
 pub use node_cast::*;
 pub use node_name::*;
 pub use object::*;

@@ -1,4 +1,4 @@
-use crate::{node::Error, WzNode, WzNodeArc, WzNodeCast};
+use crate::{node::Error, WzNode, WzNodeArc, WzNodeCast, WzNodeChilds};
 use std::sync::Arc;
 
 /// Just wrap around of `node.write().unwrap().parse(&node)`
@@ -52,28 +52,29 @@ pub fn get_resolved_uol_path(path: &str, uol_path: &str) -> String {
 }
 
 /// Make a uol node become valid node, second argument is optional,
-/// it prevent the parent is the WzImage while it currently parsing causing the deadlock.
-pub fn resolve_uol(node: &WzNodeArc, wz_image: Option<&WzNode>) {
+/// when you want do this during operate parent's children, you can pass parent's children prevent dead lock.
+pub fn resolve_uol(node: &WzNodeArc, wz_childs: Option<&mut WzNodeChilds>) -> Option<()> {
     let node_parent = node.parent.upgrade().unwrap();
 
-    if let Some(ref mut uol_target_path) = node.try_as_uol().and_then(|s| s.get_string().ok()) {
-        let mut pathes = uol_target_path.split('/');
+    let uol_target_path = node.try_as_uol()?.get_string().ok()?;
 
-        let first = node.at_relative("..");
+    let mut pathes = uol_target_path.split('/');
 
-        let uol_target = if let Some(first) = first {
-            pathes.try_fold(first, |node, name| node.at_relative(name))
-        } else {
-            None
-        };
+    let first = node.at_relative("..")?;
 
-        if let Some(target_node) = uol_target {
-            let node_name = node.name.clone();
-            if let Some(origin) = node_parent.children.write().unwrap().get_mut(&node_name) {
-                let _ = std::mem::replace(origin, target_node);
-            }
-        }
+    let target_node = pathes.try_fold(first, |node, name| node.at_relative(name))?;
+
+    let node_name = node.name.clone();
+
+    if let Ok(mut childs) = node_parent.children.try_write() {
+        let origin = childs.get_mut(&node_name)?;
+        let _ = std::mem::replace(origin, target_node);
+    } else if let Some(childs) = wz_childs {
+        let origin = childs.get_mut(&node_name)?;
+        let _ = std::mem::replace(origin, target_node);
     }
+
+    return Some(());
 }
 
 /// Get image node in the way, and return the rest of path.

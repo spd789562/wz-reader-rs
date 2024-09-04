@@ -43,6 +43,7 @@ pub struct WzNode {
 
 pub type WzNodeArc = Arc<WzNode>;
 pub type WzNodeArcVec = Vec<(WzNodeName, WzNodeArc)>;
+pub type WzNodeChilds = HashMap<WzNodeName, WzNodeArc>;
 
 impl WzNode {
     pub fn new(
@@ -192,7 +193,7 @@ impl WzNode {
         }
 
         for node in uol_nodes {
-            node_util::resolve_uol(&node, Some(self));
+            node_util::resolve_uol(&node, None);
         }
 
         Ok(())
@@ -690,7 +691,10 @@ mod test {
         // should not be able to resolve parent
         assert!(node111.parent.upgrade().is_none());
 
-        node_util::resolve_childs_parent(&root);
+        // Safety: the root is create from json, and is certainly not used by other function and thread.
+        unsafe {
+            node_util::resolve_childs_parent(&root);
+        }
 
         // should able to get parent after resolved
         let node111_parent = node111.parent.upgrade();
