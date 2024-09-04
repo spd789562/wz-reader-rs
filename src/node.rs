@@ -226,6 +226,29 @@ impl WzNode {
             .insert(node.name.clone(), Arc::clone(node));
     }
 
+    /// Add iterable nodes to the node.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use wz_reader::{WzObjectType, WzNode};
+    /// # use wz_reader::property::WzValue;
+    /// let root = WzNode::from_str("root", 1, None).into_arc();
+    /// let child1 = WzNode::from_str("1", 1, Some(&root)).into_arc();
+    /// let child2 = WzNode::from_str("2", 1, Some(&root)).into_arc();
+    /// let child3 = WzNode::from_str("3", 1, Some(&root)).into_arc();
+    ///
+    /// root.add_many([child1, child2, child3]);
+    ///
+    /// assert_eq!(root.children.read().unwrap().len(), 3);
+    /// ```
+    pub fn add_many<T: IntoIterator<Item = WzNodeArc>>(&self, node_iter: T) {
+        self.children
+            .write()
+            .unwrap()
+            .extend(node_iter.into_iter().map(|node| (node.name.clone(), node)));
+    }
+
     /// Returns the full path of the WzNode.
     ///
     /// # Examples
