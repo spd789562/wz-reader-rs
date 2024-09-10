@@ -28,22 +28,41 @@ struct Snow2Context {
 }
 impl Snow2Context {
     pub fn with_key_and_iv(mut self, key: [u8; 16], iv: Option<[u8; 4]>) -> Self {
-        self.s15 = ((key[0] as u32) << 24)
-            | ((key[1] as u32) << 16)
-            | ((key[2] as u32) << 8)
-            | (key[3] as u32);
-        self.s14 = ((key[4] as u32) << 24)
-            | ((key[5] as u32) << 16)
-            | ((key[6] as u32) << 8)
-            | (key[7] as u32);
-        self.s13 = ((key[8] as u32) << 24)
-            | ((key[9] as u32) << 16)
-            | ((key[10] as u32) << 8)
-            | (key[11] as u32);
-        self.s12 = ((key[12] as u32) << 24)
-            | ((key[13] as u32) << 16)
-            | ((key[14] as u32) << 8)
-            | (key[15] as u32);
+        let signed_key = [
+            key[0] as i8,
+            key[1] as i8,
+            key[2] as i8,
+            key[3] as i8,
+            key[4] as i8,
+            key[5] as i8,
+            key[6] as i8,
+            key[7] as i8,
+            key[8] as i8,
+            key[9] as i8,
+            key[10] as i8,
+            key[11] as i8,
+            key[12] as i8,
+            key[13] as i8,
+            key[14] as i8,
+            key[15] as i8,
+        ];
+
+        self.s15 = ((signed_key[0] as u32) << 24)
+            | ((signed_key[1] as u32) << 16)
+            | ((signed_key[2] as u32) << 8)
+            | (signed_key[3] as u32);
+        self.s14 = ((signed_key[4] as u32) << 24)
+            | ((signed_key[5] as u32) << 16)
+            | ((signed_key[6] as u32) << 8)
+            | (signed_key[7] as u32);
+        self.s13 = ((signed_key[8] as u32) << 24)
+            | ((signed_key[9] as u32) << 16)
+            | ((signed_key[10] as u32) << 8)
+            | (signed_key[11] as u32);
+        self.s12 = ((signed_key[12] as u32) << 24)
+            | ((signed_key[13] as u32) << 16)
+            | ((signed_key[14] as u32) << 8)
+            | (signed_key[15] as u32);
         self.s11 = !self.s15; // bitwise inverse
         self.s10 = !self.s14;
         self.s9 = !self.s13;
@@ -69,39 +88,74 @@ impl Snow2Context {
 
         self
     }
+    #[allow(dead_code)]
     pub fn with_key_32_and_iv(mut self, key: [u8; 32], iv: Option<[u8; 4]>) -> Self {
-        self.s15 = ((key[0] as u32) << 24)
-            | ((key[1] as u32) << 16)
-            | ((key[2] as u32) << 8)
-            | (key[3] as u32);
-        self.s14 = ((key[4] as u32) << 24)
-            | ((key[5] as u32) << 16)
-            | ((key[6] as u32) << 8)
-            | (key[7] as u32);
-        self.s13 = ((key[8] as u32) << 24)
-            | ((key[9] as u32) << 16)
-            | ((key[10] as u32) << 8)
-            | (key[11] as u32);
-        self.s12 = ((key[12] as u32) << 24)
-            | ((key[13] as u32) << 16)
-            | ((key[14] as u32) << 8)
-            | (key[15] as u32);
-        self.s11 = ((key[16] as u32) << 24)
-            | ((key[17] as u32) << 16)
-            | ((key[18] as u32) << 8)
-            | (key[19] as u32);
-        self.s10 = ((key[20] as u32) << 24)
-            | ((key[21] as u32) << 16)
-            | ((key[22] as u32) << 8)
-            | (key[23] as u32);
-        self.s9 = ((key[24] as u32) << 24)
-            | ((key[25] as u32) << 16)
-            | ((key[26] as u32) << 8)
-            | (key[27] as u32);
-        self.s8 = ((key[28] as u32) << 24)
-            | ((key[29] as u32) << 16)
-            | ((key[30] as u32) << 8)
-            | (key[31] as u32);
+        let signed_key = [
+            key[0] as i8,
+            key[1] as i8,
+            key[2] as i8,
+            key[3] as i8,
+            key[4] as i8,
+            key[5] as i8,
+            key[6] as i8,
+            key[7] as i8,
+            key[8] as i8,
+            key[9] as i8,
+            key[10] as i8,
+            key[11] as i8,
+            key[12] as i8,
+            key[13] as i8,
+            key[14] as i8,
+            key[15] as i8,
+            key[16] as i8,
+            key[17] as i8,
+            key[18] as i8,
+            key[19] as i8,
+            key[20] as i8,
+            key[21] as i8,
+            key[22] as i8,
+            key[23] as i8,
+            key[24] as i8,
+            key[25] as i8,
+            key[26] as i8,
+            key[27] as i8,
+            key[28] as i8,
+            key[29] as i8,
+            key[30] as i8,
+            key[31] as i8,
+        ];
+        self.s15 = ((signed_key[0] as u32) << 24)
+            | ((signed_key[1] as u32) << 16)
+            | ((signed_key[2] as u32) << 8)
+            | (signed_key[3] as u32);
+        self.s14 = ((signed_key[4] as u32) << 24)
+            | ((signed_key[5] as u32) << 16)
+            | ((signed_key[6] as u32) << 8)
+            | (signed_key[7] as u32);
+        self.s13 = ((signed_key[8] as u32) << 24)
+            | ((signed_key[9] as u32) << 16)
+            | ((signed_key[10] as u32) << 8)
+            | (signed_key[11] as u32);
+        self.s12 = ((signed_key[12] as u32) << 24)
+            | ((signed_key[13] as u32) << 16)
+            | ((signed_key[14] as u32) << 8)
+            | (signed_key[15] as u32);
+        self.s11 = ((signed_key[16] as u32) << 24)
+            | ((signed_key[17] as u32) << 16)
+            | ((signed_key[18] as u32) << 8)
+            | (signed_key[19] as u32);
+        self.s10 = ((signed_key[20] as u32) << 24)
+            | ((signed_key[21] as u32) << 16)
+            | ((signed_key[22] as u32) << 8)
+            | (signed_key[23] as u32);
+        self.s9 = ((signed_key[24] as u32) << 24)
+            | ((signed_key[25] as u32) << 16)
+            | ((signed_key[26] as u32) << 8)
+            | (signed_key[27] as u32);
+        self.s8 = ((signed_key[28] as u32) << 24)
+            | ((signed_key[29] as u32) << 16)
+            | ((signed_key[30] as u32) << 8)
+            | (signed_key[31] as u32);
         self.s7 = !self.s15; // bitwise inverse
         self.s6 = !self.s14;
         self.s5 = !self.s13;
@@ -436,11 +490,16 @@ impl Snow2Decryptor {
         }
     }
     #[inline]
-    pub fn decrypt_block(&mut self, data: &u32) -> [u8; 4] {
+    pub fn decrypt_block(&mut self, data: &u32) -> u32 {
         let key = self.context.keys[self.index];
-        let bytes = u32::to_le_bytes(data.wrapping_sub(key));
+        let num = data.wrapping_sub(key);
         self.index += 1;
-        bytes
+
+        if self.index >= 16 {
+            self.context.generate_keys();
+            self.index = 0;
+        }
+        num
     }
     /* logic from https://github.com/Kagamia/WzComparerR2/pull/271/files#diff-e84c5dd639ef929d7688b9d1f0005c771d0b4a65313f623404b896f53d35dad6 */
     /// seen it decrypt 4 bytes at a time, the slice is suggestd to be a multiple of 4
@@ -451,19 +510,14 @@ impl Snow2Decryptor {
         for chunk in &mut data_iter {
             let origin = chunk.pread_with::<u32>(0, LE).unwrap_or(0);
 
-            chunk.copy_from_slice(&self.decrypt_block(&origin));
-
-            if self.index >= 16 {
-                self.context.generate_keys();
-                self.index = 0;
-            }
+            chunk.copy_from_slice(&u32::to_le_bytes(self.decrypt_block(&origin)));
         }
         data_iter.into_remainder().len()
     }
     pub fn make_decrypt_slice(&mut self, data: &[u8]) -> Vec<u8> {
         let mut data = data.to_vec();
         self.decrypt_slice(&mut data);
-        return data;
+        data
     }
 }
 
