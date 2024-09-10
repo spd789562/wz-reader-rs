@@ -1,4 +1,4 @@
-use crate::property::WzLua;
+use crate::property::{WzLua, WzRawData};
 use crate::version::{guess_iv_from_wz_img, verify_iv_from_wz_img};
 use crate::{reader, util, WzNode, WzNodeArc, WzNodeArcVec, WzNodeName, WzReader};
 use std::sync::Arc;
@@ -135,6 +135,16 @@ impl WzImage {
 
         let header_byte = reader.read_u8()?;
 
+        // there also has json, atlas, etc. but they all using WzString to store it, this guy is just raw text
+        if self.name.ends_with(".txt") {
+            let name: WzNodeName = String::from("text.txt").into();
+
+            let wz_raw_data = WzRawData::new(&self.reader, self.offset, self.block_size);
+            let raw_data_node = WzNode::new(&name, wz_raw_data, parent);
+
+            return Ok((vec![(name, raw_data_node.into_lock())], vec![]));
+        }
+
         match header_byte {
             0x1 => {
                 if self.name.ends_with(".lua") {
@@ -150,6 +160,26 @@ impl WzImage {
                     return Ok((vec![(name, lua_node.into_lock())], vec![]));
                 }
                 return Err(Error::LuaParseError);
+            }
+            // a weird format raw data, it store pure text and start by "#Property"
+            // inside the data, it looks like some kind of json
+            // key = { key = value, key = value, kv = { key = value, key = value } }
+            35 => {
+                let property_string = String::from_iter(
+                    reader
+                        .get_slice(self.offset..self.offset + 9)
+                        .iter()
+                        .map(|&b| b as char),
+                );
+                if property_string != "#Property" {
+                    return Err(Error::UnknownImageHeader(header_byte, reader.pos.get()));
+                }
+                let name: WzNodeName = String::from("text.txt").into();
+                let wz_raw_data =
+                    WzRawData::new(&self.reader, self.offset + 9, self.block_size - 9);
+                let raw_data_node = WzNode::new(&name, wz_raw_data, parent);
+
+                return Ok((vec![(name, raw_data_node.into_lock())], vec![]));
             }
             WZ_IMAGE_HEADER_BYTE_WITHOUT_OFFSET => {
                 let name = reader.read_wz_string()?;
