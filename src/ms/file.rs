@@ -1,12 +1,11 @@
-use crate::{
-    directory, reader, version, Reader, SharedWzMutableKey, WzDirectory, WzNodeArc, WzNodeArcVec,
-    WzNodeCast, WzObjectType, WzReader, WzSliceReader,
-};
+use crate::{reader, WzNode, WzNodeArc, WzNodeArcVec, WzNodeName, WzReader};
 use memmap2::Mmap;
 use std::fs::File;
 use std::sync::Arc;
 
 use super::header::{self, MsHeader};
+use super::ms_image::{MsEntryMeta, MsImage};
+use super::utils;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -42,7 +41,7 @@ pub struct MsFile {
 }
 
 impl MsFile {
-    pub fn from_file<P>(path: P, wz_iv: Option<[u8; 4]>) -> Result<MsFile, Error>
+    pub fn from_file<P>(path: P) -> Result<MsFile, Error>
     where
         P: AsRef<std::path::Path>,
     {
@@ -62,11 +61,73 @@ impl MsFile {
             header: ms_header,
         })
     }
-    pub fn parse(
-        &mut self,
-        parent: &WzNodeArc,
-        patch_version: Option<i32>,
-    ) -> Result<WzNodeArcVec, Error> {
-        unimplemented!()
+    pub fn parse(&mut self, parent: &WzNodeArc) -> Result<WzNodeArcVec, Error> {
+        // decrypt with another snow key
+        let file_name_with_salt_bytes = self.header.name_with_salt.as_bytes();
+        let file_name_with_salt_len = file_name_with_salt_bytes.len();
+        let mut snow_key: [u8; 16] = [0; 16];
+        for i in 0_u8..16_u8 {
+            let byte = file_name_with_salt_bytes
+                [file_name_with_salt_len - 1 - i as usize % file_name_with_salt_len];
+            snow_key[i as usize] = i + (i % 3 + 2).wrapping_mul(byte);
+        }
+
+        /* maybe I need to turn this to a struct but it ok for now */
+        let data = self.reader.get_slice(0..self.block_size);
+        let mut snow_reader = utils::Snow2Reader::new(data, snow_key);
+
+        snow_reader.offset = self.header.estart;
+
+        let mut ms_images = Vec::with_capacity(self.header.entry_count as usize);
+
+        for _ in 0..self.header.entry_count {
+            let entry_name_len = snow_reader.read_i32()?;
+            let entry_name = snow_reader.read_utf16_string(entry_name_len as usize * 2)?;
+            let check_sum = snow_reader.read_i32()?;
+            let flags = snow_reader.read_i32()?;
+            let start_pos = snow_reader.read_i32()?;
+            let size = snow_reader.read_i32()?;
+            let size_aligned = snow_reader.read_i32()?;
+            let unk1 = snow_reader.read_i32()?;
+            let unk2 = snow_reader.read_i32()?;
+            let entry_key = snow_reader.read_bytes(16)?;
+
+            let meta = MsEntryMeta {
+                key_salt: self.header.key_salt.clone(),
+                entry_name,
+                check_sum,
+                flags,
+                start_pos,
+                size,
+                size_aligned,
+                unk1,
+                unk2,
+                entry_key,
+            };
+            let image = MsImage::new(meta, &self.reader);
+
+            ms_images.push(image);
+        }
+
+        let mut data_start = snow_reader.offset;
+        // align to 1024 bytes
+        if (data_start & 0x3FF) != 0 {
+            data_start = data_start - (data_start & 0x3FF) + 0x400;
+        }
+
+        for image in ms_images.iter_mut() {
+            let actual_start = data_start + image.offset * 1024;
+            image.offset = actual_start;
+            image.meta.start_pos = actual_start as i32;
+        }
+
+        return Ok(ms_images
+            .drain(..)
+            .map(|image| {
+                let name = WzNodeName::from(image.meta.entry_name.clone());
+                let node = WzNode::new(&name, image, Some(parent));
+                (name, node.into_lock())
+            })
+            .collect());
     }
 }

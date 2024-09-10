@@ -23,17 +23,17 @@ pub enum Error {
 #[derive(Debug, Clone, Default)]
 pub struct MsHeader {
     // name: String,
-    key_salt: String,
-    name_with_salt: String,
-    header_hash: i32,
+    pub key_salt: String,
+    pub name_with_salt: String,
+    pub header_hash: i32,
     // snow version, it should only be 2 currently
-    version: u8,
-    entry_count: i32,
+    pub version: u8,
+    pub entry_count: i32,
 
     // header start
-    hstart: usize,
+    pub hstart: usize,
     // entry start
-    estart: usize,
+    pub estart: usize,
 }
 
 impl MsHeader {
@@ -65,6 +65,7 @@ impl MsHeader {
 
         // 2. encrypted snowKeySalt
         let hashed_salt_len = reader.read_u8_at(offset)?;
+        let hashed_salt_len_i32 = reader.read_i32_at(offset)?;
         // plus 1 and skip 3 bytes
         offset += 4;
         let salt_len = hashed_salt_len ^ rand_bytes[0];
@@ -81,20 +82,20 @@ impl MsHeader {
             .collect::<String>();
         // 3. decrypt 9 bytes header with snow cipher
         // generate snow key based on filename+keySalt
-        let file_name_with_salt = format!("{}{}", file_name.to_string(), &salt_string);
+        let file_name_with_salt = format!("{}{}", file_name, &salt_string);
 
         let file_name_with_salt_bytes = file_name_with_salt.as_bytes();
         let mut snow_key: [u8; 16] = [0; 16];
         for i in 0..16 {
             snow_key[i] = file_name_with_salt_bytes[i % file_name_with_salt.len()] + i as u8;
         }
-        let mut snow_decryptor = Snow2Decryptor::new(snow_key.clone());
+        let mut snow_decryptor = Snow2Decryptor::new(snow_key);
 
         let hstart = offset;
+        // the snow decryptor is decrypting 4 bytes at a time, so we need to decrypt 12 bytes for only 9 bytes of data
         let header_bytes = reader.get_slice(offset..offset + 12);
 
-        // the snow decryptor is decrypting 4 bytes at a time, so we need to decrypt 12 bytes for only 9 bytes of data
-        let decrypt_data = snow_decryptor.make_decrypt_slice(&header_bytes[..]);
+        let decrypt_data = snow_decryptor.make_decrypt_slice(header_bytes);
 
         let hash = decrypt_data.pread_with::<i32>(0, LE)?;
         let version = decrypt_data[4];
@@ -111,7 +112,7 @@ impl MsHeader {
             .map(|s| u16::from_le_bytes([s[0], s[1]]))
             .fold(0, |acc: i32, x| acc.wrapping_add(x as i32));
 
-        let actual_hash = hashed_salt_len as i32 + version as i32 + entry_count + sum_of_salt_byte;
+        let actual_hash = hashed_salt_len_i32 + version as i32 + entry_count + sum_of_salt_byte;
         if hash != actual_hash {
             return Err(Error::HashMismatch(hash, actual_hash));
         }
