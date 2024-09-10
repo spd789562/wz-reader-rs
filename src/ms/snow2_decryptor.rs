@@ -478,6 +478,7 @@ impl Snow2Context {
         self.keys = buffer;
     }
 }
+// TODO: make this using cipher
 pub struct Snow2Decryptor {
     index: usize,
     context: Snow2Context,

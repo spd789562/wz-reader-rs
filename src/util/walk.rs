@@ -5,7 +5,8 @@ use crate::{WzNodeArc, WzObjectType};
 /// and only unparse `WzImage` after `f` is called to release memory.
 pub fn walk_node(node: &WzNodeArc, force_parse: bool, f: &dyn Fn(&WzNodeArc)) {
     if force_parse {
-        node.write().unwrap().parse(node).unwrap();
+        // ignore the error
+        let _ = node.write().unwrap().parse(node);
     }
 
     f(node);

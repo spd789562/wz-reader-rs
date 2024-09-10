@@ -44,6 +44,7 @@ impl MsImage {
         }
     }
 
+    /// make a WzImage from the MsImage, this process will allocate a new buffer instead of using MsFile's buffer
     pub fn to_wz_image(&self) -> WzImage {
         // calc snow key for entry
         let mut key_hash = 0x811C9DC5;

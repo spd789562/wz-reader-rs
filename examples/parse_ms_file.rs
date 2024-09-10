@@ -1,4 +1,5 @@
-use wz_reader::ms::file::MsFile;
+use wz_reader::util::walk_node;
+use wz_reader::{WzNode, WzNodeArc};
 
 type Error = Box<dyn std::error::Error>;
 type Result<T> = std::result::Result<T, Error>;
@@ -10,9 +11,15 @@ fn main() -> Result<()> {
     let args = std::env::args_os().collect::<Vec<_>>();
     let base_path = args.get(1).expect("missing ms file path");
 
-    let ms_file = MsFile::from_file(base_path, None)?;
+    let ms_file_node = WzNode::from_ms_file(base_path, None)?.into_lock();
 
-    println!("{:?}", ms_file.header);
+    // ms_file.write().unwrap().parse(&ms_file)?;
+
+    walk_node(&ms_file_node, true, &|node: &WzNodeArc| {
+        if node.read().unwrap().name.contains("text.txt") {
+            println!("{}", node.read().unwrap().get_full_path());
+        }
+    });
 
     Ok(())
 }

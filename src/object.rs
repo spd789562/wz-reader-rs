@@ -1,7 +1,7 @@
 use crate::property::{
     Vector2D, WzLua, WzPng, WzRawData, WzSound, WzString, WzSubProperty, WzValue,
 };
-use crate::{WzDirectory, WzFile, WzImage};
+use crate::{MsFile, MsImage, WzDirectory, WzFile, WzImage};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -24,7 +24,9 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone)]
 pub enum WzObjectType {
     File(Box<WzFile>),
+    MsFile(Box<MsFile>),
     Image(Box<WzImage>),
+    MsImage(Box<MsImage>),
     Directory(Box<WzDirectory>),
     #[cfg_attr(feature = "serde", serde(untagged))]
     Property(WzSubProperty),
@@ -63,6 +65,8 @@ macro_rules! from_impl_wz_property {
 from_impl_wz_files!(WzFile, File);
 from_impl_wz_files!(WzDirectory, Directory);
 from_impl_wz_files!(WzImage, Image);
+from_impl_wz_files!(MsFile, MsFile);
+from_impl_wz_files!(MsImage, MsImage);
 
 from_impl_wz_value!(i16, Short);
 from_impl_wz_value!(i32, Int);

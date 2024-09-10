@@ -1,6 +1,6 @@
 use crate::{
-    directory, file, property, util::node_util, version, wz_image, SharedWzMutableKey, WzFile,
-    WzImage, WzNodeCast, WzNodeName, WzObjectType,
+    directory, file, ms, property, util::node_util, version, wz_image, MsFile, SharedWzMutableKey,
+    WzFile, WzImage, WzNodeCast, WzNodeName, WzObjectType,
 };
 use hashbrown::HashMap;
 use std::path::Path;
@@ -19,6 +19,9 @@ pub enum Error {
 
     #[error("Error parsing WzFile: {0}")]
     WzFileParseError(#[from] file::Error),
+
+    #[error("Error parsing MsFile: {0}")]
+    MsFileParseError(#[from] ms::file::Error),
 
     #[error("Error parsing WzImage: {0}")]
     WzImageParseError(#[from] wz_image::Error),
@@ -104,7 +107,6 @@ impl WzNode {
         )?;
         Ok(WzNode::new(&name.into(), wz_file, parent))
     }
-
     /// from_wz_file_full with less argements.
     ///
     /// # Errors
@@ -115,6 +117,20 @@ impl WzNode {
     {
         Self::from_wz_file_full(path, None, None, parent, None)
     }
+
+    /// Create a `WzNode` from a any `.ms` file.
+    ///
+    /// # Errors
+    /// When it not valid MsFile(not contain valid header).
+    pub fn from_ms_file<P>(path: P, parent: Option<&WzNodeArc>) -> Result<Self, Error>
+    where
+        P: AsRef<Path>,
+    {
+        let name = path.as_ref().file_stem().unwrap().to_str().unwrap();
+        let ms_file = MsFile::from_file(&path)?;
+        Ok(WzNode::new(&name.into(), ms_file, parent))
+    }
+
     /// Create a `WzNode` from a any `.img` file. If version is not provided, it will try to detect the version.
     ///
     /// # Errors
@@ -171,12 +187,27 @@ impl WzNode {
                 file.is_parsed = true;
                 (childs, vec![])
             }
+            WzObjectType::MsFile(ref mut file) => {
+                if file.is_parsed {
+                    return Ok(());
+                }
+                let childs = file.parse(parent)?;
+                file.is_parsed = true;
+                (childs, vec![])
+            }
             WzObjectType::Image(ref mut image) => {
                 if image.is_parsed {
                     return Ok(());
                 }
                 let result = image.resolve_children(Some(parent))?;
                 image.is_parsed = true;
+                result
+            }
+            WzObjectType::MsImage(ref mut image) => {
+                let mut image = image.to_wz_image();
+                let result = image.resolve_children(Some(parent))?;
+                image.is_parsed = true;
+                self.object_type = image.into();
                 result
             }
             _ => return Ok(()),
