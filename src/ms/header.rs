@@ -95,7 +95,9 @@ impl MsHeader {
         // the snow decryptor is decrypting 4 bytes at a time, so we need to decrypt 12 bytes for only 9 bytes of data
         let header_bytes = reader.get_slice(offset..offset + 12);
 
-        let decrypt_data = snow_decryptor.make_decrypt_slice(header_bytes);
+        let mut decrypt_data = [0_u8; 12];
+        decrypt_data.copy_from_slice(&header_bytes);
+        snow_decryptor.decrypt_slice(&mut decrypt_data);
 
         let hash = decrypt_data.pread_with::<i32>(0, LE)?;
         let version = decrypt_data[4];

@@ -29,9 +29,10 @@ impl<'a> Snow2Reader<'a> {
         self.offset += 4;
         if self.buffer_len > 0 {
             let decrypted_bytes = decrypted.to_le_bytes();
-            let result = [&self.buffer[..self.buffer_len], &decrypted_bytes[..]]
-                .concat()
-                .pread_with::<u32>(0, LE)?;
+            let mut buffer = [0_u8; 4];
+            buffer[..self.buffer_len].copy_from_slice(&self.buffer[..self.buffer_len]);
+            buffer[self.buffer_len..].copy_from_slice(&decrypted_bytes[..4 - self.buffer_len]);
+            let result = buffer.pread_with::<u32>(0, LE)?;
             self.buffer[..(4 - self.buffer_len)]
                 .copy_from_slice(&decrypted_bytes[self.buffer_len..]);
             Ok(result)
@@ -49,9 +50,10 @@ impl<'a> Snow2Reader<'a> {
 
         if self.buffer_len > 0 {
             // merge buffer and decrypted_bytes then read u32
-            let result = [&self.buffer[..self.buffer_len], &decrypted_bytes[..]]
-                .concat()
-                .pread_with::<i32>(0, LE)?;
+            let mut buffer = [0_u8; 4];
+            buffer[..self.buffer_len].copy_from_slice(&self.buffer[..self.buffer_len]);
+            buffer[self.buffer_len..].copy_from_slice(&decrypted_bytes[..4 - self.buffer_len]);
+            let result = buffer.pread_with::<i32>(0, LE)?;
             // deal with remaining bytes
             self.buffer[..(4 - self.buffer_len)]
                 .copy_from_slice(&decrypted_bytes[self.buffer_len..]);
@@ -71,7 +73,7 @@ impl<'a> Snow2Reader<'a> {
         String::from_utf16(&utf16_vec).map_err(Error::from)
     }
     pub fn read_bytes(&mut self, len: usize) -> Result<Vec<u8>, Error> {
-        let mut vec = Vec::<u8>::with_capacity(len);
+        let mut vec = Vec::<u8>::with_capacity(len + 4);
 
         let mut remaining_len = len as i32;
 
@@ -80,8 +82,12 @@ impl<'a> Snow2Reader<'a> {
             if len < self.buffer_len {
                 vec.extend_from_slice(&self.buffer[..len]);
                 self.buffer_len -= len;
-                let remain_buffer = self.buffer[len..].to_owned();
-                self.buffer.copy_from_slice(&remain_buffer);
+
+                // move the remaining bytes to the beginning of the buffer
+                let mut temp_buffer = [0_u8; 4];
+                temp_buffer.copy_from_slice(&self.buffer[len..]);
+
+                self.buffer.copy_from_slice(&temp_buffer);
 
                 return Ok(vec);
             }
