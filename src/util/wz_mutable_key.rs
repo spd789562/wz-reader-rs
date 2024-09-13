@@ -105,10 +105,10 @@ impl WzMutableKey {
         let block_size = aes::Aes256::block_size();
 
         for i in (start_index..size).step_by(16) {
-            let in_buf = self.keys[i - block_size..i].to_vec();
+            let (in_buf, out_buf) = self.keys.split_at_mut(i);
             ecb::Encryptor::<Aes256>::new(&self.aes_key.into())
-                // im not sure why this will actually append block_size * 2 to out_buff, so will be trimed at the end
-                .encrypt_padded_b2b_mut::<Pkcs7>(&in_buf, &mut self.keys[i..])
+                // im not sure why this will actually append block_size * 2 to out_buf, so will be trimed at the end
+                .encrypt_padded_b2b_mut::<Pkcs7>(&in_buf[i - block_size..], out_buf)
                 .map_err(|_| "Failed to encrypt block")?;
         }
 
