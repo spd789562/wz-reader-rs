@@ -470,14 +470,14 @@ impl<'a> WzSliceReader<'a> {
 
         let fstart = self.header.fstart;
 
-        let offset = (offset - fstart) ^ 0xFFFFFFFF;
-        let offset = (offset * hash) & 0xFFFFFFFF;
-        let offset = offset.overflowing_sub(WZ_OFFSET as usize).0;
+        let offset = offset.wrapping_sub(fstart) ^ 0xFFFFFFFF;
+        let offset = offset.wrapping_mul(hash) & 0xFFFFFFFF;
+        let offset = offset.wrapping_sub(WZ_OFFSET as usize);
         let offset = (offset as i32).rotate_left((offset as u32) & 0x1F) as usize & 0xFFFFFFFF;
 
         let encrypted_offset = self.read_u32()? as usize;
         let offset = (offset ^ encrypted_offset) & 0xFFFFFFFF;
-        let offset = (offset + fstart * 2) & 0xFFFFFFFF;
+        let offset = offset.wrapping_add(fstart * 2) & 0xFFFFFFFF;
 
         Ok(offset)
     }
@@ -680,14 +680,14 @@ pub fn read_wz_offset(
     offset: usize,
     hash: usize,
 ) -> Result<usize> {
-    let offset = (offset - fstart) ^ 0xFFFFFFFF;
-    let offset = (offset * hash) & 0xFFFFFFFF;
-    let offset = offset.overflowing_sub(WZ_OFFSET as usize).0;
+    let offset = offset.wrapping_sub(fstart) ^ 0xFFFFFFFF;
+    let offset = offset.wrapping_mul(hash) & 0xFFFFFFFF;
+    let offset = offset.wrapping_sub(WZ_OFFSET as usize);
     let offset = offset.rotate_left((offset as u32) & 0x1F) & 0xFFFFFFFF;
 
     let encrypted_offset = buf.pread_with::<u32>(encrypted_offset, LE)?;
     let offset = (offset ^ encrypted_offset as usize) & 0xFFFFFFFF;
-    let offset = (offset + fstart * 2) & 0xFFFFFFFF;
+    let offset = offset.wrapping_add(fstart * 2) & 0xFFFFFFFF;
 
     Ok(offset)
 }
@@ -737,10 +737,10 @@ pub fn read_ascii_string(buf: &[u8], sl: i8) -> Result<String> {
 }
 
 fn resolve_ascii_char(c: u8, i: i32) -> u8 {
-    c ^ (i as u8).overflowing_add(0xAA).0
+    c ^ (i as u8).wrapping_add(0xAA)
 }
 fn resolve_unicode_char(c: u16, i: i32) -> u16 {
-    c ^ (i as u16).overflowing_add(0xAAAA).0
+    c ^ (i as u16).wrapping_add(0xAAAA)
 }
 
 pub fn get_decrypt_slice(
