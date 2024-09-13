@@ -17,8 +17,7 @@ pub struct MsEntryMeta {
     pub size_aligned: i32,
     pub unk1: i32,
     pub unk2: i32,
-    // im kinda want this use [u8; 16]
-    pub entry_key: Vec<u8>,
+    pub entry_key: [u8; 16],
 }
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]

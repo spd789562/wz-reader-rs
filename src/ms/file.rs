@@ -90,7 +90,8 @@ impl MsFile {
             let size_aligned = snow_reader.read_i32()?;
             let unk1 = snow_reader.read_i32()?;
             let unk2 = snow_reader.read_i32()?;
-            let entry_key = snow_reader.read_bytes(16)?;
+            let mut entry_key = [0_u8; 16];
+            snow_reader.write_bytes_to(&mut entry_key, 16)?;
 
             let meta = MsEntryMeta {
                 key_salt: self.header.key_salt.clone(),
