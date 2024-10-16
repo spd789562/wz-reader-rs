@@ -52,25 +52,22 @@ impl MsImage {
             key_hash = (key_hash ^ b as u32).wrapping_mul(0x1000193);
         }
 
-        // extract each  digit from key_hash
+        // extract each  digit from key_hash, like 1234 -> [1,2,3,4]
         let key_hash_digits: Vec<u8> = key_hash.to_string().chars().map(|c| c as u8 - 48).collect();
 
         let mut img_key = [0_u8; 16];
 
-        for i in 0..16 {
-            let char = self
-                .meta
-                .entry_name
-                .chars()
-                .nth(i % self.meta.entry_name.len())
-                .unwrap() as u8;
-            let digit = key_hash_digits[i % key_hash_digits.len()] % 2;
-            let ekey = self.meta.entry_key[((key_hash_digits[(i + 2) % key_hash_digits.len()]
-                + i as u8)
-                % self.meta.entry_key.len() as u8)
-                as usize];
-            let digit2 = (key_hash_digits[(i + 1) % key_hash_digits.len()] + i as u8) % 5;
+        let bytes = self.meta.entry_name.as_bytes();
 
+        for i in 0..16 {
+            let char = bytes[i % bytes.len()];
+            let digit = key_hash_digits[i % key_hash_digits.len()] % 2;
+            let digit2 = (key_hash_digits[(i + 1) % key_hash_digits.len()] + i as u8) % 5;
+            let ekey_idx = key_hash_digits[(i + 2) % key_hash_digits.len()] + i as u8;
+            let ekey = self.meta.entry_key[(ekey_idx % self.meta.entry_key.len() as u8) as usize];
+
+            // it kinda hard to read
+            // i + char * (digit + ekey + digit2)
             img_key[i] = (i as u8)
                 .wrapping_add(char.wrapping_mul(digit.wrapping_add(ekey).wrapping_add(digit2)));
         }

@@ -50,16 +50,11 @@ impl MsHeader {
             .to_ascii_lowercase();
 
         let mut offset = 0;
+        let file_name_bytes = file_name.as_bytes();
 
         // all the code is from https://github.com/Kagamia/WzComparerR2/pull/271/files#diff-d0d53b2411f7d680fb0c7c32bbf10138be0f7e662555cbc28d27353fbd2741d0
         // 1. random bytes
-        let rand_byte_count = file_name
-            .as_bytes()
-            .iter()
-            .map(|&b| b as usize)
-            .sum::<usize>()
-            % 312
-            + 30;
+        let rand_byte_count = file_name_bytes.iter().map(|&b| b as usize).sum::<usize>() % 312 + 30;
         let rand_bytes = reader.get_slice(offset..rand_byte_count);
         offset += rand_byte_count;
 
@@ -96,7 +91,7 @@ impl MsHeader {
         let header_bytes = reader.get_slice(offset..offset + 12);
 
         let mut decrypt_data = [0_u8; 12];
-        decrypt_data.copy_from_slice(&header_bytes);
+        decrypt_data.copy_from_slice(header_bytes);
         snow_decryptor.decrypt_slice(&mut decrypt_data);
 
         let hash = decrypt_data.pread_with::<i32>(0, LE)?;
@@ -122,8 +117,7 @@ impl MsHeader {
         // 4. skip random bytes
         let estart = hstart
             + 9
-            + file_name
-                .as_bytes()
+            + file_name_bytes
                 .iter()
                 .map(|&b| b as usize * 3)
                 .sum::<usize>()
