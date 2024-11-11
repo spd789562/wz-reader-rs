@@ -8,6 +8,7 @@ use crate::{
 };
 use flate2::{Decompress, FlushDecompress};
 use image::{DynamicImage, ImageBuffer, Rgb, Rgba};
+#[cfg(feature = "rayon")]
 use rayon::prelude::*;
 use std::sync::Arc;
 use thiserror::Error;
@@ -206,7 +207,29 @@ fn get_image_from_bgra4444(
     width: u32,
     height: u32,
 ) -> Result<DynamicImage, WzPngParseError> {
+    #[cfg(feature = "rayon")]
     let imgbuffer = image::ImageBuffer::from_par_fn(width, height, |x, y| {
+        let i = (x + y * width) as usize * 2;
+        let pixel = raw_data[i];
+
+        let b = pixel & 0x0F;
+        let b = b | (b << 4);
+
+        let g = pixel & 0xF0;
+        let g = g | (g >> 4);
+
+        let pixel = raw_data[i + 1];
+
+        let r = pixel & 0x0F;
+        let r = r | (r << 4);
+
+        let a = pixel & 0xF0;
+        let a = a | (a >> 4);
+
+        image::Rgba([r, g, b, a])
+    });
+    #[cfg(not(feature = "rayon"))]
+    let imgbuffer = image::ImageBuffer::from_fn(width, height, |x, y| {
         let i = (x + y * width) as usize * 2;
         let pixel = raw_data[i];
 
@@ -230,6 +253,7 @@ fn get_image_from_bgra4444(
     Ok(imgbuffer.into())
 }
 
+#[cfg(feature = "rayon")]
 fn get_image_from_dxt3(
     raw_data: &[u8],
     width: u32,
@@ -281,6 +305,51 @@ fn get_image_from_dxt3(
     Ok(img_buffer.into())
 }
 
+#[cfg(not(feature = "rayon"))]
+fn get_image_from_dxt3(
+    raw_data: &[u8],
+    width: u32,
+    height: u32,
+) -> Result<DynamicImage, WzPngParseError> {
+    let mut img_buffer = image::ImageBuffer::new(width, height);
+
+    let mut alpha_table = [0u8; 16];
+    let mut color_table = [Rgb::black(); 4];
+    let mut color_idx_table = [0u8; 16];
+
+    for y in (0..height).step_by(4) {
+        for x in (0..width).step_by(4) {
+            let offset = (y * width + x * 4) as usize;
+            let chunk = &raw_data[offset..offset + 16];
+            expand_alpha_table_dxt3(&mut alpha_table, &chunk[..8]);
+
+            let u0: u16 = reader::read_u16_at(chunk, 8)?;
+            let u1: u16 = reader::read_u16_at(chunk, 10)?;
+
+            expand_color_table(&mut color_table, u0, u1);
+            expand_color_index_table(&mut color_idx_table, &chunk[12..]);
+
+            for j in 0..4 {
+                for i in 0..4 {
+                    let idx = (j * 4 + i) as usize;
+                    let color_idx = color_idx_table[idx] as usize;
+                    let color = color_table[color_idx];
+                    let alpha = alpha_table[idx];
+
+                    img_buffer.put_pixel(
+                        x + i,
+                        y + j,
+                        image::Rgba([color.r(), color.g(), color.b(), alpha]),
+                    );
+                }
+            }
+        }
+    }
+
+    Ok(img_buffer.into())
+}
+
+#[cfg(feature = "rayon")]
 fn get_image_from_dxt5(
     raw_data: &[u8],
     width: u32,
@@ -329,6 +398,53 @@ fn get_image_from_dxt5(
     let img_buffer = image::ImageBuffer::from_par_fn(width, height, |x, y| {
         *image_buffer_chunks[(x / 4 + y / 4 * grid_row_count) as usize].get_pixel(x % 4, y % 4)
     });
+
+    Ok(img_buffer.into())
+}
+
+#[cfg(not(feature = "rayon"))]
+fn get_image_from_dxt5(
+    raw_data: &[u8],
+    width: u32,
+    height: u32,
+) -> Result<DynamicImage, WzPngParseError> {
+    let mut img_buffer = image::ImageBuffer::new(width, height);
+
+    let mut alpha_table = [0u8; 8];
+    let mut alpha_idx_table = [0u8; 16];
+    let mut color_table = [Rgb::black(); 4];
+    let mut color_idx_table = [0u8; 16];
+
+    for y in (0..height).step_by(4) {
+        for x in (0..width).step_by(4) {
+            let offset = (y * width + x * 4) as usize;
+            let chunk = &raw_data[offset..offset + 16];
+            expand_alpha_table_dxt5(&mut alpha_table, chunk[0], chunk[1]);
+            expand_alpha_index_table_dxt5(&mut alpha_idx_table, &chunk[2..8]);
+
+            let u0: u16 = reader::read_u16_at(chunk, 8)?;
+            let u1: u16 = reader::read_u16_at(chunk, 10)?;
+
+            expand_color_table(&mut color_table, u0, u1);
+            expand_color_index_table(&mut color_idx_table, &chunk[12..]);
+
+            for j in 0..4 {
+                for i in 0..4 {
+                    let idx = (j * 4 + i) as usize;
+                    let color_idx = color_idx_table[idx] as usize;
+                    let color = color_table[color_idx];
+                    let alpha_idx = alpha_idx_table[idx] as usize;
+                    let alpha = alpha_table[alpha_idx];
+
+                    img_buffer.put_pixel(
+                        x + i,
+                        y + j,
+                        image::Rgba([color.r(), color.g(), color.b(), alpha]),
+                    );
+                }
+            }
+        }
+    }
 
     Ok(img_buffer.into())
 }
@@ -535,7 +651,18 @@ fn get_image_from_bgra8888(
     width: u32,
     height: u32,
 ) -> Result<DynamicImage, WzPngParseError> {
+    #[cfg(feature = "rayon")]
     let img_buffer = image::ImageBuffer::from_par_fn(width, height, |x, y| {
+        let i = (x + y * width) as usize * 4;
+        image::Rgba([
+            raw_data[i + 2],
+            raw_data[i + 1],
+            raw_data[i],
+            raw_data[i + 3],
+        ])
+    });
+    #[cfg(not(feature = "rayon"))]
+    let img_buffer = image::ImageBuffer::from_fn(width, height, |x, y| {
         let i = (x + y * width) as usize * 4;
         image::Rgba([
             raw_data[i + 2],
@@ -565,7 +692,6 @@ fn get_image_from_rgb565(
 
     Ok(img_buffer.into())
 }
-
 fn get_image_from_argb1555(
     raw_data: &[u8],
     width: u32,
