@@ -240,13 +240,13 @@ fn get_image_from_dxt3(
         .try_fold_with::<_, Vec<ImageBufferRgbaChunk>, Result<_, WzPngParseError>>(
             Vec::new(),
             |mut v, chunk| {
-                let alpha_table = create_alpha_table_dxt3(chunk, 0);
+                let alpha_table = create_alpha_table_dxt3(&chunk[0..8]);
 
                 let u0: u16 = reader::read_u16_at(chunk, 8)?;
                 let u1: u16 = reader::read_u16_at(chunk, 10)?;
 
                 let color_table = create_color_table(u0, u1);
-                let color_idx_table = create_color_index_table(chunk, 12);
+                let color_idx_table = create_color_index_table(&chunk[12..]);
 
                 let mut img_buffer = image::ImageBuffer::new(4, 4);
                 for y in 0..4 {
@@ -292,13 +292,13 @@ fn get_image_from_dxt5(
             Vec::new(),
             |mut v, chunk| {
                 let alpha_table = create_alpha_table_dxt5(chunk[0], chunk[1]);
-                let alpha_idx_table = create_alpha_index_table_dxt5(chunk, 2);
+                let alpha_idx_table = create_alpha_index_table_dxt5(&chunk[2..8]);
 
                 let u0: u16 = reader::read_u16_at(chunk, 8)?;
                 let u1: u16 = reader::read_u16_at(chunk, 10)?;
 
                 let color_table = create_color_table(u0, u1);
-                let color_idx_table = create_color_index_table(chunk, 12);
+                let color_idx_table = create_color_index_table(&chunk[12..]);
 
                 let mut img_buffer = image::ImageBuffer::new(4, 4);
                 for y in 0..4 {
@@ -443,64 +443,64 @@ fn expand_color_table(color_table: &mut [Rgb<u8>; 4], c0: u16, c1: u16) {
     }
 }
 
-fn create_color_index_table(raw_data: &[u8], offset: usize) -> [u8; 16] {
+fn create_color_index_table(raw_data: &[u8]) -> [u8; 16] {
     let mut color_index_table = [0u8; 16];
 
-    exnand_color_index_table(&mut color_index_table, raw_data, offset);
+    expand_color_index_table(&mut color_index_table, raw_data);
 
     color_index_table
 }
 
-fn exnand_color_index_table(color_index_table: &mut [u8; 16], raw_data: &[u8], offset: usize) {
+fn expand_color_index_table(color_index_table: &mut [u8; 16], raw_data: &[u8]) {
+    // raw_data should be a [u8; 4];
     for i in 0..4 {
-        let local_offset = offset + i;
-        let color = raw_data[local_offset];
+        let color = raw_data[i];
         color_index_table[i * 4] = color & 0x03;
-        color_index_table[i * 4 + 1] = color & 0x0C >> 2;
-        color_index_table[i * 4 + 2] = color & 0x30 >> 4;
-        color_index_table[i * 4 + 3] = color & 0xC0 >> 6;
+        color_index_table[i * 4 + 1] = (color & 0x0C) >> 2;
+        color_index_table[i * 4 + 2] = (color & 0x30) >> 4;
+        color_index_table[i * 4 + 3] = (color & 0xC0) >> 6;
     }
 }
 
-fn create_alpha_table_dxt3(raw_data: &[u8], offset: usize) -> [u8; 16] {
+fn create_alpha_table_dxt3(raw_data: &[u8]) -> [u8; 16] {
     let mut alpha_table = [0u8; 16];
 
-    expand_alpha_table_dxt3(&mut alpha_table, raw_data, offset);
+    expand_alpha_table_dxt3(&mut alpha_table, raw_data);
 
     alpha_table
 }
 
-fn expand_alpha_table_dxt3(alpha_table: &mut [u8; 16], raw_data: &[u8], offset: usize) {
-    let mut local_offset = offset;
+fn expand_alpha_table_dxt3(alpha_table: &mut [u8; 16], raw_data: &[u8]) {
+    // raw_data should be a [u8; 8];
     for i in 0..8 {
-        let alpha = raw_data[local_offset];
+        let alpha = raw_data[i];
         alpha_table[i * 2] = alpha & 0x0F;
         alpha_table[i * 2 + 1] = (alpha & 0xf0) >> 4;
-
-        local_offset += 1;
     }
     for item in alpha_table.iter_mut().take(16) {
         *item = *item | (*item << 4);
     }
 }
 
-fn create_alpha_table_dxt5(a0: u8, a1: u8) -> [u8; 16] {
-    let mut alpha_table = [0u8; 16];
+fn create_alpha_table_dxt5(a0: u8, a1: u8) -> [u8; 8] {
+    let mut alpha_table = [0u8; 8];
 
     expand_alpha_table_dxt5(&mut alpha_table, a0, a1);
 
     alpha_table
 }
 
-fn expand_alpha_table_dxt5(alpha_table: &mut [u8; 16], a0: u8, a1: u8) {
+fn expand_alpha_table_dxt5(alpha_table: &mut [u8; 8], a0: u8, a1: u8) {
     alpha_table[0] = a0;
     alpha_table[1] = a1;
     if a0 > a1 {
-        for i in 2i32..8i32 {
+        for i in 2..8 {
+            // ((8 - i) * a0 + (i - 1) * a1 + 3) / 7
             alpha_table[i as usize] = (((8 - i) * a0 as i32 + (i - 1) * a1 as i32 + 3) / 7) as u8;
         }
     } else {
-        for i in 2i32..6i32 {
+        for i in 2..6 {
+            // ((6 - i) * a0 + (i - 1) * a1 + 2) / 5
             alpha_table[i as usize] = (((6 - i) * a0 as i32 + (i - 1) * a1 as i32 + 2) / 5) as u8;
         }
         alpha_table[6] = 0;
@@ -508,17 +508,18 @@ fn expand_alpha_table_dxt5(alpha_table: &mut [u8; 16], a0: u8, a1: u8) {
     }
 }
 
-fn create_alpha_index_table_dxt5(raw_data: &[u8], offset: usize) -> [u8; 16] {
+fn create_alpha_index_table_dxt5(raw_data: &[u8]) -> [u8; 16] {
     let mut alpha_index_table = [0u8; 16];
 
-    expand_alpha_index_table_dxt5(&mut alpha_index_table, raw_data, offset);
+    expand_alpha_index_table_dxt5(&mut alpha_index_table, raw_data);
 
     alpha_index_table
 }
 
-fn expand_alpha_index_table_dxt5(alpha_index_table: &mut [u8; 16], raw_data: &[u8], offset: usize) {
+fn expand_alpha_index_table_dxt5(alpha_index_table: &mut [u8; 16], raw_data: &[u8]) {
+    // raw_data should be a [u8; 6];
     for i in 0..2 {
-        let local_offset = offset + i * 3;
+        let local_offset = i * 3;
         let flags = (raw_data[local_offset] as u32)
             | ((raw_data[local_offset + 1] as u32) << 8)
             | ((raw_data[local_offset + 2] as u32) << 16);
