@@ -76,6 +76,7 @@ pub trait Reader {
     fn read_float_at(&self, pos: usize) -> Result<f32>;
     fn read_double_at(&self, pos: usize) -> Result<f64>;
 
+    #[inline]
     fn get_wz_string_type(&self, t: i8) -> WzStringType {
         match t {
             0 => WzStringType::Empty,
@@ -103,6 +104,7 @@ pub trait Reader {
 
         Ok(decrypted)
     }
+    #[inline]
     fn resolve_wz_string_meta(
         &self,
         meta_type: &WzStringType,
@@ -123,6 +125,7 @@ pub trait Reader {
             }
         }
     }
+    #[inline]
     fn try_resolve_wz_string_meta(
         &self,
         meta_type: &WzStringType,
@@ -171,34 +174,43 @@ impl<T: AsRef<[u8]>> WzBaseReader<T> {
         }
     }
 
+    #[inline]
     pub fn try_header(&self) -> Result<WzHeader> {
         self.map.as_ref().pread::<WzHeader>(0)
     }
+    #[inline]
     pub fn create_header(&self) -> WzHeader {
         self.map
             .as_ref()
             .pread::<WzHeader>(0)
             .unwrap_or(WzHeader::default())
     }
+    #[inline]
     pub fn get_ref_slice(&self) -> &[u8] {
         self.map.as_ref()
     }
+    #[inline]
     pub fn get_slice(&self, range: std::ops::Range<usize>) -> &[u8] {
         &self.map.as_ref()[range]
     }
+    #[inline]
     pub fn get_wz_fstart(&self) -> Result<u32> {
         WzHeader::get_wz_fstart(self.map.as_ref())
     }
+    #[inline]
     pub fn get_wz_fsize(&self) -> Result<u64> {
         WzHeader::get_wz_fsize(self.map.as_ref())
     }
+    #[inline]
     pub fn create_slice_reader_without_hash(&self) -> WzSliceReader {
         WzSliceReader::new(self.map.as_ref(), &self.keys).with_header(WzHeader::default())
     }
+    #[inline]
     pub fn create_slice_reader(&self) -> WzSliceReader {
         WzSliceReader::new(self.map.as_ref(), &self.keys).with_header(self.create_header())
     }
     /// create a encrypt string from current `WzReader`
+    #[inline]
     pub fn encrypt_str(&self, str: &str, meta_type: &WzStringType) -> Vec<u8> {
         if meta_type == &WzStringType::Empty {
             return Vec::new();
@@ -234,84 +246,103 @@ impl<'a> WzSliceReader<'a> {
             keys: Arc::clone(key),
         }
     }
+    #[inline]
     pub fn with_header(self, header: WzHeader<'a>) -> Self {
         WzSliceReader { header, ..self }
     }
+    #[inline]
     pub fn get_slice(&self, range: std::ops::Range<usize>) -> &[u8] {
         &self.buf[range]
     }
+    #[inline]
     pub fn get_slice_from_current(&self, len: usize) -> &[u8] {
         &self.buf[self.pos.get()..self.pos.get() + len]
     }
+    #[inline]
     pub fn is_valid_pos(&self, pos: usize) -> bool {
         pos <= self.get_size()
     }
+    #[inline]
     pub fn available(&self) -> usize {
         self.get_size() - self.pos.get()
     }
+    #[inline]
     pub fn seek(&self, pos: usize) {
         self.pos.set(pos);
     }
+    #[inline]
     pub fn skip(&self, len: usize) {
         self.pos.set(self.pos.get() + len);
     }
+    #[inline]
     pub fn save_pos(&self) {
         self._save_pos.set(self.pos.get());
     }
+    #[inline]
     pub fn restore_pos(&self) {
         self.pos.set(self._save_pos.get());
     }
+    #[inline]
     pub fn read_u8(&self) -> Result<u8> {
         let res = self.read_u8_at(self.pos.get());
         self.pos.set(self.pos.get() + 1);
         res
     }
+    #[inline]
     pub fn read_u16(&self) -> Result<u16> {
         let res = self.read_u16_at(self.pos.get());
         self.pos.set(self.pos.get() + 2);
         res
     }
+    #[inline]
     pub fn read_u32(&self) -> Result<u32> {
         let res = self.read_u32_at(self.pos.get());
         self.pos.set(self.pos.get() + 4);
         res
     }
+    #[inline]
     pub fn read_u64(&self) -> Result<u64> {
         let res = self.read_u64_at(self.pos.get());
         self.pos.set(self.pos.get() + 8);
         res
     }
+    #[inline]
     pub fn read_i8(&self) -> Result<i8> {
         let res = self.read_i8_at(self.pos.get());
         self.pos.set(self.pos.get() + 1);
         res
     }
+    #[inline]
     pub fn read_i16(&self) -> Result<i16> {
         let res = self.read_i16_at(self.pos.get());
         self.pos.set(self.pos.get() + 2);
         res
     }
+    #[inline]
     pub fn read_i32(&self) -> Result<i32> {
         let res = self.read_i32_at(self.pos.get());
         self.pos.set(self.pos.get() + 4);
         res
     }
+    #[inline]
     pub fn read_i64(&self) -> Result<i64> {
         let res = self.read_i64_at(self.pos.get());
         self.pos.set(self.pos.get() + 8);
         res
     }
+    #[inline]
     pub fn read_float(&self) -> Result<f32> {
         let res = self.read_float_at(self.pos.get());
         self.pos.set(self.pos.get() + 4);
         res
     }
+    #[inline]
     pub fn read_double(&self) -> Result<f64> {
         let res = self.read_double_at(self.pos.get());
         self.pos.set(self.pos.get() + 8);
         res
     }
-
+    #[inline]
     pub fn read_unicode_str_len(&self, sl: i8) -> Result<i32> {
         if sl == i8::MAX {
             self.read_i32()
@@ -319,6 +350,7 @@ impl<'a> WzSliceReader<'a> {
             Ok(sl as i32)
         }
     }
+    #[inline]
     pub fn read_ascii_str_len(&self, sl: i8) -> Result<i32> {
         if sl == i8::MIN {
             self.read_i32()
@@ -354,7 +386,7 @@ impl<'a> WzSliceReader<'a> {
 
         Ok(string)
     }
-
+    #[inline]
     pub fn read_wz_string_meta_at(&self, offset: usize) -> Result<WzStringMeta> {
         self.save_pos();
 
@@ -400,7 +432,7 @@ impl<'a> WzSliceReader<'a> {
             }
         }
     }
-
+    #[inline]
     pub fn read_wz_string(&self) -> Result<String> {
         let small_len = self.read_i8()?;
 
@@ -410,6 +442,7 @@ impl<'a> WzSliceReader<'a> {
             WzStringType::Ascii => self.read_ascii_string(small_len),
         }
     }
+    #[inline]
     pub fn read_wz_string_at_offset(&self, offset: usize) -> Result<String> {
         self.save_pos();
 
@@ -419,6 +452,7 @@ impl<'a> WzSliceReader<'a> {
         self.restore_pos();
         string
     }
+    #[inline]
     pub fn read_wz_string_block(&self, offset: usize) -> Result<String> {
         let string_type = self.read_u8()?;
 
@@ -431,6 +465,7 @@ impl<'a> WzSliceReader<'a> {
             _ => Ok(String::new()),
         }
     }
+    #[inline]
     pub fn read_wz_string_block_meta(&self, wz_img_offset: usize) -> Result<WzStringMeta> {
         let string_type = self.read_u8()?;
 
@@ -443,6 +478,7 @@ impl<'a> WzSliceReader<'a> {
             _ => Ok(WzStringMeta::empty()),
         }
     }
+    #[inline]
     pub fn read_wz_int(&self) -> Result<i32> {
         let small_len = self.read_i8()?;
 
@@ -452,6 +488,7 @@ impl<'a> WzSliceReader<'a> {
 
         Ok(small_len as i32)
     }
+    #[inline]
     pub fn read_wz_int64(&self) -> Result<i64> {
         let small_len = self.read_i8()?;
 
@@ -461,9 +498,11 @@ impl<'a> WzSliceReader<'a> {
 
         Ok(small_len as i64)
     }
+    #[inline]
     pub fn read_wz_long(&self) -> Result<i64> {
         self.read_wz_int64()
     }
+    #[inline]
     pub fn read_wz_offset(&self, hash: usize, offset: Option<usize>) -> Result<usize> {
         // let offset: usize = self.pos.get();
         let offset = offset.unwrap_or(self.pos.get());
@@ -484,54 +523,63 @@ impl<'a> WzSliceReader<'a> {
 }
 
 impl<T: AsRef<[u8]>> Reader for WzBaseReader<T> {
+    #[inline]
     fn read_u8_at(&self, pos: usize) -> Result<u8> {
         self.map
             .as_ref()
             .pread_with::<u8>(pos, LE)
             .map_err(Error::from)
     }
+    #[inline]
     fn read_u16_at(&self, pos: usize) -> Result<u16> {
         self.map
             .as_ref()
             .pread_with::<u16>(pos, LE)
             .map_err(Error::from)
     }
+    #[inline]
     fn read_u32_at(&self, pos: usize) -> Result<u32> {
         self.map
             .as_ref()
             .pread_with::<u32>(pos, LE)
             .map_err(Error::from)
     }
+    #[inline]
     fn read_u64_at(&self, pos: usize) -> Result<u64> {
         self.map
             .as_ref()
             .pread_with::<u64>(pos, LE)
             .map_err(Error::from)
     }
+    #[inline]
     fn read_i8_at(&self, pos: usize) -> Result<i8> {
         self.map
             .as_ref()
             .pread_with::<i8>(pos, LE)
             .map_err(Error::from)
     }
+    #[inline]
     fn read_i16_at(&self, pos: usize) -> Result<i16> {
         self.map
             .as_ref()
             .pread_with::<i16>(pos, LE)
             .map_err(Error::from)
     }
+    #[inline]
     fn read_i32_at(&self, pos: usize) -> Result<i32> {
         self.map
             .as_ref()
             .pread_with::<i32>(pos, LE)
             .map_err(Error::from)
     }
+    #[inline]
     fn read_i64_at(&self, pos: usize) -> Result<i64> {
         self.map
             .as_ref()
             .pread_with::<i64>(pos, LE)
             .map_err(Error::from)
     }
+    #[inline]
     fn read_float_at(&self, pos: usize) -> Result<f32> {
         self.map
             .as_ref()
@@ -544,10 +592,11 @@ impl<T: AsRef<[u8]>> Reader for WzBaseReader<T> {
             .pread_with::<f64>(pos, LE)
             .map_err(Error::from)
     }
-
+    #[inline]
     fn get_size(&self) -> usize {
         self.map.as_ref().len()
     }
+    #[inline]
     fn get_decrypt_slice(&self, range: std::ops::Range<usize>) -> Result<Vec<u8>> {
         let len = range.len();
         get_decrypt_slice(&self.map.as_ref()[range], len, &self.keys)
@@ -555,75 +604,97 @@ impl<T: AsRef<[u8]>> Reader for WzBaseReader<T> {
 }
 
 impl<'a> Reader for WzSliceReader<'a> {
+    #[inline]
     fn get_size(&self) -> usize {
         self.buf.len()
     }
+    #[inline]
     fn read_u8_at(&self, pos: usize) -> Result<u8> {
         self.buf.pread_with::<u8>(pos, LE).map_err(Error::from)
     }
+    #[inline]
     fn read_u16_at(&self, pos: usize) -> Result<u16> {
         self.buf.pread_with::<u16>(pos, LE).map_err(Error::from)
     }
+    #[inline]
     fn read_u32_at(&self, pos: usize) -> Result<u32> {
         self.buf.pread_with::<u32>(pos, LE).map_err(Error::from)
     }
+    #[inline]
     fn read_u64_at(&self, pos: usize) -> Result<u64> {
         self.buf.pread_with::<u64>(pos, LE).map_err(Error::from)
     }
+    #[inline]
     fn read_i8_at(&self, pos: usize) -> Result<i8> {
         self.buf.pread_with::<i8>(pos, LE).map_err(Error::from)
     }
+    #[inline]
     fn read_i16_at(&self, pos: usize) -> Result<i16> {
         self.buf.pread_with::<i16>(pos, LE).map_err(Error::from)
     }
+    #[inline]
     fn read_i32_at(&self, pos: usize) -> Result<i32> {
         self.buf.pread_with::<i32>(pos, LE).map_err(Error::from)
     }
+    #[inline]
     fn read_i64_at(&self, pos: usize) -> Result<i64> {
         self.buf.pread_with::<i64>(pos, LE).map_err(Error::from)
     }
+    #[inline]
     fn read_float_at(&self, pos: usize) -> Result<f32> {
         self.buf.pread_with::<f32>(pos, LE).map_err(Error::from)
     }
+    #[inline]
     fn read_double_at(&self, pos: usize) -> Result<f64> {
         self.buf.pread_with::<f64>(pos, LE).map_err(Error::from)
     }
+    #[inline]
     fn get_decrypt_slice(&self, range: std::ops::Range<usize>) -> Result<Vec<u8>> {
         let len = range.len();
         get_decrypt_slice(&self.buf[range], len, &self.keys)
     }
 }
 
+#[inline]
 pub fn read_u8_at(buf: &[u8], pos: usize) -> Result<u8> {
     buf.pread_with::<u8>(pos, LE).map_err(Error::from)
 }
+#[inline]
 pub fn read_u16_at(buf: &[u8], pos: usize) -> Result<u16> {
     buf.pread_with::<u16>(pos, LE).map_err(Error::from)
 }
+#[inline]
 pub fn read_u32_at(buf: &[u8], pos: usize) -> Result<u32> {
     buf.pread_with::<u32>(pos, LE).map_err(Error::from)
 }
+#[inline]
 pub fn read_u64_at(buf: &[u8], pos: usize) -> Result<u64> {
     buf.pread_with::<u64>(pos, LE).map_err(Error::from)
 }
+#[inline]
 pub fn read_i8_at(buf: &[u8], pos: usize) -> Result<i8> {
     buf.pread_with::<i8>(pos, LE).map_err(Error::from)
 }
+#[inline]
 pub fn read_i16_at(buf: &[u8], pos: usize) -> Result<i16> {
     buf.pread_with::<i16>(pos, LE).map_err(Error::from)
 }
+#[inline]
 pub fn read_i32_at(buf: &[u8], pos: usize) -> Result<i32> {
     buf.pread_with::<i32>(pos, LE).map_err(Error::from)
 }
+#[inline]
 pub fn read_i64_at(buf: &[u8], pos: usize) -> Result<i64> {
     buf.pread_with::<i64>(pos, LE).map_err(Error::from)
 }
+#[inline]
 pub fn read_string_by_len(buf: &[u8], len: usize, offset: Option<usize>) -> String {
     let offset = offset.unwrap_or(0);
     let strvec: Vec<u8> = (0..len).map(|index| buf[offset + index]).collect();
 
     String::from_utf8_lossy(&strvec).to_string()
 }
+#[inline]
 pub fn read_wz_string(buf: &[u8]) -> Result<String> {
     let small_len = read_i8_at(buf, 0)?;
 
@@ -636,6 +707,7 @@ pub fn read_wz_string(buf: &[u8]) -> Result<String> {
     }
     read_ascii_string(&buf[1..], small_len)
 }
+#[inline]
 pub fn read_wz_string_block(buf: &[u8], offset: usize) -> Result<String> {
     let string_type = read_u8_at(buf, 0)?;
 
@@ -648,7 +720,7 @@ pub fn read_wz_string_block(buf: &[u8], offset: usize) -> Result<String> {
         _ => Ok(String::new()),
     }
 }
-
+#[inline]
 pub fn read_wz_int(buf: &[u8], offset: Option<usize>) -> Result<i32> {
     let offset = offset.unwrap_or(0);
     let small_len = read_i8_at(buf, offset)?;
@@ -659,6 +731,7 @@ pub fn read_wz_int(buf: &[u8], offset: Option<usize>) -> Result<i32> {
 
     Ok(small_len as i32)
 }
+#[inline]
 pub fn read_wz_int64(buf: &[u8], offset: Option<usize>) -> Result<i64> {
     let offset = offset.unwrap_or(0);
     let small_len = read_i8_at(buf, offset)?;
@@ -669,6 +742,7 @@ pub fn read_wz_int64(buf: &[u8], offset: Option<usize>) -> Result<i64> {
 
     Ok(small_len as i64)
 }
+#[inline]
 pub fn read_wz_long(buf: &[u8], offset: Option<usize>) -> Result<i64> {
     read_wz_int64(buf, offset)
 }
@@ -736,9 +810,11 @@ pub fn read_ascii_string(buf: &[u8], sl: i8) -> Result<String> {
     Ok(String::from_utf8_lossy(&strvec).to_string())
 }
 
+#[inline]
 fn resolve_ascii_char(c: u8, i: i32) -> u8 {
     c ^ (i as u8).wrapping_add(0xAA)
 }
+#[inline]
 fn resolve_unicode_char(c: u16, i: i32) -> u16 {
     c ^ (i as u16).wrapping_add(0xAAAA)
 }

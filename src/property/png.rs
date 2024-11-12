@@ -111,9 +111,11 @@ impl WzPng {
             header,
         }
     }
+    #[inline]
     pub fn format(&self) -> u32 {
         self.format1 + self.format2
     }
+    #[inline]
     fn has_zlib_header(&self) -> bool {
         self.header == 0x9C78
             || self.header == 0xDA78
@@ -191,6 +193,7 @@ impl WzPng {
     }
 }
 
+#[inline]
 fn inflate(with_header: bool, data: &[u8], capacity: usize) -> Result<Vec<u8>, WzPngParseError> {
     let mut deflater = Decompress::new(with_header);
     let mut result = Vec::with_capacity(capacity);
@@ -202,6 +205,7 @@ fn inflate(with_header: bool, data: &[u8], capacity: usize) -> Result<Vec<u8>, W
     Ok(result)
 }
 
+#[inline]
 fn get_image_from_bgra4444(
     raw_data: Vec<u8>,
     width: u32,
@@ -488,6 +492,7 @@ fn get_pixel_data_form_517(raw_data: &[u8], width: u32, height: u32) -> Vec<u8> 
     pixels
 }
 
+#[inline]
 fn create_color_table(c0: u16, c1: u16) -> [Rgb<u8>; 4] {
     let color1 = Rgb::<u8>::from_rgb565(c0);
     let color2 = Rgb::<u8>::from_rgb565(c1);
@@ -525,6 +530,7 @@ fn create_color_table(c0: u16, c1: u16) -> [Rgb<u8>; 4] {
     [color1, color2, color3, color4]
 }
 
+#[inline]
 #[allow(dead_code)]
 fn expand_color_table(color_table: &mut [Rgb<u8>; 4], c0: u16, c1: u16) {
     color_table[0] = Rgb::from_rgb565(c0);
@@ -559,6 +565,7 @@ fn expand_color_table(color_table: &mut [Rgb<u8>; 4], c0: u16, c1: u16) {
     }
 }
 
+#[inline]
 fn create_color_index_table(raw_data: &[u8]) -> [u8; 16] {
     let mut color_index_table = [0u8; 16];
 
@@ -567,6 +574,7 @@ fn create_color_index_table(raw_data: &[u8]) -> [u8; 16] {
     color_index_table
 }
 
+#[inline]
 fn expand_color_index_table(color_index_table: &mut [u8; 16], raw_data: &[u8]) {
     // raw_data should be a [u8; 4];
     for i in 0..4 {
@@ -578,6 +586,7 @@ fn expand_color_index_table(color_index_table: &mut [u8; 16], raw_data: &[u8]) {
     }
 }
 
+#[inline]
 fn create_alpha_table_dxt3(raw_data: &[u8]) -> [u8; 16] {
     let mut alpha_table = [0u8; 16];
 
@@ -586,6 +595,7 @@ fn create_alpha_table_dxt3(raw_data: &[u8]) -> [u8; 16] {
     alpha_table
 }
 
+#[inline]
 fn expand_alpha_table_dxt3(alpha_table: &mut [u8; 16], raw_data: &[u8]) {
     // raw_data should be a [u8; 8];
     for i in 0..8 {
@@ -598,6 +608,7 @@ fn expand_alpha_table_dxt3(alpha_table: &mut [u8; 16], raw_data: &[u8]) {
     }
 }
 
+#[inline]
 fn create_alpha_table_dxt5(a0: u8, a1: u8) -> [u8; 8] {
     let mut alpha_table = [0u8; 8];
 
@@ -606,6 +617,7 @@ fn create_alpha_table_dxt5(a0: u8, a1: u8) -> [u8; 8] {
     alpha_table
 }
 
+#[inline]
 fn expand_alpha_table_dxt5(alpha_table: &mut [u8; 8], a0: u8, a1: u8) {
     alpha_table[0] = a0;
     alpha_table[1] = a1;
@@ -624,6 +636,7 @@ fn expand_alpha_table_dxt5(alpha_table: &mut [u8; 8], a0: u8, a1: u8) {
     }
 }
 
+#[inline]
 fn create_alpha_index_table_dxt5(raw_data: &[u8]) -> [u8; 16] {
     let mut alpha_index_table = [0u8; 16];
 
@@ -632,6 +645,7 @@ fn create_alpha_index_table_dxt5(raw_data: &[u8]) -> [u8; 16] {
     alpha_index_table
 }
 
+#[inline]
 fn expand_alpha_index_table_dxt5(alpha_index_table: &mut [u8; 16], raw_data: &[u8]) {
     // raw_data should be a [u8; 6];
     for i in 0..2 {
@@ -646,6 +660,7 @@ fn expand_alpha_index_table_dxt5(alpha_index_table: &mut [u8; 16], raw_data: &[u
     }
 }
 
+#[inline]
 fn get_image_from_bgra8888(
     raw_data: Vec<u8>,
     width: u32,
@@ -675,6 +690,7 @@ fn get_image_from_bgra8888(
     Ok(img_buffer.into())
 }
 
+#[inline]
 fn get_image_from_rgb565(
     raw_data: &[u8],
     width: u32,
@@ -692,6 +708,8 @@ fn get_image_from_rgb565(
 
     Ok(img_buffer.into())
 }
+
+#[inline]
 fn get_image_from_argb1555(
     raw_data: &[u8],
     width: u32,

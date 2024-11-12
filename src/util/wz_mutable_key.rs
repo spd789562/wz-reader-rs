@@ -47,13 +47,16 @@ impl WzMutableKey {
         }
         &self.keys[index]
     }
+    #[inline]
     /// get key at index, return `None` if doesn't exist.
     pub fn try_at(&self, index: usize) -> Option<&u8> {
         self.keys.get(index)
     }
+    #[inline]
     pub fn get_range(&self, range: std::ops::Range<usize>) -> &[u8] {
         &self.keys[range]
     }
+    #[inline]
     pub fn is_enough(&self, size: usize) -> bool {
         self.keys.len() >= size
     }

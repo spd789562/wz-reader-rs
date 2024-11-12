@@ -63,6 +63,7 @@ impl<'a> Snow2Reader<'a> {
             Ok(i32::from_le_bytes(decrypted_bytes))
         }
     }
+    #[inline]
     pub fn read_utf16_string(&mut self, len: usize) -> Result<String, Error> {
         let string_vec = self.read_bytes(len)?;
         let utf16_vec = string_vec
@@ -72,6 +73,7 @@ impl<'a> Snow2Reader<'a> {
 
         String::from_utf16(&utf16_vec).map_err(Error::from)
     }
+    #[inline]
     pub fn read_bytes(&mut self, len: usize) -> Result<Vec<u8>, Error> {
         let mut vec = vec![0_u8; len];
 

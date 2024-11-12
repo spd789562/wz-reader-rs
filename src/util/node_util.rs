@@ -1,11 +1,13 @@
 use crate::{node::Error, WzNode, WzNodeArc, WzNodeCast};
 use std::sync::Arc;
 
+#[inline]
 /// Just wrap around of `node.write().unwrap().parse(&node)`
 pub fn parse_node(node: &WzNodeArc) -> Result<(), Error> {
     node.write().unwrap().parse(node)
 }
 
+#[inline]
 /// Resolve a `_inlink` path, a `_inlink` path always start from a `WzImage`.
 pub fn resolve_inlink(path: &str, node: &WzNodeArc) -> Option<WzNodeArc> {
     let parent_wz_image = node.read().unwrap().get_parent_wz_image()?;
@@ -13,6 +15,7 @@ pub fn resolve_inlink(path: &str, node: &WzNodeArc) -> Option<WzNodeArc> {
     parent_wz_image.at_path(path)
 }
 
+#[inline]
 /// Resolve a `_outlink` path, a `_outlink` path always start from Wz's data root(a.k.a `Base.wz`).
 pub fn resolve_outlink(path: &str, node: &WzNodeArc, force_parse: bool) -> Option<WzNodeArc> {
     let parent_wz_base = node.read().unwrap().get_base_wz_file()?;
@@ -24,6 +27,7 @@ pub fn resolve_outlink(path: &str, node: &WzNodeArc, force_parse: bool) -> Optio
     }
 }
 
+#[inline]
 /// Make sure WzNode tree's all node has correct parent.
 pub fn resolve_childs_parent(node: &WzNodeArc) {
     let node_read = node.read().unwrap();
@@ -140,6 +144,7 @@ pub fn get_image_node_from_path<'a>(
     None
 }
 
+#[inline]
 /// get a certain node without parsing all node in the way
 pub fn get_node_without_parse(root: &WzNodeArc, path: &str) -> Option<WzNodeArc> {
     let (image_node, rest_path) = get_image_node_from_path(root, path)?;

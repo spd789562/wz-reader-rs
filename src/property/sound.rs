@@ -102,9 +102,11 @@ impl WzSound {
             sound_type,
         }
     }
+    #[inline]
     fn get_buffer_range(&self) -> Range<usize> {
         self.offset..self.offset + self.length as usize
     }
+    #[inline]
     fn get_header_range(&self) -> Range<usize> {
         self.header_offset..self.header_offset + self.header_size
     }
@@ -141,6 +143,7 @@ impl WzSound {
 
         Ok(())
     }
+    #[inline]
     pub fn get_buffer(&self) -> Vec<u8> {
         let buffer = self.reader.get_slice(self.get_buffer_range());
         match self.sound_type {
@@ -153,6 +156,7 @@ impl WzSound {
             _ => buffer.to_vec(),
         }
     }
+    #[inline]
     pub fn save(&self, path: PathBuf) -> Result<(), WzSoundError> {
         let mut file = match self.sound_type {
             WzSoundType::Wav => File::create(path.with_extension("wav"))?,

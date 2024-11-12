@@ -21,19 +21,24 @@ impl<'a> ctx::TryFromCtx<'a, Endian> for WzHeader<'a> {
 }
 
 impl WzHeader<'_> {
+    #[inline]
     pub fn get_header_slice(buf: &[u8]) -> &[u8] {
         let fstart = Self::get_wz_fstart(buf).unwrap() as usize;
         &buf[0..fstart]
     }
+    #[inline]
     pub fn get_ident(buf: &[u8]) -> Result<&str> {
         buf[0..4].pread::<&str>(0).map_err(Error::from)
     }
+    #[inline]
     pub fn get_wz_fsize(buf: &[u8]) -> Result<u64> {
         buf.pread_with::<u64>(4, LE).map_err(Error::from)
     }
+    #[inline]
     pub fn get_wz_fstart(buf: &[u8]) -> Result<u32> {
         buf.pread_with::<u32>(12, LE).map_err(Error::from)
     }
+    #[inline]
     pub fn get_wz_copyright(buf: &[u8]) -> Result<&str> {
         let fstart = Self::get_wz_fstart(buf)? as usize;
         buf[16..fstart - 17].pread::<&str>(0).map_err(Error::from)

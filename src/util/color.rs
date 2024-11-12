@@ -7,6 +7,7 @@ where
     fn create(r: u8, g: u8, b: u8) -> Self;
     fn white() -> Self;
     fn black() -> Self;
+    #[inline]
     fn from_rgb565(color: u16) -> Self {
         let r = ((color & 0xF800) >> 11) as u8;
         let g = ((color & 0x07E0) >> 5) as u8;
@@ -25,6 +26,7 @@ where
 {
     fn create_alpha(r: u8, g: u8, b: u8, a: u8) -> Self;
     fn transparent() -> Self;
+    #[inline]
     fn from_argb1555(color: u16) -> Self {
         let a = if (color & 0x8000) != 0 { 255 } else { 0 };
         let r = ((color & 0x7C00) >> 10) as u8;
@@ -37,54 +39,69 @@ where
 }
 
 impl SimpleColor for Rgba<u8> {
+    #[inline]
     fn create(r: u8, g: u8, b: u8) -> Self {
         Rgba([r, g, b, 255])
     }
+    #[inline]
     fn white() -> Self {
         Rgba([255, 255, 255, 255])
     }
+    #[inline]
     fn black() -> Self {
         Rgba([0, 0, 0, 255])
     }
+    #[inline]
     fn r(&self) -> u8 {
         self[0]
     }
+    #[inline]
     fn g(&self) -> u8 {
         self[1]
     }
+    #[inline]
     fn b(&self) -> u8 {
         self[2]
     }
 }
 
 impl SimpleColorAlpha for Rgba<u8> {
+    #[inline]
     fn create_alpha(r: u8, g: u8, b: u8, a: u8) -> Self {
         Rgba([r, g, b, a])
     }
+    #[inline]
     fn transparent() -> Self {
         Rgba([0, 0, 0, 0])
     }
+    #[inline]
     fn a(&self) -> u8 {
         self[3]
     }
 }
 
 impl SimpleColor for Rgb<u8> {
+    #[inline]
     fn create(r: u8, g: u8, b: u8) -> Self {
         Rgb([r, g, b])
     }
+    #[inline]
     fn white() -> Self {
         Rgb([255, 255, 255])
     }
+    #[inline]
     fn black() -> Self {
         Rgb([0, 0, 0])
     }
+    #[inline]
     fn r(&self) -> u8 {
         self[0]
     }
+    #[inline]
     fn g(&self) -> u8 {
         self[1]
     }
+    #[inline]
     fn b(&self) -> u8 {
         self[2]
     }

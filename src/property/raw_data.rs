@@ -17,9 +17,11 @@ impl WzRawData {
             length,
         }
     }
+    #[inline]
     fn get_buffer_range(&self) -> Range<usize> {
         self.offset..self.offset + self.length
     }
+    #[inline]
     pub fn get_buffer(&self) -> &[u8] {
         let range = self.get_buffer_range();
         self.reader.get_slice(range)
