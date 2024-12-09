@@ -13,14 +13,14 @@ pub enum WzPropertyParseError {
     #[error("Node not found")]
     NodeNotFound,
 
-    #[error("Unknown property type: {0}, at position: {1}")]
-    UnknownPropertyType(u8, usize),
+    #[error("Unknown property type: {0}, name {1}, at position: {1}")]
+    UnknownPropertyType(u8, WzNodeName, usize),
 
     #[error("Unknown extended header type: {0}, at position: {1}")]
     UnknownExtendedHeaderType(u8, usize),
 
-    #[error("Unknown extended property type: {0}, at position: {1}")]
-    UnknownExtendedPropertyType(String, usize),
+    #[error("Unknown extended property type: {0}, name: {1}, at position: {2}")]
+    UnknownExtendedPropertyType(String, WzNodeName, usize),
 
     #[error("Binary reading error")]
     ReaderError(#[from] reader::Error),
@@ -117,8 +117,28 @@ pub fn parse_property_node(
             let block_size = reader.read_u32()?;
             let next_pos = reader.pos.get() + block_size as usize;
 
-            let node =
-                parse_extended_prop(parent, org_reader, reader, next_pos, origin_offset, name)?;
+            let parse_result =
+                parse_extended_prop(parent, org_reader, reader, next_pos, origin_offset, name);
+
+            let node = if let Ok(node) = parse_result {
+                node
+            } else if let Err(WzPropertyParseError::UnknownExtendedPropertyType(
+                extend_type,
+                name,
+                pos,
+            )) = parse_result
+            {
+                // specificly make the unknown extended property doesn't throw error
+                println!(
+                    "Unknown extended property type: {}, name: {}, at position: {}",
+                    extend_type, name, pos
+                );
+                let node =
+                    WzNode::new(&name, WzObjectType::Value(WzValue::Null), parent).into_lock();
+                (name, node, None)
+            } else {
+                return parse_result;
+            };
 
             reader.seek(next_pos);
 
@@ -127,6 +147,7 @@ pub fn parse_property_node(
         _ => {
             return Err(WzPropertyParseError::UnknownPropertyType(
                 property_type,
+                name,
                 reader.pos.get(),
             ));
         }
@@ -134,6 +155,7 @@ pub fn parse_property_node(
     Ok((result.0, result.1, None))
 }
 
+#[inline]
 pub fn parse_extended_prop(
     parent: Option<&WzNodeArc>,
     org_reader: &Arc<WzReader>,
@@ -143,6 +165,7 @@ pub fn parse_extended_prop(
     property_name: WzNodeName,
 ) -> Result<(WzNodeName, WzNodeArc, Option<Vec<WzNodeArc>>), WzPropertyParseError> {
     let extend_property_type = reader.read_wz_string_block(origin_offset)?;
+
     parse_more(
         parent,
         org_reader,
@@ -333,6 +356,7 @@ pub fn parse_more(
         }
         _ => Err(WzPropertyParseError::UnknownExtendedPropertyType(
             extend_property_type.to_string(),
+            property_name,
             reader.pos.get(),
         )),
     }
@@ -421,6 +445,7 @@ pub fn get_node(
                 _ => {
                     return Err(WzPropertyParseError::UnknownPropertyType(
                         property_type,
+                        name.into(),
                         reader.pos.get(),
                     ));
                 }
