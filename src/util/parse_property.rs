@@ -250,10 +250,7 @@ pub fn parse_more(
                 (canvas_offset, canvas_slice_size),
                 canvas_header as i32,
             );
-
-            if let Ok(mut node) = node.write() {
-                node.object_type = wz_png.into();
-            }
+            node.write().unwrap().object_type = wz_png.into();
 
             Ok((property_name, node, uol_nodes))
         }
@@ -343,25 +340,52 @@ pub fn parse_more(
             Ok((property_name, node, uol_nodes))
         }
         "RawData" => {
-            reader.skip(1);
-            let raw_data_size = reader.read_i32()? as usize;
-            let raw_data_offset = reader.pos.get();
+            let raw_data_version = reader.read_u8()?;
+
+            let has_child = if raw_data_version == 0x01 {
+                reader.read_u8()? == 1
+            } else {
+                false
+            };
+
             let node = WzNode::new(
                 &property_name,
-                WzRawData::new(org_reader, raw_data_offset, raw_data_size),
+                WzObjectType::Property(WzSubProperty::Property),
                 parent,
-            );
+            )
+            .into_lock();
 
-            Ok((property_name, node.into_lock(), None))
+            let mut uol_nodes: Option<Vec<WzNodeArc>> = None;
+
+            if has_child {
+                reader.skip(2);
+                let (childs, uols) =
+                    parse_property_list(Some(&node), org_reader, reader, origin_offset)?;
+                let mut node_write = node.write().unwrap();
+                node_write.children.reserve(childs.len());
+                for (name, child) in childs {
+                    node_write.children.insert(name, child);
+                }
+                uol_nodes = Some(uols);
+            }
+
+            let raw_data_size = reader.read_i32()? as usize;
+            let raw_data_offset = reader.pos.get();
+
+            node.write().unwrap().object_type =
+                WzRawData::new(org_reader, raw_data_offset, raw_data_size).into();
+
+            Ok((property_name, node, uol_nodes))
         }
         "Canvas#Video" => {
             // origin observation, first 3 bytes is [0x00, 0x00, 0x01]
             reader.skip(3);
-            let vide_size = reader.read_i32()? as usize;
+            let video_size = reader.read_wz_int()? as usize;
             let video_offset = reader.pos.get();
+            // pos - size shoud same as end_of_block
             let node = WzNode::new(
                 &property_name,
-                WzVideo::new(org_reader, video_offset, vide_size),
+                WzVideo::new(org_reader, video_offset, video_size),
                 parent,
             );
             Ok((property_name, node.into_lock(), None))

@@ -1,5 +1,5 @@
 use crate::property::{
-    Vector2D, WzLua, WzPng, WzRawData, WzSound, WzString, WzSubProperty, WzValue,
+    Vector2D, WzLua, WzPng, WzRawData, WzSound, WzString, WzSubProperty, WzValue, WzVideo,
 };
 use crate::{WzDirectory, WzFile, WzImage, WzNode, WzObjectType};
 
@@ -30,6 +30,7 @@ pub trait WzNodeCast {
 
     fn try_as_lua(&self) -> Option<&WzLua>;
     fn try_as_raw_data(&self) -> Option<&WzRawData>;
+    fn try_as_video(&self) -> Option<&WzVideo>;
 
     fn is_null(&self) -> bool;
     fn try_as_vector2d(&self) -> Option<&Vector2D>;
@@ -116,6 +117,7 @@ impl WzNodeCast for WzNode {
 
     try_as_wz_value!(try_as_lua, Lua, WzLua);
     try_as_wz_value!(try_as_raw_data, RawData, WzRawData);
+    try_as_wz_value!(try_as_video, Video, WzVideo);
 
     try_as_wz_value!(try_as_vector2d, Vector, Vector2D);
     try_as_wz_value!(try_as_short, Short, i16);

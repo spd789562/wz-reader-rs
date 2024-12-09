@@ -20,6 +20,7 @@ fn walk_node_and_to_json(node_arc: &WzNodeArc, json: &mut Map<String, Value>) {
                 json.insert(node.name.to_string(), Value::Object(child_json));
             }
         }
+        _ => {}
     }
 }
 
