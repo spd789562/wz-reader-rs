@@ -1,6 +1,6 @@
 use crate::property::{
     get_sound_type_from_header, Vector2D, WzPng, WzRawData, WzSound, WzString, WzSubProperty,
-    WzValue,
+    WzValue, WzVideo,
 };
 use crate::{
     reader, WzNode, WzNodeArc, WzNodeArcVec, WzNodeName, WzObjectType, WzReader, WzSliceReader,
@@ -352,6 +352,18 @@ pub fn parse_more(
                 parent,
             );
 
+            Ok((property_name, node.into_lock(), None))
+        }
+        "Canvas#Video" => {
+            // origin observation, first 3 bytes is [0x00, 0x00, 0x01]
+            reader.skip(3);
+            let vide_size = reader.read_i32()? as usize;
+            let video_offset = reader.pos.get();
+            let node = WzNode::new(
+                &property_name,
+                WzVideo::new(org_reader, video_offset, vide_size),
+                parent,
+            );
             Ok((property_name, node.into_lock(), None))
         }
         _ => Err(WzPropertyParseError::UnknownExtendedPropertyType(
