@@ -369,7 +369,7 @@ pub fn parse_more(
                 uol_nodes = Some(uols);
             }
 
-            let raw_data_size = reader.read_i32()? as usize;
+            let raw_data_size = reader.read_wz_int()? as usize;
             let raw_data_offset = reader.pos.get();
 
             node.write().unwrap().object_type =
