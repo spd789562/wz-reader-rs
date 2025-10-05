@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use super::header::{self, MsHeader};
 use super::ms_image::{MsEntryMeta, MsImage};
-use super::utils;
+use super::snow2_reader::{Snow2Reader, MS_SNOW2_KEY_SIZE};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -26,7 +26,6 @@ pub enum Error {
     UnknownImageHeader(u8, String),
 }
 
-/// Root of the `WzNode`, represents the Wz file itself and contains `MsFileMeta`
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct MsFile {
@@ -65,7 +64,7 @@ impl MsFile {
         // decrypt with another snow key
         let file_name_with_salt_bytes = self.header.name_with_salt.as_bytes();
         let file_name_with_salt_len = file_name_with_salt_bytes.len();
-        let mut snow_key: [u8; 16] = [0; 16];
+        let mut snow_key: [u8; 16] = [0; MS_SNOW2_KEY_SIZE];
         for i in 0_u8..16_u8 {
             let byte = file_name_with_salt_bytes
                 [file_name_with_salt_len - 1 - i as usize % file_name_with_salt_len];
@@ -74,7 +73,7 @@ impl MsFile {
 
         /* maybe I need to turn this to a struct but it ok for now */
         let data = self.reader.get_slice(0..self.block_size);
-        let mut snow_reader = utils::Snow2Reader::new(data, snow_key);
+        let mut snow_reader = Snow2Reader::new(data, snow_key);
 
         snow_reader.offset = self.header.estart;
 
@@ -104,6 +103,8 @@ impl MsFile {
                 unk1,
                 unk2,
                 entry_key,
+                unk3: 0,
+                unk4: 0,
             };
             let image = MsImage::new(meta, &self.reader);
 

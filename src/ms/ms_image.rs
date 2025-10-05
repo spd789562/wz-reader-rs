@@ -18,6 +18,8 @@ pub struct MsEntryMeta {
     pub unk1: i32,
     pub unk2: i32,
     pub entry_key: [u8; 16],
+    pub unk3: i32, // for ms file v2
+    pub unk4: i32, // for ms file v2
 }
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
