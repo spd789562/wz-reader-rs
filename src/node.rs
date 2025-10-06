@@ -164,6 +164,7 @@ impl WzNode {
     }
 
     /// A quicker way to turn `WzNode` to `WzNodeArc`.
+    #[inline]
     pub fn into_lock(self) -> WzNodeArc {
         Arc::new(RwLock::new(self))
     }
@@ -227,6 +228,7 @@ impl WzNode {
     }
 
     /// Clear the node childrens and set the node to unparsed.
+    #[inline]
     pub fn unparse(&mut self) {
         match &mut self.object_type {
             WzObjectType::Directory(directory) => {
@@ -246,6 +248,7 @@ impl WzNode {
 
     /// Add a child to the node. It just shorten the `node.write().unwrap().children.insert(name, child)`.
     /// If you have a lot node need to add, consider mauanlly `let mut = node.write().unwrap()`.
+    #[inline]
     pub fn add(&mut self, node: &WzNodeArc) {
         self.children
             .insert(node.read().unwrap().name.clone(), Arc::clone(node));
@@ -368,6 +371,7 @@ impl WzNode {
     /// assert!(root.at("1").is_some());
     /// assert!(root.at("3").is_none());
     /// ```
+    #[inline]
     pub fn at(&self, name: &str) -> Option<WzNodeArc> {
         self.children.get(name).cloned()
     }
@@ -391,6 +395,7 @@ impl WzNode {
     /// assert!(child1.read().unwrap().at_relative("..").is_some());
     /// assert!(root.at_relative("..").is_none());
     /// ```
+    #[inline]
     pub fn at_relative(&self, path: &str) -> Option<WzNodeArc> {
         if path == ".." {
             self.parent.upgrade()
@@ -502,10 +507,12 @@ impl WzNode {
         }
     }
 
+    #[inline]
     pub fn get_parent_wz_image(&self) -> Option<WzNodeArc> {
         self.filter_parent(|node| matches!(node.object_type, WzObjectType::Image(_)))
     }
 
+    #[inline]
     pub fn get_base_wz_file(&self) -> Option<WzNodeArc> {
         self.filter_parent(|node| {
             matches!(node.object_type, WzObjectType::File(_)) && node.name.as_str() == "Base"
@@ -528,6 +535,7 @@ impl WzNode {
 
     /// Generate full json that can deserialize back to `WzNode`.
     #[cfg(feature = "json")]
+    #[inline]
     pub fn to_json(&self) -> Result<serde_json::Value, serde_json::Error> {
         serde_json::to_value(self)
     }

@@ -88,7 +88,6 @@ impl MsFile {
             snow_key[i as usize] = i + (i % 3 + 2).wrapping_mul(byte);
         }
 
-        /* maybe I need to turn this to a struct but it ok for now */
         let data = self.reader.get_slice(0..self.block_size);
         let mut snow_reader = Snow2Reader::new(data, snow_key);
 

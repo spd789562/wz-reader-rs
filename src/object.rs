@@ -1,5 +1,5 @@
 use crate::property::{
-    Vector2D, WzLua, WzPng, WzRawData, WzSound, WzString, WzSubProperty, WzValue,
+    Vector2D, WzLua, WzPng, WzRawData, WzSound, WzString, WzSubProperty, WzValue, WzVideo,
 };
 use crate::{MsFile, MsImage, WzDirectory, WzFile, WzImage};
 
@@ -76,6 +76,7 @@ from_impl_wz_value!(f64, Double);
 from_impl_wz_value!(WzString, String);
 from_impl_wz_value!(Vector2D, Vector);
 from_impl_wz_value!(WzRawData, RawData);
+from_impl_wz_value!(WzVideo, Video);
 from_impl_wz_value!(WzLua, Lua);
 
 from_impl_wz_property!(WzPng, PNG);

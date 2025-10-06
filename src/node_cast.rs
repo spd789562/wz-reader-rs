@@ -1,5 +1,5 @@
 use crate::property::{
-    Vector2D, WzLua, WzPng, WzRawData, WzSound, WzString, WzSubProperty, WzValue,
+    Vector2D, WzLua, WzPng, WzRawData, WzSound, WzString, WzSubProperty, WzValue, WzVideo,
 };
 use crate::{WzDirectory, WzFile, WzImage, WzNode, WzObjectType};
 
@@ -30,6 +30,7 @@ pub trait WzNodeCast {
 
     fn try_as_lua(&self) -> Option<&WzLua>;
     fn try_as_raw_data(&self) -> Option<&WzRawData>;
+    fn try_as_video(&self) -> Option<&WzVideo>;
 
     fn is_null(&self) -> bool;
     fn try_as_vector2d(&self) -> Option<&Vector2D>;
@@ -43,6 +44,7 @@ pub trait WzNodeCast {
 
 macro_rules! try_as {
     ($func_name:ident, $variant:ident, $result:ty) => {
+        #[inline]
         fn $func_name(&self) -> Option<&$result> {
             match &self.object_type {
                 WzObjectType::$variant(inner) => Some(inner),
@@ -54,6 +56,7 @@ macro_rules! try_as {
 
 macro_rules! try_as_wz_value {
     ($func_name:ident, $variant:ident, $result:ident) => {
+        #[inline]
         fn $func_name(&self) -> Option<&$result> {
             match &self.object_type {
                 WzObjectType::Value(WzValue::$variant(inner)) => Some(inner),
@@ -71,18 +74,21 @@ impl WzNodeCast for WzNode {
     try_as!(try_as_sub_property, Property, WzSubProperty);
     try_as!(try_as_value, Value, WzValue);
 
+    #[inline]
     fn try_as_png(&self) -> Option<&WzPng> {
         match &self.object_type {
             WzObjectType::Property(WzSubProperty::PNG(png)) => Some(png),
             _ => None,
         }
     }
+    #[inline]
     fn try_as_sound(&self) -> Option<&WzSound> {
         match &self.object_type {
             WzObjectType::Property(WzSubProperty::Sound(sound)) => Some(sound),
             _ => None,
         }
     }
+    #[inline]
     fn try_as_string(&self) -> Option<&WzString> {
         match &self.object_type {
             WzObjectType::Value(WzValue::String(string))
@@ -90,25 +96,28 @@ impl WzNodeCast for WzNode {
             _ => None,
         }
     }
-
+    #[inline]
     fn is_sub_property(&self) -> bool {
         matches!(
             &self.object_type,
             WzObjectType::Property(WzSubProperty::Property)
         )
     }
+    #[inline]
     fn is_convex(&self) -> bool {
         matches!(
             &self.object_type,
             WzObjectType::Property(WzSubProperty::Convex)
         )
     }
+    #[inline]
     fn is_null(&self) -> bool {
         matches!(&self.object_type, WzObjectType::Value(WzValue::Null))
     }
 
     try_as_wz_value!(try_as_lua, Lua, WzLua);
     try_as_wz_value!(try_as_raw_data, RawData, WzRawData);
+    try_as_wz_value!(try_as_video, Video, WzVideo);
 
     try_as_wz_value!(try_as_vector2d, Vector, Vector2D);
     try_as_wz_value!(try_as_short, Short, i16);

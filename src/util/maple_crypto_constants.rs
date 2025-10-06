@@ -13,6 +13,7 @@ pub const MAPLESTORY_USERKEY_DEFAULT: [u8; 128] = [
 pub const WZ_GMSIV: [u8; 4] = [0x4D, 0x23, 0xC7, 0x2B];
 pub const WZ_MSEAIV: [u8; 4] = [0xB9, 0x7D, 0x63, 0xE9];
 
+#[inline]
 pub fn get_trimmed_user_key(user_key: &[u8]) -> [u8; 32] {
     let mut trimmed_key = [0; 32];
 

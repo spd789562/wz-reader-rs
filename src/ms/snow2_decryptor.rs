@@ -175,6 +175,7 @@ impl Snow2Context {
 
         self
     }
+    #[inline]
     fn calc_iv(&mut self, iv: [u8; 4]) {
         /* XOR IV values */
         self.s15 ^= iv[0] as u32;
@@ -515,6 +516,7 @@ impl Snow2Decryptor {
         }
         data_iter.into_remainder().len()
     }
+    #[inline]
     pub fn make_decrypt_slice(&mut self, data: &[u8]) -> Vec<u8> {
         let mut data = data.to_vec();
         self.decrypt_slice(&mut data);

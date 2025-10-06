@@ -1,6 +1,6 @@
 use crate::property::{
     get_sound_type_from_header, Vector2D, WzPng, WzRawData, WzSound, WzString, WzSubProperty,
-    WzValue,
+    WzValue, WzVideo,
 };
 use crate::{
     reader, WzNode, WzNodeArc, WzNodeArcVec, WzNodeName, WzObjectType, WzReader, WzSliceReader,
@@ -13,14 +13,14 @@ pub enum WzPropertyParseError {
     #[error("Node not found")]
     NodeNotFound,
 
-    #[error("Unknown property type: {0}, at position: {1}")]
-    UnknownPropertyType(u8, usize),
+    #[error("Unknown property type: {0}, name {1}, at position: {1}")]
+    UnknownPropertyType(u8, WzNodeName, usize),
 
     #[error("Unknown extended header type: {0}, at position: {1}")]
     UnknownExtendedHeaderType(u8, usize),
 
-    #[error("Unknown extended property type: {0}, at position: {1}")]
-    UnknownExtendedPropertyType(String, usize),
+    #[error("Unknown extended property type: {0}, name: {1}, at position: {2}")]
+    UnknownExtendedPropertyType(String, WzNodeName, usize),
 
     #[error("Binary reading error")]
     ReaderError(#[from] reader::Error),
@@ -117,8 +117,28 @@ pub fn parse_property_node(
             let block_size = reader.read_u32()?;
             let next_pos = reader.pos.get() + block_size as usize;
 
-            let node =
-                parse_extended_prop(parent, org_reader, reader, next_pos, origin_offset, name)?;
+            let parse_result =
+                parse_extended_prop(parent, org_reader, reader, next_pos, origin_offset, name);
+
+            let node = if let Ok(node) = parse_result {
+                node
+            } else if let Err(WzPropertyParseError::UnknownExtendedPropertyType(
+                extend_type,
+                name,
+                pos,
+            )) = parse_result
+            {
+                // specificly make the unknown extended property doesn't throw error
+                println!(
+                    "Unknown extended property type: {}, name: {}, at position: {}",
+                    extend_type, name, pos
+                );
+                let node =
+                    WzNode::new(&name, WzObjectType::Value(WzValue::Null), parent).into_lock();
+                (name, node, None)
+            } else {
+                return parse_result;
+            };
 
             reader.seek(next_pos);
 
@@ -127,6 +147,7 @@ pub fn parse_property_node(
         _ => {
             return Err(WzPropertyParseError::UnknownPropertyType(
                 property_type,
+                name,
                 reader.pos.get(),
             ));
         }
@@ -134,6 +155,7 @@ pub fn parse_property_node(
     Ok((result.0, result.1, None))
 }
 
+#[inline]
 pub fn parse_extended_prop(
     parent: Option<&WzNodeArc>,
     org_reader: &Arc<WzReader>,
@@ -143,6 +165,7 @@ pub fn parse_extended_prop(
     property_name: WzNodeName,
 ) -> Result<(WzNodeName, WzNodeArc, Option<Vec<WzNodeArc>>), WzPropertyParseError> {
     let extend_property_type = reader.read_wz_string_block(origin_offset)?;
+
     parse_more(
         parent,
         org_reader,
@@ -227,10 +250,7 @@ pub fn parse_more(
                 (canvas_offset, canvas_slice_size),
                 canvas_header as i32,
             );
-
-            if let Ok(mut node) = node.write() {
-                node.object_type = wz_png.into();
-            }
+            node.write().unwrap().object_type = wz_png.into();
 
             Ok((property_name, node, uol_nodes))
         }
@@ -320,19 +340,59 @@ pub fn parse_more(
             Ok((property_name, node, uol_nodes))
         }
         "RawData" => {
-            reader.skip(1);
-            let raw_data_size = reader.read_i32()? as usize;
-            let raw_data_offset = reader.pos.get();
+            let raw_data_version = reader.read_u8()?;
+
+            let has_child = if raw_data_version == 0x01 {
+                reader.read_u8()? == 1
+            } else {
+                false
+            };
+
             let node = WzNode::new(
                 &property_name,
-                WzRawData::new(org_reader, raw_data_offset, raw_data_size),
+                WzObjectType::Property(WzSubProperty::Property),
+                parent,
+            )
+            .into_lock();
+
+            let mut uol_nodes: Option<Vec<WzNodeArc>> = None;
+
+            if has_child {
+                reader.skip(2);
+                let (childs, uols) =
+                    parse_property_list(Some(&node), org_reader, reader, origin_offset)?;
+                let mut node_write = node.write().unwrap();
+                node_write.children.reserve(childs.len());
+                for (name, child) in childs {
+                    node_write.children.insert(name, child);
+                }
+                uol_nodes = Some(uols);
+            }
+
+            let raw_data_size = reader.read_wz_int()? as usize;
+            let raw_data_offset = reader.pos.get();
+
+            node.write().unwrap().object_type =
+                WzRawData::new(org_reader, raw_data_offset, raw_data_size).into();
+
+            Ok((property_name, node, uol_nodes))
+        }
+        "Canvas#Video" => {
+            // origin observation, first 3 bytes is [0x00, 0x00, 0x01]
+            reader.skip(3);
+            let video_size = reader.read_wz_int()? as usize;
+            let video_offset = reader.pos.get();
+            // pos - size shoud same as end_of_block
+            let node = WzNode::new(
+                &property_name,
+                WzVideo::new(org_reader, video_offset, video_size),
                 parent,
             );
-
             Ok((property_name, node.into_lock(), None))
         }
         _ => Err(WzPropertyParseError::UnknownExtendedPropertyType(
             extend_property_type.to_string(),
+            property_name,
             reader.pos.get(),
         )),
     }
@@ -421,6 +481,7 @@ pub fn get_node(
                 _ => {
                     return Err(WzPropertyParseError::UnknownPropertyType(
                         property_type,
+                        name.into(),
                         reader.pos.get(),
                     ));
                 }

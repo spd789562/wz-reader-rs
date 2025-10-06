@@ -3,13 +3,13 @@ use std::ops::Range;
 use std::sync::Arc;
 
 #[derive(Debug, Clone, Default)]
-pub struct WzRawData {
+pub struct WzVideo {
     pub reader: Arc<WzReader>,
     offset: usize,
     length: usize,
 }
 
-impl WzRawData {
+impl WzVideo {
     pub fn new(reader: &Arc<WzReader>, offset: usize, length: usize) -> Self {
         Self {
             reader: Arc::clone(reader),

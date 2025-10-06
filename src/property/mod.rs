@@ -9,6 +9,7 @@ pub mod raw_data;
 pub mod sound;
 pub mod string;
 pub mod vector;
+pub mod video;
 
 pub use lua::*;
 pub use png::*;
@@ -16,6 +17,7 @@ pub use raw_data::*;
 pub use sound::*;
 pub use string::*;
 pub use vector::*;
+pub use video::*;
 
 // #[derive(Debug, Clone)]
 // pub enum WzPropertyType {
@@ -59,6 +61,8 @@ pub enum WzValue {
     #[cfg_attr(feature = "serde", serde(skip))]
     RawData(WzRawData),
     #[cfg_attr(feature = "serde", serde(skip))]
+    Video(WzVideo),
+    #[cfg_attr(feature = "serde", serde(skip))]
     Lua(WzLua),
     Short(i16),
     #[cfg_attr(feature = "serde", serde(alias = "number"))]
@@ -86,6 +90,7 @@ impl From<WzValue> for Value {
         match value {
             WzValue::Null => Value::Null,
             WzValue::RawData(_) => Value::Null,
+            WzValue::Video(_) => Value::Null,
             WzValue::Lua(_) => Value::Null,
             WzValue::Short(value) => value.into(),
             WzValue::Int(value) => value.into(),
@@ -160,6 +165,7 @@ mod test {
     fn test_serialize_wz_value() {
         let null = WzValue::Null;
         let raw_data = WzValue::RawData(WzRawData::default());
+        let video = WzValue::Video(WzVideo::default());
         let lua = WzValue::Lua(WzLua::default());
         let short = WzValue::Short(1);
         let int = WzValue::Int(1);
@@ -174,6 +180,7 @@ mod test {
         let null_json = serde_json::to_string(&null).unwrap();
         assert!(serde_json::to_string(&raw_data).is_err());
         assert!(serde_json::to_string(&lua).is_err());
+        assert!(serde_json::to_string(&video).is_err());
         let short_json = serde_json::to_string(&short).unwrap();
         let int_json = serde_json::to_string(&int).unwrap();
         let long_json = serde_json::to_string(&long).unwrap();
@@ -204,6 +211,7 @@ mod test {
     fn test_deserialize_wz_value() {
         let null_json = r#"{"type":"Null"}"#;
         let raw_data_json = r#"{"type":"RawData"}"#;
+        let video_json = r#"{"type":"Video"}"#;
         let lua_json = r#"{"type":"Lua"}"#;
         let short_json = r#"{"type":"Short","data":1}"#;
         let int_json = r#"{"type":"Int","data":1}"#;
@@ -218,6 +226,7 @@ mod test {
         let null: WzValue = serde_json::from_str(null_json).unwrap();
         let null_1: WzValue = serde_json::from_str(raw_data_json).unwrap();
         let null_2: WzValue = serde_json::from_str(lua_json).unwrap();
+        let null_3: WzValue = serde_json::from_str(video_json).unwrap();
         let short: WzValue = serde_json::from_str(short_json).unwrap();
         let int: WzValue = serde_json::from_str(int_json).unwrap();
         let long: WzValue = serde_json::from_str(long_json).unwrap();
@@ -231,6 +240,7 @@ mod test {
         assert!(matches!(null, WzValue::Null));
         assert!(matches!(null_1, WzValue::Null));
         assert!(matches!(null_2, WzValue::Null));
+        assert!(matches!(null_3, WzValue::Null));
         assert!(matches!(short, WzValue::Short(1)));
         assert!(matches!(int, WzValue::Int(1)));
         assert!(matches!(long, WzValue::Long(1)));
@@ -248,6 +258,7 @@ mod test {
         let null = WzValue::Null;
         let raw_data = WzValue::RawData(WzRawData::default());
         let lua = WzValue::Lua(WzLua::default());
+        let video = WzValue::Video(WzVideo::default());
         let short = WzValue::Short(1);
         let int = WzValue::Int(1);
         let long = WzValue::Long(1);
@@ -261,6 +272,7 @@ mod test {
         let null_json: Value = null.into();
         let raw_data_json: Value = raw_data.into();
         let lua_json: Value = lua.into();
+        let video_json: Value = video.into();
         let short_json: Value = short.into();
         let int_json: Value = int.into();
         let long_json: Value = long.into();
@@ -274,6 +286,7 @@ mod test {
         assert_eq!(null_json, Value::Null);
         assert_eq!(raw_data_json, Value::Null);
         assert_eq!(lua_json, Value::Null);
+        assert_eq!(video_json, Value::Null);
         assert_eq!(short_json, Value::Number(Number::from(1)));
         assert_eq!(int_json, Value::Number(Number::from(1)));
         assert_eq!(long_json, Value::Number(Number::from(1)));

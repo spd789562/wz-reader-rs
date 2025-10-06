@@ -56,6 +56,7 @@ impl WzStringMeta {
             string_type,
         }
     }
+    #[inline]
     pub fn empty() -> Self {
         Self {
             offset: 0,
@@ -63,6 +64,7 @@ impl WzStringMeta {
             string_type: WzStringType::Empty,
         }
     }
+    #[inline]
     pub fn new_ascii(offset: usize, length: u32) -> Self {
         Self {
             offset,
@@ -70,6 +72,7 @@ impl WzStringMeta {
             string_type: WzStringType::Ascii,
         }
     }
+    #[inline]
     pub fn new_unicode(offset: usize, length: u32) -> Self {
         Self {
             offset,
@@ -119,6 +122,7 @@ impl WzString {
             string_type: meta_type,
         }
     }
+    #[inline]
     /// Decode string from wz file.
     pub fn get_string(&self) -> Result<String, WzStringParseError> {
         self.reader
@@ -127,6 +131,7 @@ impl WzString {
     }
 }
 
+#[inline]
 /// A helper function to resolve string from `WzNodeArc`.
 pub fn resolve_string_from_node(node: &WzNodeArc) -> Result<String, WzStringParseError> {
     node.read()
