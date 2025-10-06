@@ -3,6 +3,9 @@ use memmap2::Mmap;
 use std::fs::File;
 use std::sync::Arc;
 
+use super::chacha20_reader::{
+    ChaCha20Reader, MS_CHACHA20_KEY_BASE, MS_CHACHA20_KEY_SIZE, MS_CHACHA20_NONCE_SIZE,
+};
 use super::header::{self, MsHeader};
 use super::ms_image::{MsEntryMeta, MsImage};
 use super::snow2_reader::{Snow2Reader, MS_SNOW2_KEY_SIZE};
@@ -22,8 +25,8 @@ pub enum Error {
     ReaderError(#[from] reader::Error),
     #[error(transparent)]
     HeaderReadError(#[from] header::Error),
-    #[error("[MsFile] New Wz image header found. checkByte = {0}, File Name = {1}")]
-    UnknownImageHeader(u8, String),
+    #[error("Unknown ms file, unable to parse")]
+    UnknownMsFile,
 }
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -51,7 +54,13 @@ impl MsFile {
 
         let reader = WzReader::new(map);
 
-        let ms_header = MsHeader::from_ms_file(path, &reader)?;
+        let ms_header = if let Ok(header) = MsHeader::from_ms_file(&path, &reader) {
+            header
+        } else if let Ok(header) = MsHeader::from_ms_file_v2(&path, &reader) {
+            header
+        } else {
+            return Err(Error::UnknownMsFile);
+        };
 
         Ok(MsFile {
             block_size,
@@ -61,6 +70,14 @@ impl MsFile {
         })
     }
     pub fn parse(&mut self, parent: &WzNodeArc) -> Result<WzNodeArcVec, Error> {
+        match self.header.ms_file_version {
+            1 => self.parse_v1(parent),
+            2 => self.parse_v2(parent),
+            _ => Err(Error::UnknownMsFile),
+        }
+    }
+
+    fn parse_v1(&mut self, parent: &WzNodeArc) -> Result<WzNodeArcVec, Error> {
         // decrypt with another snow key
         let file_name_with_salt_bytes = self.header.name_with_salt.as_bytes();
         let file_name_with_salt_len = file_name_with_salt_bytes.len();
@@ -105,6 +122,7 @@ impl MsFile {
                 entry_key,
                 unk3: 0,
                 unk4: 0,
+                version: self.header.version,
             };
             let image = MsImage::new(meta, &self.reader);
 
@@ -112,6 +130,88 @@ impl MsFile {
         }
 
         let mut data_start = snow_reader.offset;
+        // align to 1024 bytes
+        if (data_start & 0x3FF) != 0 {
+            data_start = data_start - (data_start & 0x3FF) + 0x400;
+        }
+
+        for image in ms_images.iter_mut() {
+            let actual_start = data_start + image.offset * 1024;
+            image.offset = actual_start;
+            image.meta.start_pos = actual_start as i32;
+        }
+
+        return Ok(ms_images
+            .drain(..)
+            .map(|image| {
+                let name = WzNodeName::from(image.meta.entry_name.clone());
+                let node = WzNode::new(&name, image, Some(parent));
+                (name, node.into_lock())
+            })
+            .collect());
+    }
+
+    fn parse_v2(&mut self, parent: &WzNodeArc) -> Result<WzNodeArcVec, Error> {
+        if self.header.entry_count == 0 {
+            return Ok(vec![]);
+        }
+
+        // decrypt with another chacha20 key
+        let file_name_with_salt_bytes = self.header.name_with_salt.as_bytes();
+        let file_name_with_salt_len = file_name_with_salt_bytes.len();
+        let chacha20_key2: [u8; MS_CHACHA20_KEY_SIZE] = core::array::from_fn(|i| {
+            let byte = file_name_with_salt_bytes
+                [file_name_with_salt_len - 1 - i % file_name_with_salt_len];
+            MS_CHACHA20_KEY_BASE[i] ^ ((i as u8) + (((i as u8) % 3 + 2).wrapping_mul(byte)))
+        });
+        let empty_nonce = [0; MS_CHACHA20_NONCE_SIZE];
+
+        let mut chacha20_reader = ChaCha20Reader::new(
+            self.reader.get_slice(0..self.block_size),
+            &chacha20_key2,
+            &empty_nonce,
+        );
+        chacha20_reader.offset = self.header.estart;
+
+        let mut ms_images = Vec::<MsImage>::with_capacity(self.header.entry_count as usize);
+
+        for _ in 0..self.header.entry_count {
+            let entry_name_len = chacha20_reader.read_i32()?;
+            let entry_name = chacha20_reader.read_utf16_string(entry_name_len as usize * 2)?;
+            let check_sum = chacha20_reader.read_i32()?;
+            let flags = chacha20_reader.read_i32()?;
+            let start_pos = chacha20_reader.read_i32()?;
+            let size = chacha20_reader.read_i32()?;
+            let size_aligned = chacha20_reader.read_i32()?;
+            let unk1 = chacha20_reader.read_i32()?;
+            let unk2 = chacha20_reader.read_i32()?;
+            let mut entry_key = [0_u8; 16];
+            chacha20_reader.write_bytes_to(&mut entry_key, 16)?;
+            let unk3 = chacha20_reader.read_i32()?;
+            let unk4 = chacha20_reader.read_i32()?;
+
+            let meta = MsEntryMeta {
+                key_salt: self.header.key_salt.clone(),
+                entry_name,
+                check_sum,
+                flags,
+                start_pos,
+                size,
+                size_aligned,
+                unk1,
+                unk2,
+                entry_key,
+                unk3,
+                unk4,
+                version: self.header.ms_file_version,
+            };
+
+            let image = MsImage::new(meta, &self.reader);
+
+            ms_images.push(image);
+        }
+
+        let mut data_start = chacha20_reader.offset;
         // align to 1024 bytes
         if (data_start & 0x3FF) != 0 {
             data_start = data_start - (data_start & 0x3FF) + 0x400;
