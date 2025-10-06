@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use c2_chacha::stream_cipher::{NewStreamCipher, SyncStreamCipher, SyncStreamCipherSeek};
+use c2_chacha::stream_cipher::{NewStreamCipher, SyncStreamCipher};
 use c2_chacha::Ietf;
 use scroll::{Pread, LE};
 

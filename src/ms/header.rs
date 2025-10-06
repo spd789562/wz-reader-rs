@@ -54,7 +54,6 @@ impl MsHeader {
         let file_name = get_ascii_file_name(path);
 
         let mut offset = 0;
-        let file_name_bytes = file_name.as_bytes();
 
         // all the code is from https://github.com/Kagamia/WzComparerR2/pull/271/files#diff-d0d53b2411f7d680fb0c7c32bbf10138be0f7e662555cbc28d27353fbd2741d0
         // 1. random bytes
@@ -160,7 +159,7 @@ impl MsHeader {
 
         // 3. encrypted chacha20 key
         let hashed_salt_len = reader.read_u8_at(offset)?;
-        let hashed_salt_len_i32 = reader.read_i32_at(offset)?;
+        let _hashed_salt_len_i32 = reader.read_i32_at(offset)?;
         offset += 4;
         let salt_len = (hashed_salt_len ^ rand_bytes[0]) as usize;
         let salt_byte_len = (salt_len * 2) as usize;
