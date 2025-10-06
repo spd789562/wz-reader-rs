@@ -142,12 +142,16 @@ impl MsHeader {
         // all the code is from https://github.com/Kagamia/WzComparerR2/pull/347/files#diff-c14e6750eb85e2b36e81f13448c1afe29e229b58f639b6a373b5cc72352ba07b
         // 1. random bytes
         let rand_byte_count = sum_str(&file_name) % 312 + 30;
-        let rand_bytes = reader.get_slice(offset..rand_byte_count);
+        let rand_bytes: Vec<u8> = reader
+            .get_slice(offset..rand_byte_count)
+            .iter()
+            .map(|b| ((*b as i8) >> 1) as u8)
+            .collect();
         offset += rand_byte_count;
 
         // 2. check file version
         const EXPECTED_VERSION: u8 = MS_CHACHA20_VERSION;
-        let version = reader.read_u8_at(offset)?;
+        let version = reader.read_u8_at(offset)? ^ rand_bytes[0];
         if version != EXPECTED_VERSION {
             return Err(Error::UnsupportedChacha20Version(version));
         }
@@ -159,13 +163,9 @@ impl MsHeader {
         offset += 4;
         let salt_len = (hashed_salt_len ^ rand_bytes[0]) as usize;
         let salt_byte_len = (salt_len * 2) as usize;
-        let mut salt_bytes = reader.get_slice(offset..offset + salt_byte_len).to_vec();
+        let salt_bytes = reader.get_slice(offset..offset + salt_byte_len).to_vec();
         offset += salt_byte_len;
 
-        for i in 0..salt_len {
-            let a = rand_bytes[i] ^ salt_bytes[i * 2];
-            salt_bytes[i] = ((a | 0x4B) << 1) - a - 75;
-        }
         let salt_string = (0..salt_len as usize)
             .map(|i| {
                 let a = rand_bytes[i] ^ salt_bytes[i * 2];
@@ -187,7 +187,7 @@ impl MsHeader {
         let empty_nonce = [0; MS_CHACHA20_NONCE_SIZE];
 
         let mut chacha20_reader = ChaCha20Reader::new(
-            reader.get_slice(offset..offset + 8),
+            reader.get_slice(offset..offset + 128),
             &chacha20_key,
             &empty_nonce,
         );
