@@ -7,14 +7,14 @@ repository = "https://github.com/spd789562/wz-reader-rs"
 documentation = "https://docs.rs/wz_reader"
 categories = ["parsing"]
 keywords = ["wz", "maplestory", "wzlib"]
-version = "0.0.15"
+version = "0.0.16"
 edition = "2021"
 license-file = "LICENSE.txt"
 
 [dependencies]
 aes = "0.8.4"
 ecb = "0.1.2"
-flate2 = { version = "1.0.28", default-features = false }
+flate2 = { version = "1.1.4", default-features = false }
 hashbrown = "0.14.3"
 image = { version = "0.25.0", default-features = false }
 memmap2 = "0.9.4"

@@ -121,7 +121,7 @@ impl MsFile {
                 entry_key,
                 unk3: 0,
                 unk4: 0,
-                version: self.header.version,
+                version: self.header.ms_file_version,
             };
             let image = MsImage::new(meta, &self.reader);
 

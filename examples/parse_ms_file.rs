@@ -13,7 +13,7 @@ fn main() -> Result<()> {
 
     let ms_file_node = WzNode::from_ms_file(base_path, None)?.into_lock();
 
-    // ms_file.write().unwrap().parse(&ms_file)?;
+    ms_file_node.write().unwrap().parse(&ms_file_node)?;
 
     walk_node(&ms_file_node, true, &|node: &WzNodeArc| {
         if node.read().unwrap().name.contains("text.txt") {
