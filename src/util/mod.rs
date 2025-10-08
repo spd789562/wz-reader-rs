@@ -1,4 +1,5 @@
 pub mod color;
+pub mod libvpx_decoder;
 pub mod maple_crypto_constants;
 pub mod node_util;
 pub mod parse_property;
