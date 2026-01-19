@@ -6,6 +6,8 @@ pub(crate) mod resolver;
 pub mod walk;
 pub mod wz_mutable_key;
 
+pub mod version;
+
 pub use parse_property::*;
 pub use resolver::*;
 pub use walk::*;

@@ -1,6 +1,6 @@
 use crate::{
-    directory, reader, version, Reader, SharedWzMutableKey, WzDirectory, WzNodeArc, WzNodeArcVec,
-    WzNodeCast, WzObjectType, WzReader, WzSliceReader,
+    directory, reader, util, version, Reader, SharedWzMutableKey, WzDirectory, WzNodeArc,
+    WzNodeArcVec, WzNodeCast, WzObjectType, WzReader, WzSliceReader,
 };
 use memmap2::Mmap;
 use std::fs::File;
@@ -136,20 +136,26 @@ impl WzFile {
 
         wz_file_meta.wz_with_encrypt_version_header = wz_with_encrypt_version_header;
 
+        let mut version_gen = util::version::pkg1::VersionGen::new(
+            wz_file_meta.wz_version_header,
+            wz_file_meta.patch_version,
+            2000,
+        );
+
         if wz_file_meta.patch_version == -1 {
-            let guess_range: Range<i32> = if wz_with_encrypt_version_header {
-                1..2000
+            if wz_with_encrypt_version_header {
+                version_gen.current = 1;
+                version_gen.max_version = 2000;
             } else {
                 /* not hold encver in wz_file, directly try 770 - 780 */
-                WZ_VERSION_HEADER_64BIT_START as i32..WZ_VERSION_HEADER_64BIT_START as i32 + 10
+                version_gen.current = WZ_VERSION_HEADER_64BIT_START as i32;
+                version_gen.max_version = WZ_VERSION_HEADER_64BIT_START as i32 + 10;
             };
 
             /* there has code in maplelib to detect version from maplestory.exe here */
 
-            for ver_to_decode in guess_range {
-                wz_file_meta.hash =
-                    check_and_get_version_hash(wz_file_meta.wz_version_header, ver_to_decode)
-                        as usize;
+            for (ver_to_decode, hash) in version_gen {
+                wz_file_meta.hash = hash as usize;
                 if let Ok(childs) = self.try_decode_with_wz_version_number(
                     parent,
                     &slice_reader,
@@ -166,9 +172,7 @@ impl WzFile {
             return Err(Error::ErrorGameVerHash);
         }
 
-        wz_file_meta.hash =
-            check_and_get_version_hash(wz_file_meta.wz_version_header, wz_file_meta.patch_version)
-                as usize;
+        wz_file_meta.hash = version_gen.check_and_get_version_hash() as usize;
 
         let childs = self.try_decode_with_wz_version_number(
             parent,
@@ -265,33 +269,4 @@ fn check_64bit_client(wz_reader: &WzSliceReader) -> (bool, u16) {
     }
 
     (false, 0)
-}
-
-fn check_and_get_version_hash(encver: i32, patch_version: i32) -> i32 {
-    let mut version_hash: i32 = 0;
-
-    let bind_version = &patch_version.to_string();
-
-    for i in bind_version.chars() {
-        let char_code = i.to_ascii_lowercase() as i32;
-
-        // version_hash * 2^5 + char_code + 1
-        version_hash = version_hash * 32 + char_code + 1;
-    }
-
-    if encver == patch_version {
-        return version_hash;
-    }
-
-    let enc = 0xff
-        ^ (version_hash >> 24) & 0xff
-        ^ (version_hash >> 16) & 0xff
-        ^ (version_hash >> 8) & 0xff
-        ^ version_hash & 0xff;
-
-    if enc == encver {
-        version_hash
-    } else {
-        0
-    }
 }

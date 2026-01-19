@@ -46,7 +46,7 @@ pub fn verify_iv_from_wz_img(buf: &[u8], iv: &[u8; 4]) -> bool {
 
 /// Try to guess IV from wz image use fixed value. Currently will try GMS, EMS, BMS.
 pub fn guess_iv_from_wz_img(buf: &[u8]) -> Option<[u8; 4]> {
-    // not support other then WZ_IMAGE_HEADER_BYTE_WITHOUT_OFFSET
+    // not support other then WzImageHeaderType::WithoutOffset
     if buf[0] != 0x73 {
         return None;
     }

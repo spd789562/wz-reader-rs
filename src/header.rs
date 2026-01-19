@@ -41,7 +41,7 @@ impl WzHeader<'_> {
     #[inline]
     pub fn get_wz_copyright(buf: &[u8]) -> Result<&str> {
         let fstart = Self::get_wz_fstart(buf)? as usize;
-        buf[16..fstart - 17].pread::<&str>(0).map_err(Error::from)
+        buf[16..fstart].pread::<&str>(0).map_err(Error::from)
     }
     pub fn read_from_buf(buf: &[u8]) -> Result<(WzHeader, usize)> {
         let ident = Self::get_ident(buf)?;
@@ -52,7 +52,7 @@ impl WzHeader<'_> {
 
         let copyright = Self::get_wz_copyright(buf)?;
 
-        let offset = fstart - 17;
+        let offset = fstart;
 
         Ok((
             WzHeader {
