@@ -25,20 +25,22 @@ pub enum Error {
 #[derive(Debug)]
 enum WzDirectoryType {
     UnknownType,
-    /// directory type and name maybe at some where alse
-    RetrieveStringFromOffset,
+    /// directory type and name maybe at some where alse, but usually is WzDirectory
+    MetaAtOffset,
     WzDirectory,
     WzImage,
     NewUnknownType,
 }
 
-fn get_wz_directory_type_from_byte(byte: u8) -> WzDirectoryType {
-    match byte {
-        1 => WzDirectoryType::UnknownType,
-        2 => WzDirectoryType::RetrieveStringFromOffset,
-        3 => WzDirectoryType::WzDirectory,
-        4 => WzDirectoryType::WzImage,
-        _ => WzDirectoryType::NewUnknownType,
+impl From<u8> for WzDirectoryType {
+    fn from(value: u8) -> Self {
+        match value {
+            1 => WzDirectoryType::UnknownType,
+            2 => WzDirectoryType::MetaAtOffset,
+            3 => WzDirectoryType::WzDirectory,
+            4 => WzDirectoryType::WzImage,
+            _ => WzDirectoryType::NewUnknownType,
+        }
     }
 }
 
@@ -85,14 +87,14 @@ impl WzDirectory {
 
         for _ in 0..entry_count {
             let dir_byte = reader.read_u8()?;
-            let dir_type = get_wz_directory_type_from_byte(dir_byte);
+            let dir_type = WzDirectoryType::from(dir_byte);
 
             match dir_type {
                 WzDirectoryType::UnknownType => {
                     reader.skip(4 + 4 + 2);
                     continue;
                 }
-                WzDirectoryType::RetrieveStringFromOffset => {
+                WzDirectoryType::MetaAtOffset => {
                     // skip read string offset
                     reader.skip(4);
                 }
@@ -134,7 +136,7 @@ impl WzDirectory {
 
         for _ in 0..entry_count {
             let dir_byte = reader.read_u8()?;
-            let mut dir_type = get_wz_directory_type_from_byte(dir_byte);
+            let mut dir_type: WzDirectoryType = dir_byte.into();
 
             let fname: WzNodeName;
 
@@ -144,12 +146,12 @@ impl WzDirectory {
                     reader.skip(4 + 4 + 2);
                     continue;
                 }
-                WzDirectoryType::RetrieveStringFromOffset => {
+                WzDirectoryType::MetaAtOffset => {
                     let str_offset = reader.read_i32()?;
 
                     let offset = reader.header.fstart + str_offset as usize;
 
-                    dir_type = get_wz_directory_type_from_byte(reader.read_u8_at(offset)?);
+                    dir_type = reader.read_u8_at(offset)?.into();
                     fname = reader.read_wz_string_at_offset(offset + 1)?.into();
                 }
                 WzDirectoryType::WzDirectory | WzDirectoryType::WzImage => {
