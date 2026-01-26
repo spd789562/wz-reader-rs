@@ -24,12 +24,12 @@ pub enum Error {
 
 #[derive(Debug)]
 enum WzDirectoryType {
-    UnknownType,
+    UnknownType = 1,
     /// directory type and name maybe at some where alse, but usually is WzDirectory
-    MetaAtOffset,
-    WzDirectory,
-    WzImage,
-    NewUnknownType,
+    MetaAtOffset = 2,
+    WzDirectory = 3,
+    WzImage = 4,
+    NewUnknownType = 5,
 }
 
 impl From<u8> for WzDirectoryType {
@@ -142,7 +142,7 @@ impl WzDirectory {
 
             match dir_type {
                 WzDirectoryType::UnknownType => {
-                    /* unknown, just skip this chunk */
+                    /* unknown, just skip this chunk, probably checksum(2), file size(4) and hash(4)*/
                     reader.skip(4 + 4 + 2);
                     continue;
                 }

@@ -246,6 +246,10 @@ impl<'a> WzSliceReader<'a> {
             keys: Arc::clone(key),
         }
     }
+    pub fn new_with_header(buf: &'a [u8], key: &Arc<RwLock<WzMutableKey>>) -> Self {
+        let header = buf.pread::<WzHeader>(0).unwrap_or(WzHeader::default());
+        WzSliceReader::new(buf, key).with_header(header)
+    }
     #[inline]
     pub fn with_header(self, header: WzHeader<'a>) -> Self {
         WzSliceReader { header, ..self }

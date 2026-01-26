@@ -68,11 +68,10 @@ pub fn guess_iv_from_wz_img(buf: &[u8]) -> Option<[u8; 4]> {
 }
 
 pub fn verify_iv_from_wz_file(buf: &[u8], iv: &[u8; 4]) -> Result<(), reader::Error> {
-    let reader = WzSliceReader::new(buf, &Arc::new(RwLock::new(WzMutableKey::from_iv(*iv))));
+    let reader =
+        WzSliceReader::new_with_header(buf, &Arc::new(RwLock::new(WzMutableKey::from_iv(*iv))));
 
-    let fstart = WzHeader::get_wz_fstart(buf)? as usize;
-
-    reader.seek(fstart + 2);
+    reader.seek(reader.header.data_start);
 
     let entry_count = reader.read_wz_int()?;
 
@@ -91,7 +90,7 @@ pub fn verify_iv_from_wz_file(buf: &[u8], iv: &[u8; 4]) -> Result<(), reader::Er
             2 => {
                 let str_offset = reader.read_i32()?;
 
-                let offset = reader.header.fstart + str_offset as usize;
+                let offset = reader.header.data_start + str_offset as usize;
                 // just check string can be valid string(instead of parse string lossy), so can prove the iv is valid
                 let meta = reader.read_wz_string_meta_at(offset + 1)?;
                 reader.try_resolve_wz_string_meta(

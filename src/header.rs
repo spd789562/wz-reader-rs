@@ -10,6 +10,8 @@ pub struct WzHeader<'a> {
     pub fsize: u64,
     /// when wz file's content actually start
     pub fstart: usize,
+    /// when wz directory actually start
+    pub data_start: usize,
     pub copyright: &'a str,
 }
 
@@ -65,6 +67,13 @@ impl WzHeader<'_> {
         buf[16..fstart].pread::<&str>(0).map_err(Error::from)
     }
     #[inline]
+    pub fn read_pkg2_hashes(buf: &[u8], fstart: usize) -> Result<[u32; 2]> {
+        let hash1 = buf.pread_with::<u32>(fstart, LE).map_err(Error::from)?;
+        let hash2 = buf.pread_with::<u32>(fstart + 4, LE).map_err(Error::from)?;
+
+        Ok([hash1, hash2])
+    }
+    #[inline]
     pub fn read_encrypted_version(buf: &[u8]) -> Option<u16> {
         let fstart = Self::get_wz_fstart(buf).ok()? as usize;
         let fsize = Self::get_wz_fsize(buf).ok()?;
@@ -89,6 +98,24 @@ impl WzHeader<'_> {
 
         Some(encrypted_version)
     }
+
+    #[inline]
+    pub fn get_data_start(buf: &[u8], ident: PKGVersion, fstart: usize, fsize: u64) -> usize {
+        if ident == PKGVersion::V2 {
+            fstart + 8
+        } else if Self::get_encrypted_version(buf, fstart, fsize).is_some() {
+            fstart + 2
+        } else {
+            fstart
+        }
+    }
+    pub fn read_data_start(buf: &[u8]) -> Result<usize> {
+        let ident = Self::get_ident(buf)?;
+        let fstart = Self::get_wz_fstart(buf)? as usize;
+        let fsize = Self::get_wz_fsize(buf)?;
+
+        Ok(Self::get_data_start(buf, ident, fstart, fsize))
+    }
     pub fn read_from_buf(buf: &[u8]) -> Result<(WzHeader, usize)> {
         let ident = Self::get_ident(buf)?;
 
@@ -100,11 +127,20 @@ impl WzHeader<'_> {
 
         let offset = fstart;
 
+        let data_start = if ident == PKGVersion::V2 {
+            fstart + 8
+        } else if Self::get_encrypted_version(buf, fstart, fsize).is_some() {
+            fstart + 2
+        } else {
+            fstart
+        };
+
         Ok((
             WzHeader {
                 ident,
                 fsize,
                 fstart,
+                data_start,
                 copyright,
             },
             offset,

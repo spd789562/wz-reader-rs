@@ -92,7 +92,7 @@ impl WzFile {
             WzReader::new(map).with_iv(wz_iv)
         };
 
-        let offset = reader.get_wz_fstart().map_err(|_| Error::InvalidWzFile)? + 2;
+        let offset = WzHeader::read_data_start(&reader.map).map_err(|_| Error::InvalidWzFile)?;
 
         let wz_file_meta = WzFileMeta {
             path: path.as_ref().to_str().unwrap().to_string(),
