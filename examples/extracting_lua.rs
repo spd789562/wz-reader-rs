@@ -1,7 +1,6 @@
 use std::fs::File;
 use std::io::Write;
-use wz_reader::util::{resolve_base, walk_node};
-use wz_reader::version::WzMapleVersion;
+use wz_reader::util::{resolve_base, version::WzMapleVersion, walk_node};
 use wz_reader::WzNodeCast;
 
 // usage:

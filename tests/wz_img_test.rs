@@ -1,6 +1,5 @@
 use wz_reader::property::{Vector2D, WzValue};
-use wz_reader::util::{self, node_util};
-use wz_reader::version::WzMapleVersion;
+use wz_reader::util::{self, node_util, version::WzMapleVersion};
 use wz_reader::{node, wz_image, WzNode, WzNodeArc, WzNodeCast, WzObjectType};
 
 type Error = Box<dyn std::error::Error>;

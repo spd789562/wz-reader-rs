@@ -1,4 +1,4 @@
-use crate::{version::WzMapleVersion, SharedWzMutableKey, WzNode, WzNodeArc, WzNodeCast};
+use crate::{util::version::WzMapleVersion, SharedWzMutableKey, WzNode, WzNodeArc, WzNodeCast};
 use std::fs::DirEntry;
 use std::io;
 use std::path::Path;

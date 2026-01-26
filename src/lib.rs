@@ -9,7 +9,6 @@ mod object;
 pub mod property;
 pub mod reader;
 pub mod util;
-pub mod version;
 pub mod wz_image;
 
 pub use directory::WzDirectory;

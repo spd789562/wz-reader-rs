@@ -1,5 +1,5 @@
 use crate::{
-    directory, file, ms, property, util::node_util, version, wz_image, MsFile, SharedWzMutableKey,
+    directory, file, ms, property, util, util::node_util, wz_image, MsFile, SharedWzMutableKey,
     WzFile, WzImage, WzNodeCast, WzNodeName, WzObjectType,
 };
 use hashbrown::HashMap;
@@ -90,7 +90,7 @@ impl WzNode {
     /// When not provid version and unable to detect it. Or it not valid WzFile(not contain valid header).
     pub fn from_wz_file_full<P>(
         path: P,
-        version: Option<version::WzMapleVersion>,
+        version: Option<util::version::WzMapleVersion>,
         patch_version: Option<i32>,
         parent: Option<&WzNodeArc>,
         existing_key: Option<&SharedWzMutableKey>,
@@ -101,7 +101,7 @@ impl WzNode {
         let name = path.as_ref().file_stem().unwrap().to_str().unwrap();
         let wz_file = WzFile::from_file(
             &path,
-            version.map(version::get_iv_by_maple_version),
+            version.map(util::version::get_iv_by_maple_version),
             patch_version,
             existing_key,
         )?;
@@ -137,13 +137,14 @@ impl WzNode {
     /// When provided version is incorrect or unable to detect version.
     pub fn from_img_file<P>(
         path: P,
-        version: Option<version::WzMapleVersion>,
+        version: Option<util::version::WzMapleVersion>,
         parent: Option<&WzNodeArc>,
     ) -> Result<Self, Error>
     where
         P: AsRef<Path>,
     {
-        let wz_image = WzImage::from_file(&path, version.map(version::get_iv_by_maple_version))?;
+        let wz_image =
+            WzImage::from_file(&path, version.map(util::version::get_iv_by_maple_version))?;
         Ok(WzNode::new(&wz_image.name.clone(), wz_image, parent))
     }
 

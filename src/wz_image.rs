@@ -1,5 +1,4 @@
 use crate::property::{WzLua, WzRawData};
-use crate::version::{guess_iv_from_wz_img, verify_iv_from_wz_img};
 use crate::{reader, util, Reader, WzNode, WzNodeArc, WzNodeArcVec, WzNodeName, WzReader};
 use std::sync::Arc;
 
@@ -96,12 +95,12 @@ impl WzImage {
         let map = unsafe { memmap2::Mmap::map(&file)? };
 
         let wz_iv = if let Some(iv) = wz_iv {
-            if !verify_iv_from_wz_img(&map, &iv) {
+            if !util::version::verify_iv_from_wz_img(&map, &iv) {
                 return Err(Error::WrongVersion);
             }
             iv
         } else {
-            guess_iv_from_wz_img(&map).ok_or(Error::UnableToGuessVersion)?
+            util::version::guess_iv_from_wz_img(&map).ok_or(Error::UnableToGuessVersion)?
         };
 
         let block_size = map.len();

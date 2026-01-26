@@ -1,6 +1,6 @@
 use crate::{
-    directory, reader, util, version, wz_image, Reader, SharedWzMutableKey, WzDirectory, WzHeader,
-    WzNodeArc, WzNodeArcVec, WzNodeCast, WzObjectType, WzReader, WzSliceReader,
+    directory, reader, util, wz_image, SharedWzMutableKey, WzDirectory, WzHeader, WzNodeArc,
+    WzNodeArcVec, WzNodeCast, WzObjectType, WzReader,
 };
 use memmap2::Mmap;
 use std::fs::File;
@@ -81,7 +81,7 @@ impl WzFile {
             // consider do version::verify_iv_from_wz_file here like WzImage does, but feel like it's not necessary
             iv
         } else {
-            version::guess_iv_from_wz_file(&map).ok_or(Error::UnableToGuessVersion)?
+            util::version::guess_iv_from_wz_file(&map).ok_or(Error::UnableToGuessVersion)?
         };
 
         let reader = if let Some(keys) = existing_key {
