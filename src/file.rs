@@ -1,6 +1,6 @@
 use crate::{
-    directory, reader, util, version, wz_image, Reader, SharedWzMutableKey, WzDirectory, WzNodeArc,
-    WzNodeArcVec, WzNodeCast, WzObjectType, WzReader, WzSliceReader,
+    directory, reader, util, version, wz_image, Reader, SharedWzMutableKey, WzDirectory, WzHeader,
+    WzNodeArc, WzNodeArcVec, WzNodeCast, WzObjectType, WzReader, WzSliceReader,
 };
 use memmap2::Mmap;
 use std::fs::File;
@@ -8,6 +8,8 @@ use std::sync::Arc;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+
+const WZ_VERSION_HEADER_64BIT_START: u16 = 770;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -115,25 +117,25 @@ impl WzFile {
     ) -> Result<WzNodeArcVec, Error> {
         let reader = self.reader.clone();
 
+        let slice_reader = reader.create_slice_reader();
+
+        let option_encrypt_version = WzHeader::get_encrypted_version(
+            slice_reader.buf,
+            slice_reader.header.fstart,
+            slice_reader.header.fsize,
+        );
+
         let mut wz_file_meta = WzFileMeta {
             path: "".to_string(),
             patch_version: patch_version.unwrap_or(self.wz_file_meta.patch_version),
-            wz_version_header: 0,
-            wz_with_encrypt_version_header: true,
+            wz_version_header: if let Some(encrypt_version) = option_encrypt_version {
+                encrypt_version as i32
+            } else {
+                WZ_VERSION_HEADER_64BIT_START as i32
+            },
+            wz_with_encrypt_version_header: option_encrypt_version.is_some(),
             hash: 0,
         };
-
-        let slice_reader = reader.create_slice_reader();
-
-        let (wz_with_encrypt_version_header, encrypt_version) = check_64bit_client(&slice_reader);
-
-        wz_file_meta.wz_version_header = if wz_with_encrypt_version_header {
-            encrypt_version as i32
-        } else {
-            WZ_VERSION_HEADER_64BIT_START as i32
-        };
-
-        wz_file_meta.wz_with_encrypt_version_header = wz_with_encrypt_version_header;
 
         let mut version_gen = util::version::pkg1::VersionGen::new(
             wz_file_meta.wz_version_header,
@@ -142,7 +144,7 @@ impl WzFile {
         );
 
         if wz_file_meta.patch_version == -1 {
-            if wz_with_encrypt_version_header {
+            if wz_file_meta.wz_with_encrypt_version_header {
                 version_gen.current = 1;
                 version_gen.max_version = 2000;
             } else {
@@ -232,26 +234,4 @@ impl WzFile {
             ..wz_file_meta
         };
     }
-}
-
-const WZ_VERSION_HEADER_64BIT_START: u16 = 770;
-
-fn check_64bit_client(wz_reader: &WzSliceReader) -> (bool, u16) {
-    let encrypt_version = wz_reader.read_u16_at(wz_reader.header.fstart).unwrap();
-
-    if wz_reader.header.fsize >= 2 {
-        if encrypt_version > 0xff {
-            return (false, 0);
-        }
-        if encrypt_version == 0x80 {
-            let prop_count = wz_reader.read_i32_at(wz_reader.header.fstart + 2).unwrap();
-            if prop_count > 0 && (prop_count & 0xff) == 0 && prop_count <= 0xffff {
-                return (false, 0);
-            }
-        }
-        /* the only place return actual encrypt_version */
-        return (true, encrypt_version);
-    }
-
-    (false, 0)
 }

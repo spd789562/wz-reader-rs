@@ -64,6 +64,31 @@ impl WzHeader<'_> {
         let fstart = Self::get_wz_fstart(buf)? as usize;
         buf[16..fstart].pread::<&str>(0).map_err(Error::from)
     }
+    #[inline]
+    pub fn read_encrypted_version(buf: &[u8]) -> Option<u16> {
+        let fstart = Self::get_wz_fstart(buf).ok()? as usize;
+        let fsize = Self::get_wz_fsize(buf).ok()?;
+
+        Self::get_encrypted_version(buf, fstart, fsize)
+    }
+    #[inline]
+    pub fn get_encrypted_version(buf: &[u8], fstart: usize, fsize: u64) -> Option<u16> {
+        let encrypted_version = buf.pread_with::<u16>(fstart, LE).ok()?;
+
+        if fsize < 2 || encrypted_version > 0xff {
+            return None;
+        }
+
+        if encrypted_version == 0x80 {
+            let entry_count = buf.pread_with::<i32>(fstart + 2, LE).ok()?;
+            //check entry count is valid
+            if entry_count > 0 && (entry_count & 0xff) == 0 && entry_count <= 0xffff {
+                return None;
+            }
+        }
+
+        Some(encrypted_version)
+    }
     pub fn read_from_buf(buf: &[u8]) -> Result<(WzHeader, usize)> {
         let ident = Self::get_ident(buf)?;
 
