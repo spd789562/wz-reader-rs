@@ -1,6 +1,6 @@
 use crate::property::{WzLua, WzRawData};
 use crate::version::{guess_iv_from_wz_img, verify_iv_from_wz_img};
-use crate::{reader, util, WzNode, WzNodeArc, WzNodeArcVec, WzNodeName, WzReader};
+use crate::{reader, util, Reader, WzNode, WzNodeArc, WzNodeArcVec, WzNodeName, WzReader};
 use std::sync::Arc;
 
 #[cfg(feature = "serde")]
@@ -28,8 +28,27 @@ pub enum Error {
     NotImageObject,
 }
 
-pub const WZ_IMAGE_HEADER_BYTE_WITHOUT_OFFSET: u8 = 0x73;
-pub const WZ_IMAGE_HEADER_BYTE_WITH_OFFSET: u8 = 0x1B;
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WzImageHeaderType {
+    Unknown = 0,
+    WithoutOffset = 0x73,
+    WithOffset = 0x1B,
+    PlainText = 0x01,
+    PackText = 0x23,
+}
+
+impl From<u8> for WzImageHeaderType {
+    fn from(value: u8) -> Self {
+        match value {
+            0x73 => WzImageHeaderType::WithoutOffset,
+            0x1B => WzImageHeaderType::WithOffset,
+            0x01 => WzImageHeaderType::PlainText,
+            0x23 => WzImageHeaderType::PackText,
+            _ => WzImageHeaderType::Unknown,
+        }
+    }
+}
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[cfg_attr(feature = "serde", serde(default))]
@@ -106,7 +125,7 @@ impl WzImage {
         reader.seek(self.offset);
         let header_byte = reader.read_u8()?;
 
-        if header_byte != WZ_IMAGE_HEADER_BYTE_WITHOUT_OFFSET {
+        if header_byte != WzImageHeaderType::WithoutOffset as u8 {
             return Err(Error::UnknownImageHeader(header_byte, reader.pos.get()));
         } else {
             let name = reader.read_wz_string()?;
@@ -122,6 +141,11 @@ impl WzImage {
             Ok(node) => Ok(node.1),
             Err(e) => Err(Error::from(e)),
         }
+    }
+
+    pub fn get_header_type(&self) -> WzImageHeaderType {
+        let header_byte = self.reader.read_u8_at(self.offset).unwrap_or(0);
+        WzImageHeaderType::from(header_byte)
     }
 
     /// Parse the whole `WzImage` and return all children nodes. It can be directly used when you want to keep the original order of children.
@@ -145,8 +169,8 @@ impl WzImage {
             return Ok((vec![(name, raw_data_node.into_lock())], vec![]));
         }
 
-        match header_byte {
-            0x1 => {
+        match WzImageHeaderType::from(header_byte) {
+            WzImageHeaderType::PlainText => {
                 if self.name.ends_with(".lua") {
                     let len = reader.read_wz_int()?;
                     let offset = reader.pos.get();
@@ -164,7 +188,7 @@ impl WzImage {
             // a weird format raw data, it store pure text and start by "#Property"
             // inside the data, it looks like some kind of json
             // key = { key = value, key = value, kv = { key = value, key = value } }
-            35 => {
+            WzImageHeaderType::PackText => {
                 let property_string = String::from_iter(
                     reader
                         .get_slice(self.offset..self.offset + 9)
@@ -181,7 +205,7 @@ impl WzImage {
 
                 return Ok((vec![(name, raw_data_node.into_lock())], vec![]));
             }
-            WZ_IMAGE_HEADER_BYTE_WITHOUT_OFFSET => {
+            WzImageHeaderType::WithoutOffset => {
                 let name = reader.read_wz_string()?;
                 let value = reader.read_u16()?;
                 if name != "Property" && value != 0 {
@@ -200,7 +224,12 @@ impl WzImage {
 pub fn is_lua_image(name: &str) -> bool {
     name.ends_with(".lua")
 }
-pub fn is_valid_wz_image(check_byte: u8) -> bool {
-    check_byte == WZ_IMAGE_HEADER_BYTE_WITH_OFFSET
-        || check_byte == WZ_IMAGE_HEADER_BYTE_WITHOUT_OFFSET
+
+pub fn is_valid_image_header<T: Into<WzImageHeaderType>>(header_byte: T) -> bool {
+    matches!(
+        header_byte.into(),
+        WzImageHeaderType::WithoutOffset
+            | WzImageHeaderType::PlainText
+            | WzImageHeaderType::PackText
+    )
 }

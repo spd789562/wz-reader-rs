@@ -1,10 +1,9 @@
 use crate::{
-    directory, reader, util, version, Reader, SharedWzMutableKey, WzDirectory, WzNodeArc,
+    directory, reader, util, version, wz_image, Reader, SharedWzMutableKey, WzDirectory, WzNodeArc,
     WzNodeArcVec, WzNodeCast, WzObjectType, WzReader, WzSliceReader,
 };
 use memmap2::Mmap;
 use std::fs::File;
-use std::ops::Range;
 use std::sync::Arc;
 
 #[cfg(feature = "serde")]
@@ -156,12 +155,9 @@ impl WzFile {
 
             for (ver_to_decode, hash) in version_gen {
                 wz_file_meta.hash = hash as usize;
-                if let Ok(childs) = self.try_decode_with_wz_version_number(
-                    parent,
-                    &slice_reader,
-                    &wz_file_meta,
-                    ver_to_decode,
-                ) {
+                if let Ok(childs) =
+                    self.try_decode_with_wz_version_number(parent, &wz_file_meta, ver_to_decode)
+                {
                     wz_file_meta.patch_version = ver_to_decode;
                     self.update_wz_file_meta(wz_file_meta);
                     self.is_parsed = true;
@@ -176,7 +172,6 @@ impl WzFile {
 
         let childs = self.try_decode_with_wz_version_number(
             parent,
-            &slice_reader,
             &wz_file_meta,
             wz_file_meta.patch_version,
         )?;
@@ -189,7 +184,6 @@ impl WzFile {
     fn try_decode_with_wz_version_number(
         &self,
         parent: &WzNodeArc,
-        reader: &WzSliceReader,
         meta: &WzFileMeta,
         use_maplestory_patch_version: i32,
     ) -> Result<WzNodeArcVec, Error> {
@@ -209,27 +203,18 @@ impl WzFile {
             .find(|(_, node)| matches!(node.read().unwrap().object_type, WzObjectType::Image(_)));
 
         if let Some((name, image_node)) = first_image_node {
-            let offset = image_node
+            let header_type = image_node
                 .read()
                 .unwrap()
                 .try_as_image()
-                .map(|node| node.offset)
+                .map(|node| node.get_header_type())
                 .ok_or(Error::ErrorGameVerHash)?;
 
-            let check_byte = reader
-                .read_u8_at(offset)
-                .map_err(|_| Error::ErrorGameVerHash)?;
-
-            match check_byte {
-                0x73 | 0x1b | 0x01 => {}
-                _ => {
-                    /* 0x30, 0x6C, 0xBC */
-                    println!(
-                        "UnknownImageHeader: check_byte = {}, File Name = {}",
-                        check_byte, name
-                    );
-                    return Err(Error::UnknownImageHeader(check_byte, name.to_string()));
-                }
+            if !wz_image::is_valid_image_header(header_type) {
+                return Err(Error::UnknownImageHeader(
+                    header_type as u8,
+                    name.to_string(),
+                ));
             }
         }
 
