@@ -6,7 +6,7 @@ type Result<T> = std::result::Result<T, Error>;
 /// Wz file's header.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct WzHeader<'a> {
-    pub ident: &'a str,
+    pub ident: PKGVersion,
     pub fsize: u64,
     /// when wz file's content actually start
     pub fstart: usize,
@@ -20,6 +20,24 @@ impl<'a> ctx::TryFromCtx<'a, Endian> for WzHeader<'a> {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PKGVersion {
+    V1,
+    V2,
+    #[default]
+    Unknown,
+}
+
+impl From<&str> for PKGVersion {
+    fn from(value: &str) -> Self {
+        match value.as_ref() {
+            "PKG1" => PKGVersion::V1,
+            "PKG2" => PKGVersion::V2,
+            _ => PKGVersion::Unknown,
+        }
+    }
+}
+
 impl WzHeader<'_> {
     #[inline]
     pub fn get_header_slice(buf: &[u8]) -> &[u8] {
@@ -27,8 +45,11 @@ impl WzHeader<'_> {
         &buf[0..fstart]
     }
     #[inline]
-    pub fn get_ident(buf: &[u8]) -> Result<&str> {
-        buf[0..4].pread::<&str>(0).map_err(Error::from)
+    pub fn get_ident(buf: &[u8]) -> Result<PKGVersion> {
+        buf[0..4]
+            .pread::<&str>(0)
+            .map(|s| PKGVersion::from(s))
+            .map_err(Error::from)
     }
     #[inline]
     pub fn get_wz_fsize(buf: &[u8]) -> Result<u64> {

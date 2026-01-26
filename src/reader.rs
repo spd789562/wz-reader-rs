@@ -3,9 +3,9 @@ use scroll::{Pread, LE};
 use std::cell::Cell;
 use std::sync::{Arc, RwLock};
 
+use crate::header::WzHeader;
 use crate::property::{encrypt_str, WzStringMeta, WzStringType};
 use crate::util::WzMutableKey;
-use crate::WzHeader;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -256,7 +256,8 @@ impl<'a> WzSliceReader<'a> {
     }
     #[inline]
     pub fn get_slice_from_current(&self, len: usize) -> &[u8] {
-        &self.buf[self.pos.get()..self.pos.get() + len]
+        let pos = self.pos.get();
+        &self.buf[pos..pos + len]
     }
     #[inline]
     pub fn is_valid_pos(&self, pos: usize) -> bool {
@@ -284,62 +285,72 @@ impl<'a> WzSliceReader<'a> {
     }
     #[inline]
     pub fn read_u8(&self) -> Result<u8> {
-        let res = self.read_u8_at(self.pos.get());
-        self.pos.set(self.pos.get() + 1);
+        let pos = self.pos.get();
+        let res = self.read_u8_at(pos);
+        self.pos.set(pos + 1);
         res
     }
     #[inline]
     pub fn read_u16(&self) -> Result<u16> {
-        let res = self.read_u16_at(self.pos.get());
-        self.pos.set(self.pos.get() + 2);
+        let pos = self.pos.get();
+        let res = self.read_u16_at(pos);
+        self.pos.set(pos + 2);
         res
     }
     #[inline]
     pub fn read_u32(&self) -> Result<u32> {
-        let res = self.read_u32_at(self.pos.get());
-        self.pos.set(self.pos.get() + 4);
+        let pos = self.pos.get();
+        let res = self.read_u32_at(pos);
+        self.pos.set(pos + 4);
         res
     }
     #[inline]
     pub fn read_u64(&self) -> Result<u64> {
-        let res = self.read_u64_at(self.pos.get());
-        self.pos.set(self.pos.get() + 8);
+        let pos = self.pos.get();
+        let res = self.read_u64_at(pos);
+        self.pos.set(pos + 8);
         res
     }
     #[inline]
     pub fn read_i8(&self) -> Result<i8> {
-        let res = self.read_i8_at(self.pos.get());
-        self.pos.set(self.pos.get() + 1);
+        let pos = self.pos.get();
+        let res = self.read_i8_at(pos);
+        self.pos.set(pos + 1);
         res
     }
     #[inline]
     pub fn read_i16(&self) -> Result<i16> {
-        let res = self.read_i16_at(self.pos.get());
-        self.pos.set(self.pos.get() + 2);
+        let pos = self.pos.get();
+        let res = self.read_i16_at(pos);
+        self.pos.set(pos + 2);
         res
     }
     #[inline]
     pub fn read_i32(&self) -> Result<i32> {
-        let res = self.read_i32_at(self.pos.get());
-        self.pos.set(self.pos.get() + 4);
+        let pos = self.pos.get();
+        let res = self.read_i32_at(pos);
+        self.pos.set(pos + 4);
         res
     }
     #[inline]
     pub fn read_i64(&self) -> Result<i64> {
-        let res = self.read_i64_at(self.pos.get());
-        self.pos.set(self.pos.get() + 8);
+        let pos = self.pos.get();
+        let res = self.read_i64_at(pos);
+        self.pos.set(pos + 8);
         res
     }
     #[inline]
     pub fn read_float(&self) -> Result<f32> {
-        let res = self.read_float_at(self.pos.get());
-        self.pos.set(self.pos.get() + 4);
+        let pos = self.pos.get();
+        let res = self.read_float_at(pos);
+        self.pos.set(pos + 4);
         res
     }
     #[inline]
     pub fn read_double(&self) -> Result<f64> {
-        let res = self.read_double_at(self.pos.get());
-        self.pos.set(self.pos.get() + 8);
+        let pos = self.pos.get();
+        let res = self.read_double_at(pos);
+        self.pos.set(pos + 8);
         res
     }
     #[inline]
@@ -507,16 +518,43 @@ impl<'a> WzSliceReader<'a> {
         // let offset: usize = self.pos.get();
         let offset = offset.unwrap_or(self.pos.get());
 
-        let fstart = self.header.fstart;
+        let header_size = self.header.fstart;
 
-        let offset = offset.wrapping_sub(fstart) ^ 0xFFFFFFFF;
+        let offset = offset.wrapping_sub(header_size) ^ 0xFFFFFFFF;
         let offset = offset.wrapping_mul(hash) & 0xFFFFFFFF;
         let offset = offset.wrapping_sub(WZ_OFFSET as usize);
+        // it's pretty important need to cast to i32 first usize.rotate_left will give wrong result
         let offset = (offset as i32).rotate_left((offset as u32) & 0x1F) as usize & 0xFFFFFFFF;
 
         let encrypted_offset = self.read_u32()? as usize;
         let offset = (offset ^ encrypted_offset) & 0xFFFFFFFF;
-        let offset = offset.wrapping_add(fstart * 2) & 0xFFFFFFFF;
+        let offset = offset.wrapping_add(header_size * 2) & 0xFFFFFFFF;
+
+        Ok(offset)
+    }
+    #[inline]
+    pub fn read_wz_offset_pkg2(
+        &self,
+        hash: usize,
+        pkg2_hash1: usize,
+        offset: Option<usize>,
+    ) -> Result<usize> {
+        let offset = offset.unwrap_or(self.pos.get());
+
+        let header_size = self.header.fsize as usize;
+
+        let distance = ((hash ^ pkg2_hash1) & 0x1F) as u32;
+
+        let offset = offset.wrapping_add(0xFFFFFFFC).wrapping_sub(header_size);
+        let offset = !offset;
+        let offset = offset.wrapping_mul(hash) & 0xFFFFFFFF;
+        let offset = offset.wrapping_sub(WZ_OFFSET as usize);
+        let offset = offset ^ (pkg2_hash1 as usize).wrapping_mul(0x01010101);
+        let offset = (offset as i32).rotate_left(distance) as usize & 0xFFFFFFFF;
+
+        let encrypted_offset = self.read_u32()? as usize;
+        let offset = (offset ^ encrypted_offset) & 0xFFFFFFFF;
+        let offset = offset.wrapping_add(header_size) & 0xFFFFFFFF;
 
         Ok(offset)
     }
@@ -849,6 +887,7 @@ pub fn get_decrypt_slice(
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::header::PKGVersion;
     use crate::util::maple_crypto_constants::{WZ_GMSIV, WZ_MSEAIV};
     use crate::util::WzMutableKey;
 
@@ -981,7 +1020,7 @@ mod test {
         let reader = WzVecReader::new(setup()?);
 
         let wz_header = reader.create_header();
-        assert_eq!(wz_header.ident, "PKG1");
+        assert_eq!(wz_header.ident, PKGVersion::V1);
         assert_eq!(wz_header.fsize, 364);
         assert_eq!(wz_header.fstart, 60);
         assert_eq!(
