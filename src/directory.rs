@@ -1,6 +1,6 @@
 use crate::{
-    reader, Reader, WzImage, WzNode, WzNodeArc, WzNodeArcVec, WzNodeName, WzObjectType, WzReader,
-    WzSliceReader,
+    reader, PKGVersion, Reader, WzHeader, WzImage, WzNode, WzNodeArc, WzNodeArcVec, WzNodeName,
+    WzObjectType, WzReader, WzSliceReader,
 };
 use std::sync::Arc;
 
@@ -19,6 +19,8 @@ pub enum Error {
     InvalidWzVersion,
     #[error("Entry count overflow, Invalid wz version used for decryption, try parsing other version numbers.")]
     InvalidEntryCount,
+    #[error("Unknown pkg version, can't resolve children")]
+    UnknownPkgVersion,
     #[error("Binary reading error")]
     ReaderError(#[from] reader::Error),
 }
@@ -118,6 +120,20 @@ impl WzDirectory {
 
         reader.seek(self.offset);
 
+        if reader.header.ident == PKGVersion::V1 {
+            self.resolve_children_pkg1(&reader, parent)
+        } else if reader.header.ident == PKGVersion::V2 {
+            self.resolve_children_pkg2(&reader, parent)
+        } else {
+            Err(Error::UnknownPkgVersion)
+        }
+    }
+
+    fn resolve_children_pkg1(
+        &self,
+        reader: &WzSliceReader,
+        parent: &WzNodeArc,
+    ) -> Result<WzNodeArcVec, Error> {
         let entry_count = reader.read_wz_int()?;
 
         if !(0..=1000000).contains(&entry_count) {
@@ -165,6 +181,51 @@ impl WzDirectory {
 
         Ok(nodes)
     }
+
+    fn resolve_children_pkg2(
+        &self,
+        reader: &WzSliceReader,
+        parent: &WzNodeArc,
+    ) -> Result<WzNodeArcVec, Error> {
+        let encrypted_entry_count = reader.read_wz_int()?;
+
+        let wz_dir_entries: Vec<WzDirectoryEntry> = vec![];
+
+        loop {
+            let entry = WzDirectoryEntry::read_pkg2_entry(&reader, encrypted_entry_count)?;
+
+            match entry.dir_type {
+                WzDirectoryType::UnknownType => {
+                    break;
+                }
+                WzDirectoryType::NewUnknownType(dir_byte) => {
+                    println!("NewUnknownType: {}", dir_byte);
+                    return Err(Error::UnknownWzDirectoryType(dir_byte, reader.pos.get()));
+                }
+                _ => {
+                    // do nothing
+                }
+            }
+        }
+
+        let encrypted_offset_count = reader.read_wz_int()?;
+
+        if encrypted_offset_count != encrypted_entry_count || wz_dir_entries.len() == 0 {
+            return Err(Error::InvalidWzVersion);
+        }
+
+        let mut nodes: WzNodeArcVec = Vec::with_capacity(wz_dir_entries.len() as usize);
+
+        let [hash1, _] = WzHeader::read_pkg2_hashes(reader.buf, reader.header.fstart)?;
+
+        for mut entry in wz_dir_entries {
+            entry.offset = reader.read_wz_offset_pkg2(self.hash, hash1 as usize, None)?;
+
+            nodes.push(entry.into_wz_node_tuple(parent, &self));
+        }
+
+        Ok(nodes)
+    }
 }
 
 #[derive(Debug, Default)]
@@ -204,6 +265,40 @@ impl WzDirectoryEntry {
         entry.size = reader.read_wz_int()? as usize;
         entry._checksum = reader.read_wz_int()?;
         entry.offset = reader.read_wz_offset(hash, None)?;
+
+        Ok(entry)
+    }
+
+    pub fn read_pkg2_entry(
+        reader: &WzSliceReader,
+        encrypted_entry_count: i32,
+    ) -> Result<Self, Error> {
+        let mut entry = WzDirectoryEntry::default();
+        entry.dir_type = reader.read_u8()?.into();
+
+        match entry.dir_type {
+            WzDirectoryType::WzDirectory | WzDirectoryType::WzImage => {
+                entry.name = reader.read_wz_string()?.into();
+            }
+            WzDirectoryType::NewUnknownType(_) => {
+                let current_pos = reader.pos.get();
+                reader.pos.set(current_pos - 1);
+                let test_value = reader.read_wz_int()?;
+                // if reach the value is same as encrypted_entry_count, mean we reach the end of the entries
+                if test_value == encrypted_entry_count {
+                    reader.pos.set(current_pos - 1);
+                    entry.dir_type = WzDirectoryType::UnknownType;
+                }
+                return Ok(entry);
+            }
+            _ => {
+                return Err(Error::InvalidWzVersion);
+            }
+        }
+
+        entry.size = reader.read_wz_int()? as usize;
+        entry._checksum = reader.read_wz_int()?;
+        entry.offset = reader.pos.get();
 
         Ok(entry)
     }

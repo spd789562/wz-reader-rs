@@ -1,6 +1,6 @@
 use crate::{
-    directory, reader, util, wz_image, SharedWzMutableKey, WzDirectory, WzHeader, WzNodeArc,
-    WzNodeArcVec, WzNodeCast, WzObjectType, WzReader,
+    directory, reader, util, wz_image, PKGVersion, SharedWzMutableKey, WzDirectory, WzHeader,
+    WzNodeArc, WzNodeArcVec, WzNodeCast, WzObjectType, WzReader, WzSliceReader,
 };
 use memmap2::Mmap;
 use std::fs::File;
@@ -29,6 +29,8 @@ pub enum Error {
     UnknownImageHeader(u8, String),
     #[error("Unable to guess version")]
     UnableToGuessVersion,
+    #[error("Unknown pkg version, can't resolve children")]
+    UnknownPkgVersion,
 }
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -119,6 +121,19 @@ impl WzFile {
 
         let slice_reader = reader.create_slice_reader();
 
+        match slice_reader.header.ident {
+            PKGVersion::V1 => self.parse_pkg1(parent, patch_version, slice_reader),
+            PKGVersion::V2 => self.parse_pkg2(parent, slice_reader),
+            _ => Err(Error::UnknownPkgVersion),
+        }
+    }
+
+    fn parse_pkg1(
+        &mut self,
+        parent: &WzNodeArc,
+        patch_version: Option<i32>,
+        slice_reader: WzSliceReader,
+    ) -> Result<WzNodeArcVec, Error> {
         let option_encrypt_version = WzHeader::get_encrypted_version(
             slice_reader.buf,
             slice_reader.header.fstart,
@@ -183,6 +198,36 @@ impl WzFile {
         Ok(childs)
     }
 
+    fn parse_pkg2(
+        &mut self,
+        parent: &WzNodeArc,
+        slice_reader: WzSliceReader,
+    ) -> Result<WzNodeArcVec, Error> {
+        let [hash1, hash2] =
+            WzHeader::read_pkg2_hashes(slice_reader.buf, slice_reader.header.fstart)?;
+
+        let version_gen = util::version::pkg2::VersionGen::new(hash1, hash2);
+
+        let mut wz_file_meta = WzFileMeta {
+            path: "".to_string(),
+            patch_version: -1,
+            wz_version_header: 0,
+            wz_with_encrypt_version_header: false,
+            hash: 0,
+        };
+
+        for hash in version_gen {
+            wz_file_meta.hash = hash as usize;
+            if let Ok(childs) = self.try_decode_with_wz_version_number(parent, &wz_file_meta, -1) {
+                self.update_wz_file_meta(wz_file_meta);
+                self.is_parsed = true;
+                return Ok(childs);
+            }
+        }
+
+        Err(Error::ErrorGameVerHash)
+    }
+
     fn try_decode_with_wz_version_number(
         &self,
         parent: &WzNodeArc,
@@ -195,8 +240,6 @@ impl WzFile {
 
         let node = WzDirectory::new(self.offset, self.block_size, &self.reader, false)
             .with_hash(meta.hash);
-
-        node.verify_hash()?;
 
         let childs = node.resolve_children(parent)?;
 
