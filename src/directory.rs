@@ -1,5 +1,6 @@
 use crate::{
     reader, Reader, WzImage, WzNode, WzNodeArc, WzNodeArcVec, WzNodeName, WzObjectType, WzReader,
+    WzSliceReader,
 };
 use std::sync::Arc;
 
@@ -22,14 +23,16 @@ pub enum Error {
     ReaderError(#[from] reader::Error),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
+#[repr(u8)]
 enum WzDirectoryType {
+    #[default]
     UnknownType = 1,
     /// directory type and name maybe at some where alse, but usually is WzDirectory
     MetaAtOffset = 2,
     WzDirectory = 3,
     WzImage = 4,
-    NewUnknownType = 5,
+    NewUnknownType(u8),
 }
 
 impl From<u8> for WzDirectoryType {
@@ -39,7 +42,7 @@ impl From<u8> for WzDirectoryType {
             2 => WzDirectoryType::MetaAtOffset,
             3 => WzDirectoryType::WzDirectory,
             4 => WzDirectoryType::WzImage,
-            _ => WzDirectoryType::NewUnknownType,
+            _ => WzDirectoryType::NewUnknownType(value),
         }
     }
 }
@@ -86,34 +89,23 @@ impl WzDirectory {
         }
 
         for _ in 0..entry_count {
-            let dir_byte = reader.read_u8()?;
-            let dir_type = WzDirectoryType::from(dir_byte);
+            let entry = WzDirectoryEntry::read_pkg1_entry(&reader, self.hash)?;
 
-            match dir_type {
+            match entry.dir_type {
                 WzDirectoryType::UnknownType => {
+                    /* unknown, just skip this chunk, probably checksum(2), file size(4) and hash(4)*/
                     reader.skip(4 + 4 + 2);
                     continue;
                 }
-                WzDirectoryType::MetaAtOffset => {
-                    // skip read string offset
-                    reader.skip(4);
+                WzDirectoryType::NewUnknownType(dir_byte) => {
+                    return Err(Error::UnknownWzDirectoryType(dir_byte, reader.pos.get()));
                 }
-                WzDirectoryType::WzDirectory | WzDirectoryType::WzImage => {
-                    reader.read_wz_string()?;
-                }
-                WzDirectoryType::NewUnknownType => {
-                    return Err(Error::UnknownWzDirectoryType(dir_byte, reader.pos.get()))
+                _ => {
+                    // do nothing
                 }
             }
 
-            let fsize = reader.read_wz_int()?;
-            reader.read_wz_int()?;
-            let offset = reader.read_wz_offset(self.hash, None)?;
-            let buf_start = offset;
-
-            let buf_end = buf_start + fsize as usize;
-
-            if !reader.is_valid_pos(buf_end) {
+            if !reader.is_valid_pos(entry.offset + entry.size) {
                 return Err(Error::InvalidWzVersion);
             }
         }
@@ -135,67 +127,31 @@ impl WzDirectory {
         let mut nodes: WzNodeArcVec = Vec::with_capacity(entry_count as usize);
 
         for _ in 0..entry_count {
-            let dir_byte = reader.read_u8()?;
-            let mut dir_type: WzDirectoryType = dir_byte.into();
+            let entry = WzDirectoryEntry::read_pkg1_entry(&reader, self.hash)?;
 
-            let fname: WzNodeName;
-
-            match dir_type {
+            match entry.dir_type {
                 WzDirectoryType::UnknownType => {
                     /* unknown, just skip this chunk, probably checksum(2), file size(4) and hash(4)*/
                     reader.skip(4 + 4 + 2);
                     continue;
                 }
-                WzDirectoryType::MetaAtOffset => {
-                    let str_offset = reader.read_i32()?;
-
-                    let offset = reader.header.fstart + str_offset as usize;
-
-                    dir_type = reader.read_u8_at(offset)?.into();
-                    fname = reader.read_wz_string_at_offset(offset + 1)?.into();
-                }
-                WzDirectoryType::WzDirectory | WzDirectoryType::WzImage => {
-                    fname = reader.read_wz_string()?.into();
-                }
-                WzDirectoryType::NewUnknownType => {
+                WzDirectoryType::NewUnknownType(dir_byte) => {
                     println!("NewUnknownType: {}", dir_byte);
                     return Err(Error::UnknownWzDirectoryType(dir_byte, reader.pos.get()));
                 }
+                _ => {
+                    // do nothing
+                }
             }
 
-            let fsize = reader.read_wz_int()?;
-            let _checksum = reader.read_wz_int()?;
-            let offset = reader.read_wz_offset(self.hash, None)?;
-            let buf_start = offset;
-
-            let buf_end = buf_start + fsize as usize;
-
-            if !reader.is_valid_pos(buf_end) {
+            if !reader.is_valid_pos(entry.offset + entry.size) {
                 return Err(Error::InvalidWzVersion);
             }
 
-            match dir_type {
-                WzDirectoryType::WzDirectory => {
-                    let wz_dir = WzDirectory::new(offset, fsize as usize, &self.reader, false)
-                        .with_hash(self.hash);
-
-                    let obj_node = WzNode::new(&fname, wz_dir, Some(parent));
-
-                    nodes.push((fname, obj_node.into_lock()));
-                }
-                WzDirectoryType::WzImage => {
-                    let wz_image = WzImage::new(&fname, offset, fsize as usize, &self.reader);
-
-                    let obj_node = WzNode::new(&fname, wz_image, Some(parent));
-
-                    nodes.push((fname, obj_node.into_lock()));
-                }
-                _ => {
-                    // should never be here
-                }
-            }
+            nodes.push(entry.into_wz_node_tuple(parent, &self));
         }
 
+        // if there has any directory, parse it since it's probably cheep
         for (_, node) in nodes.iter() {
             let mut write = node.write().unwrap();
             if let WzObjectType::Directory(dir) = &mut write.object_type {
@@ -208,5 +164,72 @@ impl WzDirectory {
         }
 
         Ok(nodes)
+    }
+}
+
+#[derive(Debug, Default)]
+struct WzDirectoryEntry {
+    name: WzNodeName,
+    dir_type: WzDirectoryType,
+    size: usize,
+    offset: usize,
+    _checksum: i32,
+}
+
+impl WzDirectoryEntry {
+    pub fn read_pkg1_entry(reader: &WzSliceReader, hash: usize) -> Result<Self, Error> {
+        let mut entry = WzDirectoryEntry::default();
+        entry.dir_type = reader.read_u8()?.into();
+
+        match entry.dir_type {
+            WzDirectoryType::UnknownType => {
+                return Ok(entry);
+            }
+            WzDirectoryType::MetaAtOffset => {
+                let str_offset = reader.read_i32()?;
+
+                let offset = reader.header.fstart + str_offset as usize;
+
+                entry.dir_type = reader.read_u8_at(offset)?.into();
+                entry.name = reader.read_wz_string_at_offset(offset + 1)?.into();
+            }
+            WzDirectoryType::WzDirectory | WzDirectoryType::WzImage => {
+                entry.name = reader.read_wz_string()?.into();
+            }
+            WzDirectoryType::NewUnknownType(_) => {
+                return Ok(entry);
+            }
+        }
+
+        entry.size = reader.read_wz_int()? as usize;
+        entry._checksum = reader.read_wz_int()?;
+        entry.offset = reader.read_wz_offset(hash, None)?;
+
+        Ok(entry)
+    }
+
+    pub fn into_wz_node_tuple(
+        self,
+        parent: &WzNodeArc,
+        wz_dir: &WzDirectory,
+    ) -> (WzNodeName, WzNodeArc) {
+        let node: WzNode;
+
+        match self.dir_type {
+            WzDirectoryType::WzDirectory => {
+                let wz_dir = WzDirectory::new(self.offset, self.size, &wz_dir.reader, false)
+                    .with_hash(wz_dir.hash);
+                node = WzNode::new(&self.name, wz_dir, Some(parent));
+            }
+            WzDirectoryType::WzImage => {
+                let wz_image = WzImage::new(&self.name, self.offset, self.size, &wz_dir.reader);
+                node = WzNode::new(&self.name, wz_image, Some(parent));
+            }
+            _ => {
+                node = WzNode::empty();
+            }
+        }
+
+        (self.name, node.into_lock())
     }
 }
