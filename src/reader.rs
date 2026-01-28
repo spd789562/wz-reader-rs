@@ -539,28 +539,30 @@ impl<'a> WzSliceReader<'a> {
     #[inline]
     pub fn read_wz_offset_pkg2(
         &self,
-        hash: usize,
-        pkg2_hash1: usize,
+        hash: u32,
+        pkg2_hash1: u32,
         offset: Option<usize>,
     ) -> Result<usize> {
-        let offset = offset.unwrap_or(self.pos.get());
+        // different from pkg1, use the offset 'after' read the encrypted offset
+        let encrypted_offset = self.read_u32()?;
 
-        let header_size = self.header.fsize as usize;
+        let offset = offset.unwrap_or(self.pos.get()) as u32;
 
-        let distance = ((hash ^ pkg2_hash1) & 0x1F) as u32;
+        let header_size = self.header.fstart as u32;
+
+        let distance = ((hash ^ pkg2_hash1) & 0x1F) as u8;
 
         let offset = offset.wrapping_add(0xFFFFFFFC).wrapping_sub(header_size);
-        let offset = !offset;
-        let offset = offset.wrapping_mul(hash) & 0xFFFFFFFF;
-        let offset = offset.wrapping_sub(WZ_OFFSET as usize);
-        let offset = offset ^ (pkg2_hash1 as usize).wrapping_mul(0x01010101);
-        let offset = (offset as i32).rotate_left(distance) as usize & 0xFFFFFFFF;
+        let offset = !offset as u32;
+        let offset = offset.wrapping_mul(hash);
+        let offset = offset.wrapping_sub(WZ_OFFSET as u32);
+        let offset = offset ^ pkg2_hash1.wrapping_mul(0x01010101);
+        let offset = offset.rotate_left(distance as u32);
 
-        let encrypted_offset = self.read_u32()? as usize;
-        let offset = (offset ^ encrypted_offset) & 0xFFFFFFFF;
-        let offset = offset.wrapping_add(header_size) & 0xFFFFFFFF;
+        let offset = offset ^ encrypted_offset;
+        let offset = offset.wrapping_add(header_size);
 
-        Ok(offset)
+        Ok(offset as usize)
     }
 }
 

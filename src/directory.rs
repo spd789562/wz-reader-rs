@@ -189,7 +189,7 @@ impl WzDirectory {
     ) -> Result<WzNodeArcVec, Error> {
         let encrypted_entry_count = reader.read_wz_int()?;
 
-        let wz_dir_entries: Vec<WzDirectoryEntry> = vec![];
+        let mut wz_dir_entries: Vec<WzDirectoryEntry> = vec![];
 
         loop {
             let entry = WzDirectoryEntry::read_pkg2_entry(&reader, encrypted_entry_count)?;
@@ -203,7 +203,7 @@ impl WzDirectory {
                     return Err(Error::UnknownWzDirectoryType(dir_byte, reader.pos.get()));
                 }
                 _ => {
-                    // do nothing
+                    wz_dir_entries.push(entry);
                 }
             }
         }
@@ -219,7 +219,11 @@ impl WzDirectory {
         let [hash1, _] = WzHeader::read_pkg2_hashes(reader.buf, reader.header.fstart)?;
 
         for mut entry in wz_dir_entries {
-            entry.offset = reader.read_wz_offset_pkg2(self.hash, hash1 as usize, None)?;
+            entry.offset = reader.read_wz_offset_pkg2(self.hash as u32, hash1, None)?;
+
+            if !reader.is_valid_pos(entry.offset + entry.size) {
+                return Err(Error::InvalidWzVersion);
+            }
 
             nodes.push(entry.into_wz_node_tuple(parent, &self));
         }
