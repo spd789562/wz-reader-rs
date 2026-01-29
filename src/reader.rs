@@ -868,24 +868,21 @@ pub fn get_decrypt_slice(
     len: usize,
     keys: &Arc<RwLock<WzMutableKey>>,
 ) -> Result<Vec<u8>> {
-    let is_need_mut = {
-        let read = keys.read().unwrap();
-        !read.is_enough(len) && !read.without_decrypt
-    };
+    let mut original = buf.to_vec();
 
-    if is_need_mut {
-        let mut key = keys.write().unwrap();
-        key.ensure_key_size(len)
+    let mut write = keys.write().unwrap();
+
+    if write.without_decrypt {
+        return Ok(original);
+    }
+
+    if !write.is_enough(len) && !write.without_decrypt {
+        write
+            .ensure_key_size(len)
             .map_err(|_| Error::DecryptError(len))?;
     }
 
-    let keys = keys.read().unwrap();
-
-    let mut original = buf.to_vec();
-
-    if !keys.without_decrypt {
-        keys.decrypt_slice(&mut original);
-    }
+    write.decrypt_slice(&mut original);
 
     Ok(original)
 }
@@ -893,8 +890,8 @@ pub fn get_decrypt_slice(
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::header::PKGVersion;
     use crate::util::maple_crypto_constants::{WZ_GMSIV, WZ_MSEAIV};
+    use crate::util::version::PKGVersion;
     use crate::util::WzMutableKey;
 
     type Error = Box<dyn std::error::Error>;

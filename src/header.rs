@@ -1,4 +1,5 @@
 use super::reader::Error;
+use crate::util::version::PKGVersion;
 use scroll::{ctx, Endian, Pread, LE};
 
 type Result<T> = std::result::Result<T, Error>;
@@ -19,24 +20,6 @@ impl<'a> ctx::TryFromCtx<'a, Endian> for WzHeader<'a> {
     type Error = Error;
     fn try_from_ctx(src: &'a [u8], _: Endian) -> std::result::Result<(Self, usize), Self::Error> {
         Self::read_from_buf(src)
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum PKGVersion {
-    V1,
-    V2,
-    #[default]
-    Unknown,
-}
-
-impl From<&str> for PKGVersion {
-    fn from(value: &str) -> Self {
-        match value.as_ref() {
-            "PKG1" => PKGVersion::V1,
-            "PKG2" => PKGVersion::V2,
-            _ => PKGVersion::Unknown,
-        }
     }
 }
 

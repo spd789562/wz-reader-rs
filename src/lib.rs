@@ -22,3 +22,6 @@ pub use node_name::*;
 pub use object::*;
 pub use reader::{Reader, SharedWzMutableKey, WzReader, WzSliceReader};
 pub use wz_image::{WzImage, WzImageHeaderType};
+
+#[deprecated(note = "use util::version instead")]
+pub use util::version;

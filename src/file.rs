@@ -1,6 +1,6 @@
 use crate::{
-    directory, reader, util, wz_image, PKGVersion, SharedWzMutableKey, WzDirectory, WzHeader,
-    WzNodeArc, WzNodeArcVec, WzNodeCast, WzObjectType, WzReader, WzSliceReader,
+    directory, reader, util, util::version::PKGVersion, wz_image, SharedWzMutableKey, WzDirectory,
+    WzHeader, WzNodeArc, WzNodeArcVec, WzNodeCast, WzObjectType, WzReader, WzSliceReader,
 };
 use memmap2::Mmap;
 use std::fs::File;

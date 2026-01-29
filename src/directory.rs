@@ -1,6 +1,6 @@
 use crate::{
-    reader, PKGVersion, Reader, WzHeader, WzImage, WzNode, WzNodeArc, WzNodeArcVec, WzNodeName,
-    WzObjectType, WzReader, WzSliceReader,
+    reader, util::version::PKGVersion, Reader, WzHeader, WzImage, WzNode, WzNodeArc, WzNodeArcVec,
+    WzNodeName, WzObjectType, WzReader, WzSliceReader,
 };
 use std::sync::Arc;
 
@@ -27,7 +27,7 @@ pub enum Error {
 
 #[derive(Debug, Default)]
 #[repr(u8)]
-enum WzDirectoryType {
+pub(crate) enum WzDirectoryType {
     #[default]
     UnknownType = 1,
     /// directory type and name maybe at some where alse, but usually is WzDirectory
