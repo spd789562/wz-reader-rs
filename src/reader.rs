@@ -518,10 +518,12 @@ impl<'a> WzSliceReader<'a> {
         self.read_wz_int64()
     }
     #[inline]
-    pub fn read_wz_offset(&self, hash: usize, offset: Option<usize>) -> Result<usize> {
-        // let offset: usize = self.pos.get();
-        let offset = offset.unwrap_or(self.pos.get());
-
+    pub fn read_wz_offset(
+        &self,
+        hash: usize,
+        encrypted_offset: u32,
+        offset: usize,
+    ) -> Result<usize> {
         let header_size = self.header.fstart;
 
         let offset = offset.wrapping_sub(header_size) ^ 0xFFFFFFFF;
@@ -530,8 +532,7 @@ impl<'a> WzSliceReader<'a> {
         // it's pretty important need to cast to i32 first usize.rotate_left will give wrong result
         let offset = (offset as i32).rotate_left((offset as u32) & 0x1F) as usize & 0xFFFFFFFF;
 
-        let encrypted_offset = self.read_u32()? as usize;
-        let offset = (offset ^ encrypted_offset) & 0xFFFFFFFF;
+        let offset = (offset ^ (encrypted_offset as usize)) & 0xFFFFFFFF;
         let offset = offset.wrapping_add(header_size * 2) & 0xFFFFFFFF;
 
         Ok(offset)
@@ -541,13 +542,10 @@ impl<'a> WzSliceReader<'a> {
         &self,
         hash: u32,
         pkg2_hash1: u32,
-        offset: Option<usize>,
+        encrypted_offset: u32,
+        offset: usize,
     ) -> Result<usize> {
-        // different from pkg1, use the offset 'after' read the encrypted offset
-        let encrypted_offset = self.read_u32()?;
-
-        let offset = offset.unwrap_or(self.pos.get()) as u32;
-
+        let offset = offset as u32;
         let header_size = self.header.fstart as u32;
 
         let distance = ((hash ^ pkg2_hash1) & 0x1F) as u8;

@@ -152,6 +152,8 @@ impl WzFile {
             hash: 0,
         };
 
+        let mut wz_dir = WzDirectory::new(self.offset, self.block_size, &self.reader, false);
+
         let mut version_gen = util::version::pkg1::VersionGen::new(
             wz_file_meta.wz_version_header,
             wz_file_meta.patch_version,
@@ -172,13 +174,15 @@ impl WzFile {
 
             for (ver_to_decode, hash) in version_gen {
                 wz_file_meta.hash = hash as usize;
-                if let Ok(childs) =
-                    self.try_decode_with_wz_version_number(parent, &wz_file_meta, ver_to_decode)
+                wz_file_meta.wz_version_header = ver_to_decode;
+                wz_dir.hash = hash as usize;
+                if let Ok(children) =
+                    self.try_decode_with_wz_version_number(parent, &wz_file_meta, &mut wz_dir)
                 {
                     wz_file_meta.patch_version = ver_to_decode;
                     self.update_wz_file_meta(wz_file_meta);
                     self.is_parsed = true;
-                    return Ok(childs);
+                    return Ok(children);
                 }
             }
 
@@ -186,16 +190,14 @@ impl WzFile {
         }
 
         wz_file_meta.hash = version_gen.check_and_get_version_hash() as usize;
+        wz_dir.hash = wz_file_meta.hash;
 
-        let childs = self.try_decode_with_wz_version_number(
-            parent,
-            &wz_file_meta,
-            wz_file_meta.patch_version,
-        )?;
+        let children =
+            self.try_decode_with_wz_version_number(parent, &wz_file_meta, &mut wz_dir)?;
         self.update_wz_file_meta(wz_file_meta);
         self.is_parsed = true;
 
-        Ok(childs)
+        Ok(children)
     }
 
     fn parse_pkg2(
@@ -216,12 +218,17 @@ impl WzFile {
             hash: 0,
         };
 
+        let mut wz_dir = WzDirectory::new(self.offset, self.block_size, &self.reader, false);
+
         for hash in version_gen {
             wz_file_meta.hash = hash as usize;
-            if let Ok(childs) = self.try_decode_with_wz_version_number(parent, &wz_file_meta, -1) {
+            wz_dir.hash = hash as usize;
+            if let Ok(children) =
+                self.try_decode_with_wz_version_number(parent, &wz_file_meta, &mut wz_dir)
+            {
                 self.update_wz_file_meta(wz_file_meta);
                 self.is_parsed = true;
-                return Ok(childs);
+                return Ok(children);
             }
         }
 
@@ -232,18 +239,15 @@ impl WzFile {
         &self,
         parent: &WzNodeArc,
         meta: &WzFileMeta,
-        use_maplestory_patch_version: i32,
+        wz_dir: &mut WzDirectory,
     ) -> Result<WzNodeArcVec, Error> {
         if meta.hash == 0 {
             return Err(Error::ErrorGameVerHash);
         }
 
-        let node = WzDirectory::new(self.offset, self.block_size, &self.reader, false)
-            .with_hash(meta.hash);
+        let children = wz_dir.resolve_children(parent)?;
 
-        let childs = node.resolve_children(parent)?;
-
-        let first_image_node = childs
+        let first_image_node = children
             .iter()
             .find(|(_, node)| matches!(node.read().unwrap().object_type, WzObjectType::Image(_)));
 
@@ -264,11 +268,11 @@ impl WzFile {
         }
 
         // there a special case this 2 will match
-        if !meta.wz_with_encrypt_version_header && use_maplestory_patch_version == 113 {
+        if !meta.wz_with_encrypt_version_header && meta.wz_version_header == 113 {
             return Err(Error::ErrorGameVerHash);
         }
 
-        Ok(childs)
+        Ok(children)
     }
 
     fn update_wz_file_meta(&mut self, wz_file_meta: WzFileMeta) {
