@@ -21,8 +21,8 @@ pub enum WzPngParseError {
     #[error("inflate raw data failed")]
     InflateError(#[from] flate2::DecompressError),
 
-    #[error("Unknown format: {0}")]
-    UnknownFormat(u32),
+    #[error("Unknown format: {0:?}")]
+    UnknownFormat(WzPngFormat),
 
     #[error("Unsupported header: {0}")]
     UnsupportedHeader(i32),
@@ -41,6 +41,7 @@ pub enum WzPngParseError {
 }
 
 type ImageBufferRgbaChunk = ImageBuffer<Rgba<u8>, Vec<u8>>;
+type ImageBufferRgba16Chunk = ImageBuffer<Rgba<u16>, Vec<u16>>;
 type ImageBufferRgbChunk = ImageBuffer<Rgb<u8>, Vec<u8>>;
 
 /// A helper get image from `WzNodeArc`, will also resolve `_inlink` or `_outlink`
@@ -72,6 +73,51 @@ pub fn get_image(node: &WzNodeArc) -> Result<DynamicImage, WzPngParseError> {
     }
 }
 
+#[derive(Debug, Clone, Default)]
+#[repr(u32)]
+pub enum WzPngFormat {
+    #[default]
+    Unknown,
+    BGRA4444 = 1,
+    BGRA8888 = 2,
+    ARGB1555 = 257,
+    RGB565 = 513,
+    RGB565_517 = 517,
+
+    DXT1 = 4097, // bc1
+    DXT3 = 1026, // bc3
+    DXT3SM = 3,
+    DXT5 = 2050, // bc5
+    BC7 = 4098,
+
+    R16 = 769,
+    A8 = 2304,
+    RGBA1010102 = 2562,
+    RGBA32Float = 4100,
+}
+
+impl From<u32> for WzPngFormat {
+    fn from(value: u32) -> Self {
+        match value {
+            1 => Self::BGRA4444,
+            2 => Self::BGRA8888,
+            257 => Self::ARGB1555,
+            513 => Self::RGB565,
+            517 => Self::RGB565_517,
+            4097 => Self::DXT1,
+            1026 => Self::DXT3,
+            3 => Self::DXT3SM,
+            2050 => Self::DXT5,
+            4098 => Self::BC7,
+            769 => Self::R16,
+            2304 => Self::A8,
+            2562 => Self::RGBA1010102,
+            4100 => Self::RGBA32Float,
+            _ => Self::Unknown,
+        }
+    }
+}
+
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct WzPng {
@@ -87,6 +133,8 @@ pub struct WzPng {
     format2: u32,
     #[cfg_attr(feature = "serde", serde(skip))]
     pub header: i32,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    pub pages: i32,
 
     pub width: u32,
     pub height: u32,
@@ -99,6 +147,7 @@ impl WzPng {
         format: (u32, u32),
         data_range: (usize, usize),
         header: i32,
+        pages: i32,
     ) -> WzPng {
         WzPng {
             reader: Arc::clone(reader),
@@ -109,11 +158,12 @@ impl WzPng {
             format1: format.0,
             format2: format.1,
             header,
+            pages,
         }
     }
     #[inline]
-    pub fn format(&self) -> u32 {
-        self.format1 + self.format2
+    pub fn format(&self) -> WzPngFormat {
+        WzPngFormat::from(self.format1 + self.format2)
     }
     #[inline]
     fn has_zlib_header(&self) -> bool {
@@ -130,26 +180,39 @@ impl WzPng {
         let pixels = self.get_raw_data(data)?;
 
         match self.format() {
-            1 => get_image_from_bgra4444(pixels, self.width, self.height),
-            2 => get_image_from_bgra8888(pixels, self.width, self.height),
-            3 | 1026 => get_image_from_dxt3(&pixels, self.width, self.height),
-            257 => get_image_from_argb1555(&pixels, self.width, self.height),
-            513 => get_image_from_rgb565(&pixels, self.width, self.height),
-            517 => {
+            WzPngFormat::BGRA4444 => get_image_from_bgra4444(pixels, self.width, self.height),
+            WzPngFormat::BGRA8888 => get_image_from_bgra8888(pixels, self.width, self.height),
+            WzPngFormat::DXT3 | WzPngFormat::DXT3SM => {
+                get_image_from_dxt3(&pixels, self.width, self.height)
+            }
+            WzPngFormat::ARGB1555 => get_image_from_argb1555(&pixels, self.width, self.height),
+            WzPngFormat::RGB565 => get_image_from_rgb565(&pixels, self.width, self.height),
+            WzPngFormat::RGB565_517 => {
                 let decoded = get_pixel_data_form_517(&pixels, self.width, self.height);
                 get_image_from_rgb565(&decoded, self.width, self.height)
             }
-            2050 => get_image_from_dxt5(&pixels, self.width, self.height),
+            WzPngFormat::DXT5 => get_image_from_dxt5(&pixels, self.width, self.height),
+            WzPngFormat::R16 => get_image_from_a16(&pixels, self.width, self.height),
             _ => Err(WzPngParseError::UnknownFormat(self.format())),
         }
     }
     fn get_buff_size(&self) -> Result<usize, WzPngParseError> {
         match self.format() {
-            1 | 257 | 513 => Ok((self.width * self.height * 2) as usize),
-            2 => Ok((self.width * self.height * 4) as usize),
-            3 => Ok((self.width * self.height * 4) as usize),
-            1026 | 2050 => Ok((self.width * self.height) as usize),
-            517 => {
+            WzPngFormat::BGRA4444
+            | WzPngFormat::ARGB1555
+            | WzPngFormat::RGB565
+            | WzPngFormat::R16 => Ok((self.width * self.height * 2) as usize),
+            WzPngFormat::BGRA8888 | WzPngFormat::RGBA1010102 => {
+                Ok((self.width * self.height * 4) as usize)
+            }
+            WzPngFormat::DXT3SM => Ok((self.width * self.height * 4) as usize),
+            WzPngFormat::DXT3 | WzPngFormat::DXT5 => {
+                Ok((((self.width + 3) / 4) * ((self.height + 3) / 4) * 16) as usize)
+            }
+            WzPngFormat::BC7 => Ok((self.width * (self.height & !3)) as usize),
+            WzPngFormat::A8 => Ok((self.width * self.height) as usize),
+            WzPngFormat::RGBA32Float => Ok((self.width * self.height * 16) as usize),
+            WzPngFormat::RGB565_517 => {
                 /* 128 = 16 * 16 / 2 */
                 Ok((self.width * self.height / 128) as usize)
             }
@@ -545,23 +608,21 @@ fn expand_color_table(color_table: &mut [Rgb<u8>; 4], c0: u16, c1: u16) {
     let b1 = color_table[1].b() as i32;
 
     if c0 > c1 {
-        color_table[2] = Rgb([
-            ((r * 2 + r1 + 1) / 3) as u8,
-            ((g * 2 + g1 + 1) / 3) as u8,
-            ((b * 2 + b1 + 1) / 3) as u8,
-        ]);
-        color_table[3] = Rgb([
-            ((r + r1 * 2 + 1) / 3) as u8,
-            ((g + g1 * 2 + 1) / 3) as u8,
-            ((b + b1 * 2 + 1) / 3) as u8,
-        ]);
+        color_table[2][0] = ((r * 2 + r1 + 1) / 3) as u8;
+        color_table[2][1] = ((g * 2 + g1 + 1) / 3) as u8;
+        color_table[2][2] = ((b * 2 + b1 + 1) / 3) as u8;
+
+        color_table[3][0] = ((r + r1 * 2 + 1) / 3) as u8;
+        color_table[3][1] = ((g + g1 * 2 + 1) / 3) as u8;
+        color_table[3][2] = ((b + b1 * 2 + 1) / 3) as u8;
     } else {
-        color_table[2] = Rgb([
-            ((r + r1) / 2) as u8,
-            ((g + g1) / 2) as u8,
-            ((b + b1) / 2) as u8,
-        ]);
-        color_table[3] = Rgb::black();
+        color_table[2][0] = ((r + r1) / 2) as u8;
+        color_table[2][1] = ((g + g1) / 2) as u8;
+        color_table[2][2] = ((b + b1) / 2) as u8;
+        // set to black
+        color_table[3][0] = 0;
+        color_table[3][1] = 0;
+        color_table[3][2] = 0;
     }
 }
 
@@ -722,6 +783,25 @@ fn get_image_from_argb1555(
             let i = (x + y * width) as usize * 2;
             let color = reader::read_u16_at(raw_data, i)?;
             *pixel = Rgba::<u8>::from_argb1555(color);
+            Ok(())
+        })?;
+
+    Ok(img_buffer.into())
+}
+
+#[inline]
+fn get_image_from_a16(
+    raw_data: &[u8],
+    width: u32,
+    height: u32,
+) -> Result<DynamicImage, WzPngParseError> {
+    let mut img_buffer: ImageBufferRgba16Chunk = image::ImageBuffer::new(width, height);
+    img_buffer
+        .enumerate_pixels_mut()
+        .try_for_each::<_, Result<(), WzPngParseError>>(|(x, y, pixel)| {
+            let i = (x + y * width) as usize * 2;
+            let pixel_16 = u16::from_le_bytes([raw_data[i], raw_data[i + 1]]);
+            *pixel = Rgba([pixel_16, 0u16, 0u16, 0xffff]);
             Ok(())
         })?;
 

@@ -237,8 +237,8 @@ pub fn parse_more(
             let width = reader.read_wz_int()?;
             let height = reader.read_wz_int()?;
             let format1 = reader.read_wz_int()?;
-            let format2 = reader.read_i8()?;
-            reader.skip(4);
+            let scale = reader.read_i8()?;
+            let pages = reader.read_i32()?;
             let canvas_slice_size = (reader.read_i32()? - 1) as usize;
             reader.skip(1);
             let canvas_offset = reader.pos.get();
@@ -246,9 +246,10 @@ pub fn parse_more(
             let wz_png = WzPng::new(
                 org_reader,
                 (width as u32, height as u32),
-                (format1 as u32, format2 as u32),
+                (format1 as u32, scale as u32),
                 (canvas_offset, canvas_slice_size),
                 canvas_header as i32,
+                pages,
             );
             node.write().unwrap().object_type = wz_png.into();
 
