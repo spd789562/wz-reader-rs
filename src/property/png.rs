@@ -6,6 +6,8 @@ use crate::{
     util::node_util,
     WzNodeArc, WzObjectType,
 };
+use block_compression::BC7Settings;
+use block_compression::{decode::decompress_blocks_as_rgba8, CompressionVariant};
 use flate2::{Decompress, FlushDecompress};
 use image::{DynamicImage, ImageBuffer, Rgb, Rgba};
 #[cfg(feature = "rayon")]
@@ -193,6 +195,10 @@ impl WzPng {
             }
             WzPngFormat::DXT5 => get_image_from_dxt5(&pixels, self.width, self.height),
             WzPngFormat::R16 => get_image_from_a16(&pixels, self.width, self.height),
+            WzPngFormat::RGBA1010102 => {
+                get_image_from_r10g10b10a2(&pixels, self.width, self.height)
+            }
+            WzPngFormat::BC7 => get_image_from_bc7(&pixels, self.width, self.height),
             _ => Err(WzPngParseError::UnknownFormat(self.format())),
         }
     }
@@ -805,5 +811,54 @@ fn get_image_from_a16(
             Ok(())
         })?;
 
+    Ok(img_buffer.into())
+}
+
+#[inline]
+fn get_image_from_r10g10b10a2(
+    raw_data: &[u8],
+    width: u32,
+    height: u32,
+) -> Result<DynamicImage, WzPngParseError> {
+    #[inline(always)]
+    fn pixel_to_rgba(chunk: &[u8]) -> Rgba<u8> {
+        let pixel = u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+        let r = ((pixel & 0x3ff) >> 2) as u8;
+        let g = (((pixel >> 10) & 0x3ff) >> 2) as u8;
+        let b = (((pixel >> 20) & 0x3ff) >> 2) as u8;
+        let a = (((pixel >> 30) & 0x03) * 85) as u8;
+        Rgba([r, g, b, a])
+    }
+
+    #[cfg(feature = "rayon")]
+    let img_buffer = image::ImageBuffer::from_par_fn(width, height, |x, y| {
+        let i = (x + y * width) as usize * 4;
+        pixel_to_rgba(&raw_data[i..i + 4])
+    });
+    #[cfg(not(feature = "rayon"))]
+    let img_buffer = image::ImageBuffer::from_fn(width, height, |x, y| {
+        let i = (x + y * width) as usize * 4;
+        pixel_to_rgba(&raw_data[i..i + 4])
+    });
+
+    Ok(img_buffer.into())
+}
+
+fn get_image_from_bc7(
+    block_data: &[u8],
+    width: u32,
+    height: u32,
+) -> Result<DynamicImage, WzPngParseError> {
+    let mut output_rgba = vec![0_u8; (width * height * 4) as usize];
+    decompress_blocks_as_rgba8(
+        CompressionVariant::BC7(BC7Settings::opaque_ultra_fast()),
+        width,
+        height,
+        block_data,
+        &mut output_rgba,
+    );
+
+    let img_buffer = ImageBuffer::<Rgba<u8>, Vec<u8>>::from_raw(width, height, output_rgba)
+        .ok_or(WzPngParseError::UnsupportedHeader(0))?;
     Ok(img_buffer.into())
 }

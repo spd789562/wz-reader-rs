@@ -213,7 +213,7 @@ mod test {
     #[test]
     fn try_as_png() {
         let reader = Arc::new(setup_wz_reader().unwrap());
-        let png = WzPng::new(&reader, (1, 1), (1, 1), (0, 1), 0);
+        let png = WzPng::new(&reader, (1, 1), (1, 1), (0, 1), 0, 0);
         let node = WzNode::from_str("test", png, None);
 
         assert!(node.try_as_png().is_some());

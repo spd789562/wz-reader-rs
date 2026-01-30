@@ -99,7 +99,7 @@ impl WzHeader<'_> {
 
         Ok(Self::get_data_start(buf, ident, fstart, fsize))
     }
-    pub fn read_from_buf(buf: &[u8]) -> Result<(WzHeader, usize)> {
+    pub fn read_from_buf(buf: &[u8]) -> Result<(WzHeader<'_>, usize)> {
         let ident = Self::get_ident(buf)?;
 
         let fsize = Self::get_wz_fsize(buf)?;

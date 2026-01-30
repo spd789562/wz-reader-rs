@@ -3,10 +3,10 @@ use wz_reader::util::{resolve_base, resolve_root_wz_file_dir, walk_node};
 use wz_reader::{WzNode, WzNodeArc, WzNodeCast};
 
 // usage:
-//   cargo run --example extracting_png --features "image/png" -- "path/to/Base.wz" "output/path"
-//   cargo run --example extracting_png --features "image/png" -- single "D:\Path\To\Base.wz" ".\output"
-//   cargo run --example extracting_png --features "image/png" -- base "D:\Path\To\Base.wz" ".\output"
-//   cargo run --example extracting_png --features "image/png" -- folder "D:\Path\To\Base.wz" ".\output"
+//   cargo run --example extracting_pngs --features "image/png" -- "path/to/Base.wz" "output/path"
+//   cargo run --example extracting_pngs --features "image/png" -- single "D:\Path\To\Base.wz" ".\output"
+//   cargo run --example extracting_pngs --features "image/png" -- base "D:\Path\To\Base.wz" ".\output"
+//   cargo run --example extracting_pngs --features "image/png" -- folder "D:\Path\To\Base.wz" ".\output"
 fn main() {
     let mut args = std::env::args_os().skip(1);
     let method = args
@@ -14,6 +14,10 @@ fn main() {
         .expect("Need method (single/base/folder) as 1st arg");
     let path = args.next().expect("Need path to wz file as 2nd arg");
     let out = args.next().expect("Need out dir as 3rd arg");
+    let out_path_string = out
+        .into_string()
+        .expect("unable to convert the out path to string");
+
     let save_image_fn = |node: &WzNodeArc| {
         let node_read = node.read().unwrap();
         if node_read.try_as_png().is_some() {
@@ -21,9 +25,12 @@ fn main() {
             /* the name of image is easily got conflect */
             let save_name = node_read.get_full_path().replace("/", "-");
             /* resolving image will auto resolve image from _inlink and _outlink */
-            image.save(format!("{out}/{save_name}.png")).unwrap();
+            image
+                .save(format!("{out_path_string}/{save_name}.png"))
+                .unwrap();
         }
     };
+
     match method.as_encoded_bytes() {
         b"single" => {
             /* resolve single wz file */
