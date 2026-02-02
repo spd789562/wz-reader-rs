@@ -7,9 +7,11 @@ It a rust learning project, performance maybe not as good as C#.
   - Image
     * flate2
     * image
+    * texture2ddecoder for bc7
   - Char Decryption
     * aes
     * ecb
+    * c2-chacha
   - Data
     * hashbrown - Hashmap
     * memmap2
