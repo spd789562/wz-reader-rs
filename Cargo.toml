@@ -24,7 +24,7 @@ thiserror = "1.0.57"
 serde = { version = "1.0", features = ["derive"], optional = true }
 serde_json = { version = "1.0", optional = true }
 c2-chacha = "0.3.3"
-block_compression = "0.8.0"
+texture2ddecoder = "0.1.2"
 
 [dev-dependencies]
 serde_json = { version = "1.0" }

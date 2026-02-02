@@ -6,13 +6,14 @@ use crate::{
     util::node_util,
     WzNodeArc, WzObjectType,
 };
-use block_compression::BC7Settings;
-use block_compression::{decode::decompress_blocks_as_rgba8, CompressionVariant};
+// use block_compression::BC7Settings;
+// use block_compression::{decode::decompress_blocks_as_rgba8, CompressionVariant};
 use flate2::{Decompress, FlushDecompress};
 use image::{DynamicImage, ImageBuffer, Rgb, Rgba};
 #[cfg(feature = "rayon")]
 use rayon::prelude::*;
 use std::sync::Arc;
+use texture2ddecoder::decode_bc7;
 use thiserror::Error;
 
 #[cfg(feature = "serde")]
@@ -22,6 +23,9 @@ use serde::{Deserialize, Serialize};
 pub enum WzPngParseError {
     #[error("inflate raw data failed")]
     InflateError(#[from] flate2::DecompressError),
+
+    #[error("decode bc7 failed: {0}")]
+    DecodeBc7Error(String),
 
     #[error("Unknown format: {0:?}")]
     UnknownFormat(WzPngFormat),
@@ -75,7 +79,7 @@ pub fn get_image(node: &WzNodeArc) -> Result<DynamicImage, WzPngParseError> {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 #[repr(u32)]
 pub enum WzPngFormat {
     #[default]
@@ -849,16 +853,34 @@ fn get_image_from_bc7(
     width: u32,
     height: u32,
 ) -> Result<DynamicImage, WzPngParseError> {
-    let mut output_rgba = vec![0_u8; (width * height * 4) as usize];
-    decompress_blocks_as_rgba8(
-        CompressionVariant::BC7(BC7Settings::opaque_ultra_fast()),
-        width,
-        height,
-        block_data,
-        &mut output_rgba,
-    );
+    // let mut output_rgba = vec![0_u8; (width * height * 4) as usize];
+    // decompress_blocks_as_rgba8(
+    //     CompressionVariant::BC7(BC7Settings::opaque_ultra_fast()),
+    //     width,
+    //     height,
+    //     block_data,
+    //     &mut output_rgba,
+    // );
+    let mut output_rgba_u32 = vec![0_u32; (width * height) as usize];
 
-    let img_buffer = ImageBuffer::<Rgba<u8>, Vec<u8>>::from_raw(width, height, output_rgba)
+    /* TODO: maybe implement this without external crate */
+    decode_bc7(
+        block_data,
+        width as usize,
+        height as usize,
+        &mut output_rgba_u32,
+    )
+    .map_err(|e| WzPngParseError::DecodeBc7Error(e.to_string()))?;
+
+    let output_rgba: Vec<u8> = output_rgba_u32
+        .into_iter()
+        .flat_map(|pixel| {
+            let bgra_bytes = pixel.to_le_bytes();
+            [bgra_bytes[2], bgra_bytes[1], bgra_bytes[0], bgra_bytes[3]]
+        })
+        .collect();
+
+    let img_buffer = ImageBufferRgbaChunk::from_raw(width, height, output_rgba)
         .ok_or(WzPngParseError::UnsupportedHeader(0))?;
     Ok(img_buffer.into())
 }
