@@ -6,15 +6,16 @@ use crate::{
     util::node_util,
     WzNodeArc, WzObjectType,
 };
-// use block_compression::BC7Settings;
-// use block_compression::{decode::decompress_blocks_as_rgba8, CompressionVariant};
+
+use std::sync::Arc;
+use thiserror::Error;
+
 use flate2::{Decompress, FlushDecompress};
 use image::{DynamicImage, ImageBuffer, Rgb, Rgba};
+use texture2ddecoder::decode_bc7;
+
 #[cfg(feature = "rayon")]
 use rayon::prelude::*;
-use std::sync::Arc;
-use texture2ddecoder::decode_bc7;
-use thiserror::Error;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -853,17 +854,9 @@ fn get_image_from_bc7(
     width: u32,
     height: u32,
 ) -> Result<DynamicImage, WzPngParseError> {
-    // let mut output_rgba = vec![0_u8; (width * height * 4) as usize];
-    // decompress_blocks_as_rgba8(
-    //     CompressionVariant::BC7(BC7Settings::opaque_ultra_fast()),
-    //     width,
-    //     height,
-    //     block_data,
-    //     &mut output_rgba,
-    // );
     let mut output_rgba_u32 = vec![0_u32; (width * height) as usize];
 
-    /* TODO: maybe implement this without external crate */
+    /* TODO: maybe implement this without external crate, this implementation need extra transform from bgra u32 to u8 */
     decode_bc7(
         block_data,
         width as usize,
@@ -880,7 +873,8 @@ fn get_image_from_bc7(
         })
         .collect();
 
-    let img_buffer = ImageBufferRgbaChunk::from_raw(width, height, output_rgba)
-        .ok_or(WzPngParseError::UnsupportedHeader(0))?;
+    let img_buffer = ImageBufferRgbaChunk::from_raw(width, height, output_rgba).ok_or(
+        WzPngParseError::DecodeBc7Error(String::from("Failed to create image buffer")),
+    )?;
     Ok(img_buffer.into())
 }
