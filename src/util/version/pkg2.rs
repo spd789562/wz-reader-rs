@@ -211,6 +211,7 @@ impl Iterator for VersionGen {
         }
 
         if self.current_idx <= self.v2_results.len() + self.v3_results.len() {
+            self.current_idx += 1;
             Some(self.calc_hash_version_v1())
         } else {
             None
@@ -296,5 +297,7 @@ mod tests {
             version_gen.hash2,
             v
         ));
+
+        assert!(version_gen.next().is_none());
     }
 }
