@@ -1,10 +1,11 @@
 use crate::{
-    directory, reader, util, util::version::PKGVersion, wz_image, SharedWzMutableKey, WzDirectory,
-    WzHeader, WzNodeArc, WzNodeArcVec, WzNodeCast, WzObjectType, WzReader, WzSliceReader,
+    directory, reader, util, util::string_decryptor, util::version::PKGVersion, wz_image,
+    SharedWzMutableKey, WzDirectory, WzHeader, WzNodeArc, WzNodeArcVec, WzNodeCast, WzObjectType,
+    WzReader, WzSliceReader,
 };
 use memmap2::Mmap;
 use std::fs::File;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -79,19 +80,31 @@ impl WzFile {
 
         let block_size = map.len();
 
-        let wz_iv = if let Some(iv) = wz_iv {
-            // consider do version::verify_iv_from_wz_file here like WzImage does, but feel like it's not necessary
-            iv
-        } else {
-            util::version::guess_iv_from_wz_file(&map).ok_or(Error::UnableToGuessVersion)?
-        };
+        // use existing key or create from wz_iv
+        let existing_keys = existing_key.cloned().or_else(|| {
+            wz_iv.map(|iv| {
+                let keys: SharedWzMutableKey = Arc::new(RwLock::new(
+                    string_decryptor::ecb_decryptor::EcbDecryptor::from_iv(iv),
+                ));
+                keys
+            })
+        });
 
-        let reader = if let Some(keys) = existing_key {
-            WzReader::new(map)
-                .with_iv(wz_iv)
-                .with_existing_keys(keys.clone())
+        // ensure the keys is valid or guess one
+        let verified_keys = existing_keys
+            .and_then(|keys| {
+                if string_decryptor::verify_decryptor_from_wz_file(&map, &keys).is_ok() {
+                    Some(keys)
+                } else {
+                    None
+                }
+            })
+            .or_else(|| string_decryptor::guess_decryptor_from_wz_file(&map));
+
+        let reader = if let Some(keys) = verified_keys {
+            WzReader::new(map).with_existing_keys(keys.clone())
         } else {
-            WzReader::new(map).with_iv(wz_iv)
+            WzReader::new(map)
         };
 
         let offset = WzHeader::read_data_start(&reader.map).map_err(|_| Error::InvalidWzFile)?;

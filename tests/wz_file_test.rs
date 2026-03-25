@@ -442,7 +442,10 @@ fn should_guessing_iv() -> Result<()> {
         .read()
         .unwrap()
         .try_as_file()
-        .map(|file| assert_eq!(file.reader.wz_iv, [0xB9, 0x7D, 0x63, 0xE9]))
+        .map(|file| assert_eq!(
+            file.reader.keys.read().unwrap().get_iv_hash(),
+            u32::from_le_bytes([0xB9, 0x7D, 0x63, 0xE9]) as u64
+        ))
         .is_some());
 
     make_sure_wz_file_version(&wz_file, -1);

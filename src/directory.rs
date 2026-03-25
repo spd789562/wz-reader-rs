@@ -1,6 +1,8 @@
 use crate::{
-    reader, util::version::PKGVersion, wz_image, Reader, WzHeader, WzImage, WzNode, WzNodeArc,
-    WzNodeArcVec, WzNodeName, WzObjectType, WzReader, WzSliceReader,
+    reader,
+    util::{string_decryptor::DecrypterType, version::PKGVersion},
+    wz_image, Reader, WzHeader, WzImage, WzNode, WzNodeArc, WzNodeArcVec, WzNodeName, WzObjectType,
+    WzReader, WzSliceReader,
 };
 use std::sync::Arc;
 
@@ -122,50 +124,63 @@ impl WzDirectory {
             0
         };
 
-        let mut nodes: WzNodeArcVec = Vec::with_capacity(self.entries.len());
+        let trying_count = if reader.header.ident == PKGVersion::V2 {
+            2
+        } else {
+            1
+        };
+        let reader_pos = reader.pos.get();
 
-        // recalculate offset using current hash
-        for entry in self.entries.iter_mut() {
-            if reader.header.ident == PKGVersion::V1 {
-                entry.offset = reader.read_wz_offset(
-                    self.hash,
-                    entry.encrypted_offset,
-                    entry.calculation_offset,
-                )?;
-            } else if reader.header.ident == PKGVersion::V2 {
-                entry.offset = reader.read_wz_offset_pkg2(
-                    self.hash as u32,
-                    pkg2_hash1,
-                    entry.encrypted_offset,
-                    entry.calculation_offset,
-                )?;
-            }
+        let mut all_verified = true;
 
-            if !reader.is_valid_pos(entry.offset + entry.size) {
-                return Err(Error::InvalidWzVersion);
-            }
-
-            if entry.dir_type == WzDirectoryType::WzImage {
-                let header_byte = reader.read_u8_at(entry.offset)?;
-                if !wz_image::is_valid_image_header(header_byte) {
-                    return Err(Error::InvalidWzVersion);
+        for i in 0..trying_count {
+            all_verified = true;
+            reader.seek(reader_pos);
+            for entry in self.entries.iter_mut() {
+                if reader.header.ident == PKGVersion::V1 {
+                    entry.offset = reader.read_wz_offset(
+                        self.hash,
+                        entry.encrypted_offset,
+                        entry.calculation_offset,
+                    )?;
+                } else if reader.header.ident == PKGVersion::V2 {
+                    if i == 0 {
+                        entry.offset = reader.read_wz_offset_pkg2(
+                            self.hash as u32,
+                            pkg2_hash1,
+                            entry.encrypted_offset,
+                            entry.calculation_offset,
+                        )?;
+                    } else {
+                        entry.offset = reader.read_wz_offset_pkg2_v2(
+                            self.hash as u32,
+                            pkg2_hash1,
+                            entry.encrypted_offset,
+                            entry.calculation_offset,
+                        )?;
+                    }
                 }
-                // should we try to parse the wz_image?
-            } else if entry.dir_type == WzDirectoryType::WzDirectory {
-                reader.seek(entry.offset);
 
-                let entry_count = reader.read_wz_int()?;
-
-                // entry count should not below 0
-                if entry_count < 0 {
-                    return Err(Error::InvalidWzVersion);
+                if entry.verify(&reader).is_err() {
+                    all_verified = false;
+                    break;
                 }
             }
 
-            let tuple = entry.into_wz_node_tuple(parent, self.hash, &self.reader);
-
-            nodes.push(tuple);
+            if all_verified {
+                break;
+            }
         }
+
+        if !all_verified {
+            return Err(Error::InvalidWzVersion);
+        }
+
+        let nodes: WzNodeArcVec = self
+            .entries
+            .iter()
+            .map(|entry| entry.into_wz_node_tuple(parent, self.hash, &self.reader))
+            .collect();
 
         // if there has any directory, parse it since it's probably cheep
         for (_, node) in nodes.iter() {
@@ -224,7 +239,11 @@ impl WzDirectory {
 
         // currently we don't know how to decrypt the entry_count, so we will just keep reading until get the encrypted_offset_count
         loop {
-            let entry = WzDirectoryEntry::read_pkg2_entry(&reader, encrypted_entry_count)?;
+            let entry = WzDirectoryEntry::read_pkg2_entry(
+                &reader,
+                encrypted_entry_count,
+                wz_dir_entries.len() == 0,
+            )?;
 
             match entry.dir_type {
                 // im using the UnknownType to indicate the end of the entries
@@ -247,9 +266,8 @@ impl WzDirectory {
         }
 
         for entry in wz_dir_entries.iter_mut() {
-            // different from pkg1, use the offset 'after' read the encrypted offset
-            entry.encrypted_offset = reader.read_u32()?;
             entry.calculation_offset = reader.pos.get();
+            entry.encrypted_offset = reader.read_u32()?;
         }
 
         Ok(wz_dir_entries)
@@ -303,18 +321,26 @@ impl WzDirectoryEntry {
     pub fn read_pkg2_entry(
         reader: &WzSliceReader,
         encrypted_entry_count: i32,
+        use_pkg2_dir_read: bool,
     ) -> Result<Self, Error> {
         let mut entry = WzDirectoryEntry::default();
         entry.dir_type = reader.read_u8()?.into();
 
         match entry.dir_type {
             WzDirectoryType::WzDirectory | WzDirectoryType::WzImage => {
-                entry.name = reader.read_wz_string()?.into();
+                if use_pkg2_dir_read
+                    && reader.keys.read().unwrap().get_enc_type() == DecrypterType::KMST1198
+                {
+                    entry.name = reader.read_wz_string_pkg2_dir()?.into();
+                } else {
+                    entry.name = reader.read_wz_string()?.into();
+                }
             }
             WzDirectoryType::NewUnknownType(_) => {
                 let current_pos = reader.pos.get();
                 reader.pos.set(current_pos - 1);
                 let test_value = reader.read_wz_int()?;
+
                 // if reach the value is same as encrypted_entry_count, mean we reach the end of the entries
                 if test_value == encrypted_entry_count {
                     reader.pos.set(current_pos - 1);
@@ -331,6 +357,30 @@ impl WzDirectoryEntry {
         entry._checksum = reader.read_wz_int()?;
 
         Ok(entry)
+    }
+
+    pub fn verify(&self, reader: &WzSliceReader) -> Result<(), Error> {
+        if !reader.is_valid_pos(self.offset + self.size) {
+            return Err(Error::InvalidWzVersion);
+        }
+
+        if self.dir_type == WzDirectoryType::WzImage {
+            let header_byte = reader.read_u8_at(self.offset)?;
+            if !wz_image::is_valid_image_header(header_byte) {
+                return Err(Error::InvalidWzVersion);
+            }
+            // should we try to parse the wz_image?
+        } else if self.dir_type == WzDirectoryType::WzDirectory {
+            reader.seek(self.offset);
+
+            let entry_count = reader.read_wz_int()?;
+
+            // entry count should not below 0
+            if entry_count < 0 {
+                return Err(Error::InvalidWzVersion);
+            }
+        }
+        Ok(())
     }
 
     pub fn into_wz_node_tuple(

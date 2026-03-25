@@ -1,4 +1,7 @@
-use crate::{reader, util::WzMutableKey, Reader, WzNodeArc, WzNodeCast, WzReader};
+use crate::util::string_decryptor::{
+    ecb_decryptor::EcbDecryptor, pkg2_decryptor::Pkg2Decryptor, Decryptor,
+};
+use crate::{reader, Reader, WzNodeArc, WzNodeCast, WzReader};
 use std::sync::{Arc, RwLock};
 use thiserror::Error;
 
@@ -19,12 +22,19 @@ pub enum WzStringParseError {
 pub enum WzStringType {
     Ascii,
     Unicode,
+    Pkg2Dir,
     Empty,
 }
 
 impl Default for WzStringType {
     fn default() -> Self {
         Self::Ascii
+    }
+}
+
+impl std::fmt::Display for WzStringType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
     }
 }
 
@@ -80,6 +90,14 @@ impl WzStringMeta {
             string_type: WzStringType::Unicode,
         }
     }
+    #[inline]
+    pub fn new_pkg2_dir(offset: usize, length: u32) -> Self {
+        Self {
+            offset,
+            length,
+            string_type: WzStringType::Pkg2Dir,
+        }
+    }
 }
 
 impl WzString {
@@ -93,7 +111,7 @@ impl WzString {
     }
     /// Create a new `WzString` it will encrypt the string with the given iv.
     pub fn from_str(str: &str, iv: [u8; 4]) -> Self {
-        let mut mtbkeys = WzMutableKey::from_iv(iv);
+        let mut mtbkeys = EcbDecryptor::from_iv(iv);
 
         let len;
 
@@ -112,7 +130,6 @@ impl WzString {
 
         let mut reader = WzReader::from_buff(&encrypted);
 
-        reader.wz_iv = iv;
         reader.keys = Arc::new(RwLock::new(mtbkeys));
 
         WzString {
@@ -122,6 +139,25 @@ impl WzString {
             string_type: meta_type,
         }
     }
+
+    pub fn from_str_pkg2_dir(str: &str) -> Self {
+        let mut keys = Pkg2Decryptor::new_with_key(0x1A2B3C4D);
+
+        let len = str.chars().count() * 2;
+
+        let encrypted = encrypt_str(&mut keys, str, &WzStringType::Pkg2Dir);
+
+        let reader =
+            WzReader::from_buff(&encrypted).with_existing_keys(Arc::new(RwLock::new(keys)));
+
+        WzString {
+            reader: Arc::new(reader),
+            offset: 0,
+            length: len as u32,
+            string_type: WzStringType::Pkg2Dir,
+        }
+    }
+
     #[inline]
     /// Decode string from wz file.
     pub fn get_string(&self) -> Result<String, WzStringParseError> {
@@ -142,7 +178,7 @@ pub fn resolve_string_from_node(node: &WzNodeArc) -> Result<String, WzStringPars
 }
 
 pub(crate) fn encrypt_str(
-    keys: &mut WzMutableKey,
+    keys: &mut dyn Decryptor,
     str: &str,
     string_type: &WzStringType,
 ) -> Vec<u8> {
@@ -177,6 +213,18 @@ pub(crate) fn encrypt_str(
 
                 *b ^= i ^ key;
             }
+
+            bytes
+        }
+        WzStringType::Pkg2Dir => {
+            let mut bytes = str
+                .encode_utf16()
+                .flat_map(|b| b.to_le_bytes())
+                .collect::<Vec<_>>();
+
+            keys.ensure_key_size(bytes.len() * 2).unwrap();
+
+            keys.decrypt_slice(&mut bytes);
 
             bytes
         }
@@ -297,6 +345,17 @@ mod test {
         assert_eq!(wz_string.length, 4);
         assert_eq!(wz_string.string_type, WzStringType::Unicode);
         assert_eq!(wz_string.get_string()?, "測試");
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_wz_string_create_pkg2_dir() -> Result<()> {
+        let wz_string = WzString::from_str_pkg2_dir("test");
+
+        assert_eq!(wz_string.length, 8);
+        assert_eq!(wz_string.string_type, WzStringType::Pkg2Dir);
+        assert_eq!(wz_string.get_string()?, "test");
 
         Ok(())
     }

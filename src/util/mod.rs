@@ -3,6 +3,7 @@ pub mod maple_crypto_constants;
 pub mod node_util;
 pub mod parse_property;
 pub(crate) mod resolver;
+pub mod string_decryptor;
 pub mod walk;
 pub mod wz_mutable_key;
 

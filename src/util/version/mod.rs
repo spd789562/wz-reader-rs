@@ -2,7 +2,7 @@ pub mod pkg1;
 pub mod pkg2;
 
 use crate::util::maple_crypto_constants::{WZ_GMSIV, WZ_MSEAIV};
-use crate::util::wz_mutable_key::WzMutableKey;
+use crate::util::string_decryptor::{ecb_decryptor::EcbDecryptor, Decryptor};
 use crate::{directory::WzDirectoryType, reader, Reader, WzSliceReader};
 use std::sync::{Arc, RwLock};
 
@@ -11,6 +11,13 @@ pub fn get_iv_by_maple_version(version: WzMapleVersion) -> [u8; 4] {
         WzMapleVersion::GMS => WZ_GMSIV,
         WzMapleVersion::EMS => WZ_MSEAIV,
         _ => [0; 4],
+    }
+}
+
+pub fn get_key_by_maple_version(version: WzMapleVersion) -> u32 {
+    match version {
+        WzMapleVersion::KMST1198 => 0xDEADBEEF,
+        _ => 0,
     }
 }
 
@@ -36,6 +43,8 @@ pub enum WzMapleVersion {
     CUSTOM,
 
     UNKNOWN,
+
+    KMST1198,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -58,7 +67,8 @@ impl From<&str> for PKGVersion {
 
 /// Verify IV from wz image
 pub fn verify_iv_from_wz_img(buf: &[u8], iv: &[u8; 4]) -> bool {
-    let reader = WzSliceReader::new(buf, &Arc::new(RwLock::new(WzMutableKey::from_iv(*iv))));
+    let keys = Arc::new(RwLock::new(EcbDecryptor::from_iv(*iv))) as Arc<RwLock<dyn Decryptor>>;
+    let reader = WzSliceReader::new(buf, &keys);
 
     reader.pos.set(1);
 
@@ -91,8 +101,8 @@ pub fn guess_iv_from_wz_img(buf: &[u8]) -> Option<[u8; 4]> {
 // basically wzcr2 implementation see @link https://github.com/Kagamia/WzComparerR2/blob/f66dd68cda767db8a1ff7af5c58fa89324cc2bd0/WzComparerR2.WzLib/Wz_Crypto.cs#L109
 // it try to read first wz_directory entry's name and verify it is a valid string
 pub fn verify_iv_from_wz_file(buf: &[u8], iv: &[u8; 4]) -> Result<(), reader::Error> {
-    let reader =
-        WzSliceReader::new_with_header(buf, &Arc::new(RwLock::new(WzMutableKey::from_iv(*iv))));
+    let keys = Arc::new(RwLock::new(EcbDecryptor::from_iv(*iv))) as Arc<RwLock<dyn Decryptor>>;
+    let reader = WzSliceReader::new_with_header(buf, &keys);
 
     reader.seek(reader.header.data_start);
 
