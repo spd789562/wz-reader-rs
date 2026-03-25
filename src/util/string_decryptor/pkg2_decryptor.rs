@@ -19,8 +19,6 @@ impl Pkg2Decryptor {
             keys[i as usize * 2 + 1] = k2;
         }
 
-        println!("keys: {:?}", keys);
-
         return Self { keys, iv: key };
     }
 }
@@ -50,7 +48,7 @@ impl Decryptor for Pkg2Decryptor {
         }
     }
 
-    fn ensure_key_size(&mut self, size: usize) -> Result<(), String> {
+    fn ensure_key_size(&mut self, _size: usize) -> Result<(), String> {
         Ok(())
     }
 }

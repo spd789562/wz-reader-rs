@@ -6,7 +6,9 @@ use std::sync::{Arc, RwLock};
 
 use crate::header::WzHeader;
 use crate::property::{encrypt_str, WzStringMeta, WzStringType};
-use crate::util::string_decryptor::{ecb_decryptor::EcbDecryptor, DecrypterType, Decryptor};
+use crate::util::string_decryptor::{
+    DecrypterType, Decryptor, SharedWzMutableKey, GLOBAL_STRING_DECRYPTOR,
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -23,8 +25,6 @@ pub enum Error {
 }
 
 type Result<T> = std::result::Result<T, Error>;
-
-pub type SharedWzMutableKey = Arc<RwLock<dyn Decryptor>>;
 
 /// A basic reader for reading data, it store original data, and can't not
 /// read data without provide offset of the data.
@@ -46,7 +46,7 @@ impl Default for WzBaseReader<Mmap> {
             .unwrap();
         WzBaseReader {
             map: memmap,
-            keys: Arc::new(RwLock::new(EcbDecryptor::new([0; 4], [0; 32]))),
+            keys: GLOBAL_STRING_DECRYPTOR.get_decryptor(DecrypterType::Unknown),
             wz_version: DecrypterType::Unknown,
         }
     }
@@ -174,13 +174,13 @@ impl<T: AsRef<[u8]>> WzBaseReader<T> {
     pub fn new(map: T) -> Self {
         WzBaseReader {
             map,
-            keys: Arc::new(RwLock::new(EcbDecryptor::new([0; 4], [0; 32]))),
+            keys: GLOBAL_STRING_DECRYPTOR.get_decryptor(DecrypterType::Unknown),
             wz_version: DecrypterType::Unknown,
         }
     }
     pub fn with_iv(self, iv: [u8; 4]) -> Self {
         WzBaseReader {
-            keys: Arc::new(RwLock::new(EcbDecryptor::from_iv(iv))),
+            keys: GLOBAL_STRING_DECRYPTOR.get_decryptor_by_iv(iv),
             wz_version: DecrypterType::Unknown,
             ..self
         }
@@ -255,7 +255,7 @@ impl WzBaseReader<Mmap> {
         }
         WzReader {
             map: memmap.make_read_only().unwrap(),
-            keys: Arc::new(RwLock::new(EcbDecryptor::new([0; 4], [0; 32]))),
+            keys: GLOBAL_STRING_DECRYPTOR.get_decryptor(DecrypterType::Unknown),
             wz_version: DecrypterType::Unknown,
         }
     }
@@ -972,7 +972,7 @@ pub fn get_decrypt_slice(buf: &[u8], len: usize, keys: &SharedWzMutableKey) -> R
 mod test {
     use super::*;
     use crate::util::maple_crypto_constants::{WZ_GMSIV, WZ_MSEAIV};
-    use crate::util::string_decryptor::ecb_decryptor::EcbDecryptor;
+    use crate::util::string_decryptor::{ecb_decryptor::EcbDecryptor, Decryptor};
     use crate::util::version::PKGVersion;
 
     type Error = Box<dyn std::error::Error>;

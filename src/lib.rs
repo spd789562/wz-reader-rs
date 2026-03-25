@@ -20,7 +20,8 @@ pub use node::{WzNode, WzNodeArc, WzNodeArcVec};
 pub use node_cast::*;
 pub use node_name::*;
 pub use object::*;
-pub use reader::{Reader, SharedWzMutableKey, WzReader, WzSliceReader};
+pub use reader::{Reader, WzReader, WzSliceReader};
+pub use util::string_decryptor::{SharedWzMutableKey, GLOBAL_STRING_DECRYPTOR};
 pub use wz_image::{WzImage, WzImageHeaderType};
 
 #[deprecated(note = "use util::version instead")]

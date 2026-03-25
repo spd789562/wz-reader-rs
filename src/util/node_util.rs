@@ -278,8 +278,6 @@ mod test {
             .unwrap();
         let outlink = resolve_string_from_node(&node).unwrap();
 
-        println!("{:?}", outlink);
-
         let outlink_target = resolve_outlink(&outlink, &node, false);
 
         assert!(outlink_target.is_some());
