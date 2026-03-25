@@ -60,16 +60,16 @@ impl VersionGen {
         let mut results: Vec<u32> = Vec::new();
         let mut carries = [0; 33];
         let mut lhs_bits = [0; 32];
-        for s_candidate in 0..32 {
-            let mut info = HashGenInfo::new(
-                5,
-                self.hash2,
-                &mut carries,
-                &mut lhs_bits,
-                &mut results,
-                &hash_verifier::verify_v2,
-            );
+        let mut info = HashGenInfo::new(
+            5,
+            self.hash2,
+            &mut carries,
+            &mut lhs_bits,
+            &mut results,
+            &hash_verifier::verify_v2,
+        );
 
+        for s_candidate in 0..32 {
             info.carries.fill(0);
             info.lhs_bits.fill(0);
             info.s = s_candidate;
@@ -82,19 +82,18 @@ impl VersionGen {
         let mut results: Vec<u32> = Vec::new();
         let mut carries = [0; 33];
         let mut lhs_bits = [0; 32];
+        let mut info = HashGenInfo::new(
+            4,
+            (!self.hash2) ^ self.hash1,
+            &mut carries,
+            &mut lhs_bits,
+            &mut results,
+            &hash_verifier::verify_v3,
+        );
         for s_candidate in 0_u32..16_u32 {
-            let mut info = HashGenInfo::new(
-                4,
-                (!self.hash2) ^ self.hash1,
-                &mut carries,
-                &mut lhs_bits,
-                &mut results,
-                &hash_verifier::verify_v3,
-            );
-
             info.carries.fill(0);
             info.lhs_bits.fill(0);
-            info.s = s_candidate.wrapping_add(self.hash1 & 0x1f);
+            info.s = s_candidate.wrapping_add(self.hash1 & 0xf) as i32 as u32;
             info.low_bits = s_candidate;
             self.backtrack(0, 0, &mut info);
         }
@@ -176,7 +175,7 @@ mod hash_verifier {
     }
     pub fn verify_v3(hash1: u32, hash2: u32, target_hash: u32) -> bool {
         let rotate_base = hash1 ^ (target_hash.wrapping_add(VERIFY_KEY));
-        let rotate_amount = ((target_hash & 0x1f) + (hash1 & 0x1f)) as u32;
+        let rotate_amount = (target_hash & 0xf) + (hash1 & 0xf);
 
         let lt = rotate_base.rotate_left(rotate_amount);
 
