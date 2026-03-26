@@ -1,6 +1,6 @@
 use crate::util::maple_crypto_constants::{WZ_GMSIV, WZ_MSEAIV};
-use crate::util::WzMutableKey;
-use crate::WzReader;
+use crate::GLOBAL_STRING_DECRYPTOR;
+use crate::{SharedWzMutableKey, WzReader};
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -39,7 +39,7 @@ impl WzLua {
             .reader
             .get_slice(self.offset..self.length + self.offset);
 
-        let mut keys = self
+        let keys = self
             .get_mtb_keys_from_guess_lua_iv()
             .ok_or(WzLuaParseError::UnknownLuaIv)?;
 
@@ -47,15 +47,17 @@ impl WzLua {
 
         let mut decoded = data.to_vec();
 
-        keys.ensure_key_size(len).unwrap();
+        let mut write = keys.write().unwrap();
 
-        keys.decrypt_slice(&mut decoded);
+        write.ensure_key_size(len).unwrap();
+
+        write.decrypt_slice(&mut decoded);
 
         String::from_utf8(decoded).map_err(WzLuaParseError::from)
     }
 
     /// try to guess the iv from encrypted data
-    fn get_mtb_keys_from_guess_lua_iv(&self) -> Option<WzMutableKey> {
+    fn get_mtb_keys_from_guess_lua_iv(&self) -> Option<SharedWzMutableKey> {
         let len = std::cmp::min(64, self.length);
         let test_data = self.reader.get_slice(self.offset..self.offset + len);
 
@@ -63,11 +65,15 @@ impl WzLua {
 
         for iv in ivs {
             let mut decoded = test_data.to_vec();
-            let mut keys = WzMutableKey::from_iv(iv);
+            let keys = GLOBAL_STRING_DECRYPTOR.get_decryptor_by_iv(iv);
 
-            keys.ensure_key_size(len).unwrap();
+            {
+                let mut write = keys.write().unwrap();
 
-            keys.decrypt_slice(&mut decoded);
+                write.ensure_key_size(len).unwrap();
+
+                write.decrypt_slice(&mut decoded);
+            }
 
             if String::from_utf8(decoded).is_ok() {
                 return Some(keys);
@@ -81,12 +87,13 @@ impl WzLua {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::util::string_decryptor::{Decryptor, EcbDecryptor};
     use memmap2::MmapMut;
     use std::fs::OpenOptions;
     use tempfile;
 
     fn generate_encrypted_text(text: &str, iv: [u8; 4]) -> Vec<u8> {
-        let mut keys = WzMutableKey::from_iv(iv);
+        let mut keys = EcbDecryptor::from_iv(iv);
         let mut data = text.as_bytes().to_vec();
 
         keys.ensure_key_size(data.len()).unwrap();

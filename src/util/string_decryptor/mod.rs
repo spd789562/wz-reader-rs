@@ -10,6 +10,8 @@ use crate::version::{get_iv_by_maple_version, get_key_by_maple_version, WzMapleV
 use crate::{directory::WzDirectoryType, reader, Reader, WzSliceReader};
 
 pub type SharedWzMutableKey = Arc<RwLock<dyn Decryptor>>;
+pub use ecb_decryptor::EcbDecryptor;
+pub use pkg2_decryptor::Pkg2Decryptor;
 
 pub trait Decryptor: std::fmt::Debug + Send + Sync {
     fn get_iv_hash(&self) -> u64;
