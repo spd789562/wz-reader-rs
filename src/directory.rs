@@ -338,10 +338,10 @@ impl WzDirectoryEntry {
             WzDirectoryType::NewUnknownType(_) => {
                 let current_pos = reader.pos.get();
                 reader.pos.set(current_pos - 1);
-                let test_value = reader.read_wz_int()?;
+                let test_wz_int = reader.read_wz_int()?;
 
                 // if reach the value is same as encrypted_entry_count, mean we reach the end of the entries
-                if test_value == encrypted_entry_count {
+                if test_wz_int == encrypted_entry_count {
                     reader.pos.set(current_pos - 1);
                     entry.dir_type = WzDirectoryType::UnknownType;
                 }

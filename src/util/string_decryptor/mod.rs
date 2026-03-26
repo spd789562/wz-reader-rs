@@ -94,10 +94,19 @@ pub(crate) fn try_get_first_wz_name_pkg2_meta_from_wz_file(
     reader.seek(reader.header.data_start);
 
     // entry count
-    reader.read_wz_int()?;
+    let encrypted_entry_count = reader.read_wz_int()?;
 
     // first dir type
-    reader.read_u8()?;
+    let dir = reader.read_u8()?;
+
+    // ignore the zero entry count
+    if dir == 128 {
+        reader.pos.set(reader.pos.get() - 1);
+        if reader.read_wz_int()? == encrypted_entry_count {
+            return Ok(WzStringMeta::empty());
+        }
+        return Err(reader::Error::DecryptError(reader.pos.get()));
+    }
 
     reader.read_wz_string_pkg2_dir_meta()
 }
