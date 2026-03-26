@@ -31,8 +31,8 @@ type Result<T> = std::result::Result<T, Error>;
 #[derive(Debug)]
 pub struct WzBaseReader<T: Sized + AsRef<[u8]>> {
     pub map: T,
-    pub wz_version: DecrypterType,
-    pub keys: Arc<RwLock<dyn Decryptor>>,
+    pub keys: SharedWzStringDecryptor,
+    pub pkg2_keys: SharedWzStringDecryptor,
 }
 
 /// the Mmap impl for WzBaseReader
@@ -47,7 +47,7 @@ impl Default for WzBaseReader<Mmap> {
         WzBaseReader {
             map: memmap,
             keys: GLOBAL_STRING_DECRYPTOR.get_decryptor(DecrypterType::Unknown),
-            wz_version: DecrypterType::Unknown,
+            pkg2_keys: GLOBAL_STRING_DECRYPTOR.get_decryptor(DecrypterType::Unknown),
         }
     }
 }
@@ -60,8 +60,8 @@ pub struct WzSliceReader<'a> {
     pub pos: Cell<usize>,
     _save_pos: Cell<usize>,
     pub header: WzHeader<'a>,
-    pub wz_version: DecrypterType,
     pub keys: SharedWzStringDecryptor,
+    pub pkg2_keys: SharedWzStringDecryptor,
 }
 
 static WZ_OFFSET: i32 = 0x581C3F6D;
@@ -69,6 +69,7 @@ static WZ_OFFSET: i32 = 0x581C3F6D;
 pub trait Reader {
     fn get_size(&self) -> usize;
     fn get_decrypt_slice(&self, range: std::ops::Range<usize>) -> Result<Vec<u8>>;
+    fn get_pkg2_decrypt_slice(&self, range: std::ops::Range<usize>) -> Result<Vec<u8>>;
     fn read_u8_at(&self, pos: usize) -> Result<u8>;
     fn read_u16_at(&self, pos: usize) -> Result<u16>;
     fn read_u32_at(&self, pos: usize) -> Result<u32>;
@@ -109,7 +110,7 @@ pub trait Reader {
         Ok(decrypted)
     }
     fn resolve_pkg2_dir_raw(&self, offset: usize, length: usize) -> Result<Vec<u16>> {
-        let decrypted = self.get_decrypt_slice(offset..(offset + length))?;
+        let decrypted = self.get_pkg2_decrypt_slice(offset..(offset + length))?;
 
         Ok(decrypted
             .chunks(2)
@@ -175,22 +176,28 @@ impl<T: AsRef<[u8]>> WzBaseReader<T> {
         WzBaseReader {
             map,
             keys: GLOBAL_STRING_DECRYPTOR.get_decryptor(DecrypterType::Unknown),
-            wz_version: DecrypterType::Unknown,
+            pkg2_keys: GLOBAL_STRING_DECRYPTOR.get_decryptor(DecrypterType::Unknown),
         }
     }
     pub fn with_iv(self, iv: [u8; 4]) -> Self {
         WzBaseReader {
             keys: GLOBAL_STRING_DECRYPTOR.get_decryptor_by_iv(iv),
-            wz_version: DecrypterType::Unknown,
+            pkg2_keys: GLOBAL_STRING_DECRYPTOR.get_decryptor(DecrypterType::Unknown),
             ..self
         }
     }
 
     // using the existing keys if the iv is the same to save the memory
     pub fn with_existing_keys(self, keys: Arc<RwLock<dyn Decryptor>>) -> Self {
+        let pkg2_keys = Arc::clone(&keys);
+        let keys = if keys.read().unwrap().is_pkg2() {
+            Arc::clone(&GLOBAL_STRING_DECRYPTOR.general)
+        } else {
+            Arc::clone(&keys)
+        };
         WzBaseReader {
-            keys: Arc::clone(&keys),
-            wz_version: keys.read().unwrap().get_enc_type(),
+            keys,
+            pkg2_keys,
             ..self
         }
     }
@@ -226,13 +233,13 @@ impl<T: AsRef<[u8]>> WzBaseReader<T> {
     pub fn create_slice_reader_without_hash(&self) -> WzSliceReader<'_> {
         WzSliceReader::new(self.map.as_ref(), &self.keys)
             .with_header(WzHeader::default())
-            .with_wz_version(self.wz_version)
+            .with_pkg2_keys(&self.pkg2_keys)
     }
     #[inline]
     pub fn create_slice_reader(&self) -> WzSliceReader<'_> {
         WzSliceReader::new(self.map.as_ref(), &self.keys)
             .with_header(self.create_header())
-            .with_wz_version(self.wz_version)
+            .with_pkg2_keys(&self.pkg2_keys)
     }
     /// create a encrypt string from current `WzReader`
     #[inline]
@@ -256,20 +263,26 @@ impl WzBaseReader<Mmap> {
         WzReader {
             map: memmap.make_read_only().unwrap(),
             keys: GLOBAL_STRING_DECRYPTOR.get_decryptor(DecrypterType::Unknown),
-            wz_version: DecrypterType::Unknown,
+            pkg2_keys: GLOBAL_STRING_DECRYPTOR.get_decryptor(DecrypterType::Unknown),
         }
     }
 }
 
 impl<'a> WzSliceReader<'a> {
-    pub fn new(buf: &'a [u8], key: &SharedWzStringDecryptor) -> Self {
+    pub fn new(buf: &'a [u8], keys: &SharedWzStringDecryptor) -> Self {
+        let pkg2_keys = Arc::clone(keys);
+        let keys = if keys.read().unwrap().is_pkg2() {
+            Arc::clone(&GLOBAL_STRING_DECRYPTOR.general)
+        } else {
+            Arc::clone(&keys)
+        };
         WzSliceReader {
             buf,
             pos: Cell::new(0),
             _save_pos: Cell::new(0),
             header: Default::default(),
-            keys: Arc::clone(key),
-            wz_version: DecrypterType::Unknown,
+            keys,
+            pkg2_keys,
         }
     }
     pub fn new_with_header(buf: &'a [u8], key: &SharedWzStringDecryptor) -> Self {
@@ -281,8 +294,11 @@ impl<'a> WzSliceReader<'a> {
         WzSliceReader { header, ..self }
     }
     #[inline]
-    pub fn with_wz_version(self, wz_version: DecrypterType) -> Self {
-        WzSliceReader { wz_version, ..self }
+    pub fn with_pkg2_keys(self, keys: &SharedWzStringDecryptor) -> Self {
+        WzSliceReader {
+            pkg2_keys: Arc::clone(keys),
+            ..self
+        }
     }
     #[inline]
     pub fn get_slice(&self, range: std::ops::Range<usize>) -> &[u8] {
@@ -732,6 +748,11 @@ impl<T: AsRef<[u8]>> Reader for WzBaseReader<T> {
         let len = range.len();
         get_decrypt_slice(&self.map.as_ref()[range], len, &self.keys)
     }
+    #[inline]
+    fn get_pkg2_decrypt_slice(&self, range: std::ops::Range<usize>) -> Result<Vec<u8>> {
+        let len = range.len();
+        get_decrypt_slice(&self.map.as_ref()[range], len, &self.pkg2_keys)
+    }
 }
 
 impl<'a> Reader for WzSliceReader<'a> {
@@ -783,6 +804,11 @@ impl<'a> Reader for WzSliceReader<'a> {
     fn get_decrypt_slice(&self, range: std::ops::Range<usize>) -> Result<Vec<u8>> {
         let len = range.len();
         get_decrypt_slice(&self.buf[range], len, &self.keys)
+    }
+    #[inline]
+    fn get_pkg2_decrypt_slice(&self, range: std::ops::Range<usize>) -> Result<Vec<u8>> {
+        let len = range.len();
+        get_decrypt_slice(&self.buf[range], len, &self.pkg2_keys)
     }
 }
 
@@ -950,7 +976,11 @@ fn resolve_unicode_char(c: u16, i: i32) -> u16 {
     c ^ (i as u16).wrapping_add(0xAAAA)
 }
 
-pub fn get_decrypt_slice(buf: &[u8], len: usize, keys: &SharedWzStringDecryptor) -> Result<Vec<u8>> {
+pub fn get_decrypt_slice(
+    buf: &[u8],
+    len: usize,
+    keys: &SharedWzStringDecryptor,
+) -> Result<Vec<u8>> {
     let mut original = buf.to_vec();
 
     // prevent lock take too long

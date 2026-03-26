@@ -328,9 +328,8 @@ impl WzDirectoryEntry {
 
         match entry.dir_type {
             WzDirectoryType::WzDirectory | WzDirectoryType::WzImage => {
-                if use_pkg2_dir_read
-                    && reader.keys.read().unwrap().get_enc_type() == DecrypterType::KMST1198
-                {
+                // currently only the first name is using read_wz_string_pkg2_dir
+                if use_pkg2_dir_read && reader.pkg2_keys.read().unwrap().is_pkg2() {
                     entry.name = reader.read_wz_string_pkg2_dir()?.into();
                 } else {
                     entry.name = reader.read_wz_string()?.into();

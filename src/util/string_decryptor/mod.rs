@@ -16,6 +16,7 @@ pub use pkg2_decryptor::Pkg2Decryptor;
 pub trait Decryptor: std::fmt::Debug + Send + Sync {
     fn get_iv_hash(&self) -> u64;
     fn is_enough(&self, size: usize) -> bool;
+    fn is_pkg2(&self) -> bool;
     fn at(&mut self, index: usize) -> &u8;
     fn try_at(&self, index: usize) -> Option<&u8>;
     fn decrypt_slice(&self, data: &mut [u8]);
@@ -35,8 +36,7 @@ pub enum DecrypterType {
 }
 
 pub(crate) fn try_get_first_wz_name_meta(buf: &[u8]) -> Result<WzStringMeta, reader::Error> {
-    let keys: SharedWzStringDecryptor =
-        Arc::new(RwLock::new(ecb_decryptor::EcbDecryptor::from_iv([0; 4])));
+    let keys: SharedWzStringDecryptor = Arc::new(RwLock::new(EcbDecryptor::from_iv([0; 4])));
     let reader = WzSliceReader::new_with_header(buf, &keys);
 
     reader.seek(reader.header.data_start);
@@ -84,8 +84,7 @@ pub(crate) fn try_get_first_wz_name_meta(buf: &[u8]) -> Result<WzStringMeta, rea
 pub(crate) fn try_get_first_wz_name_pkg2_meta_from_wz_file(
     buf: &[u8],
 ) -> Result<WzStringMeta, reader::Error> {
-    let keys: SharedWzStringDecryptor =
-        Arc::new(RwLock::new(ecb_decryptor::EcbDecryptor::from_iv([0; 4])));
+    let keys: SharedWzStringDecryptor = Arc::new(RwLock::new(EcbDecryptor::from_iv([0; 4])));
     let reader = WzSliceReader::new_with_header(buf, &keys);
 
     if reader.header.ident != PKGVersion::V2 {
@@ -171,11 +170,11 @@ pub fn guess_decryptor_from_wz_file(buf: &[u8]) -> Option<SharedWzStringDecrypto
 }
 
 pub struct StringDecryptor {
-    gms: Arc<RwLock<ecb_decryptor::EcbDecryptor>>,
-    kms: Arc<RwLock<ecb_decryptor::EcbDecryptor>>,
-    general: Arc<RwLock<ecb_decryptor::EcbDecryptor>>,
-    custom: OnceLock<Arc<RwLock<ecb_decryptor::EcbDecryptor>>>,
-    kmst1198: Arc<RwLock<pkg2_decryptor::Pkg2Decryptor>>,
+    pub gms: Arc<RwLock<EcbDecryptor>>,
+    pub kms: Arc<RwLock<EcbDecryptor>>,
+    pub general: Arc<RwLock<EcbDecryptor>>,
+    pub custom: OnceLock<Arc<RwLock<EcbDecryptor>>>,
+    pub kmst1198: Arc<RwLock<Pkg2Decryptor>>,
 }
 
 impl StringDecryptor {
@@ -201,22 +200,21 @@ impl StringDecryptor {
             WZ_GMSIV => Arc::clone(&self.gms) as SharedWzStringDecryptor,
             WZ_MSEAIV => Arc::clone(&self.kms) as SharedWzStringDecryptor,
             [0, 0, 0, 0] => Arc::clone(&self.general) as SharedWzStringDecryptor,
-            _ => Arc::new(RwLock::new(ecb_decryptor::EcbDecryptor::from_iv(iv)))
-                as SharedWzStringDecryptor,
+            _ => Arc::new(RwLock::new(EcbDecryptor::from_iv(iv))) as SharedWzStringDecryptor,
         }
     }
 }
 
 pub const GLOBAL_STRING_DECRYPTOR: LazyLock<StringDecryptor> = LazyLock::new(|| StringDecryptor {
-    gms: Arc::new(RwLock::new(ecb_decryptor::EcbDecryptor::from_iv(
-        get_iv_by_maple_version(WzMapleVersion::GMS),
-    ))),
-    kms: Arc::new(RwLock::new(ecb_decryptor::EcbDecryptor::from_iv(
-        get_iv_by_maple_version(WzMapleVersion::EMS),
-    ))),
+    gms: Arc::new(RwLock::new(EcbDecryptor::from_iv(get_iv_by_maple_version(
+        WzMapleVersion::GMS,
+    )))),
+    kms: Arc::new(RwLock::new(EcbDecryptor::from_iv(get_iv_by_maple_version(
+        WzMapleVersion::EMS,
+    )))),
     custom: OnceLock::new(),
-    general: Arc::new(RwLock::new(ecb_decryptor::EcbDecryptor::from_iv([0; 4]))),
-    kmst1198: Arc::new(RwLock::new(pkg2_decryptor::Pkg2Decryptor::new_with_key(
+    general: Arc::new(RwLock::new(EcbDecryptor::from_iv([0; 4]))),
+    kmst1198: Arc::new(RwLock::new(Pkg2Decryptor::new_with_key(
         get_key_by_maple_version(WzMapleVersion::KMST1198),
     ))),
 });

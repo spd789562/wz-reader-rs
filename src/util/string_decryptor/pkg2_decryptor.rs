@@ -24,6 +24,10 @@ impl Pkg2Decryptor {
 }
 
 impl Decryptor for Pkg2Decryptor {
+    fn is_pkg2(&self) -> bool {
+        true
+    }
+
     fn get_enc_type(&self) -> DecrypterType {
         DecrypterType::KMST1198
     }

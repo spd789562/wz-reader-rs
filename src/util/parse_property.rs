@@ -238,7 +238,13 @@ pub fn parse_more(
             let height = reader.read_wz_int()?;
             let format1 = reader.read_wz_int()?;
             let scale = reader.read_i8()?;
-            let pages = reader.read_i32()?;
+            /* unknown start */
+            // usually u8
+            let pages = reader.read_wz_int()?;
+            // unknown1 usually u8
+            let _ = reader.read_wz_int()?;
+            reader.skip(2);
+            /* unknown end */
             let canvas_slice_size = (reader.read_i32()? - 1) as usize;
             reader.skip(1);
             let canvas_offset = reader.pos.get();

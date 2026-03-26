@@ -61,6 +61,10 @@ impl Decryptor for EcbDecryptor {
         u32::from_le_bytes(self.iv).into()
     }
 
+    fn is_pkg2(&self) -> bool {
+        false
+    }
+
     fn is_enough(&self, size: usize) -> bool {
         if self.without_decrypt {
             return true;
