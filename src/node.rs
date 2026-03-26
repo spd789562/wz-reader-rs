@@ -1,6 +1,6 @@
 use crate::{
-    directory, file, ms, property, util, util::node_util, wz_image, MsFile, SharedWzMutableKey,
-    WzFile, WzImage, WzNodeCast, WzNodeName, WzObjectType,
+    directory, file, ms, property, util, util::node_util, wz_image, MsFile,
+    SharedWzStringDecryptor, WzFile, WzImage, WzNodeCast, WzNodeName, WzObjectType,
 };
 use hashbrown::HashMap;
 use std::path::Path;
@@ -93,7 +93,7 @@ impl WzNode {
         version: Option<util::version::WzMapleVersion>,
         patch_version: Option<i32>,
         parent: Option<&WzNodeArc>,
-        existing_key: Option<&SharedWzMutableKey>,
+        existing_key: Option<&SharedWzStringDecryptor>,
     ) -> Result<Self, Error>
     where
         P: AsRef<Path>,

@@ -7,7 +7,7 @@ use std::sync::{Arc, RwLock};
 use crate::header::WzHeader;
 use crate::property::{encrypt_str, WzStringMeta, WzStringType};
 use crate::util::string_decryptor::{
-    DecrypterType, Decryptor, SharedWzMutableKey, GLOBAL_STRING_DECRYPTOR,
+    DecrypterType, Decryptor, SharedWzStringDecryptor, GLOBAL_STRING_DECRYPTOR,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -61,7 +61,7 @@ pub struct WzSliceReader<'a> {
     _save_pos: Cell<usize>,
     pub header: WzHeader<'a>,
     pub wz_version: DecrypterType,
-    pub keys: SharedWzMutableKey,
+    pub keys: SharedWzStringDecryptor,
 }
 
 static WZ_OFFSET: i32 = 0x581C3F6D;
@@ -262,7 +262,7 @@ impl WzBaseReader<Mmap> {
 }
 
 impl<'a> WzSliceReader<'a> {
-    pub fn new(buf: &'a [u8], key: &SharedWzMutableKey) -> Self {
+    pub fn new(buf: &'a [u8], key: &SharedWzStringDecryptor) -> Self {
         WzSliceReader {
             buf,
             pos: Cell::new(0),
@@ -272,7 +272,7 @@ impl<'a> WzSliceReader<'a> {
             wz_version: DecrypterType::Unknown,
         }
     }
-    pub fn new_with_header(buf: &'a [u8], key: &SharedWzMutableKey) -> Self {
+    pub fn new_with_header(buf: &'a [u8], key: &SharedWzStringDecryptor) -> Self {
         let header = buf.pread::<WzHeader>(0).unwrap_or(WzHeader::default());
         WzSliceReader::new(buf, key).with_header(header)
     }
@@ -950,7 +950,7 @@ fn resolve_unicode_char(c: u16, i: i32) -> u16 {
     c ^ (i as u16).wrapping_add(0xAAAA)
 }
 
-pub fn get_decrypt_slice(buf: &[u8], len: usize, keys: &SharedWzMutableKey) -> Result<Vec<u8>> {
+pub fn get_decrypt_slice(buf: &[u8], len: usize, keys: &SharedWzStringDecryptor) -> Result<Vec<u8>> {
     let mut original = buf.to_vec();
 
     // prevent lock take too long

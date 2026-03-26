@@ -1,6 +1,6 @@
 use crate::util::maple_crypto_constants::{WZ_GMSIV, WZ_MSEAIV};
 use crate::GLOBAL_STRING_DECRYPTOR;
-use crate::{SharedWzMutableKey, WzReader};
+use crate::{SharedWzStringDecryptor, WzReader};
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -57,7 +57,7 @@ impl WzLua {
     }
 
     /// try to guess the iv from encrypted data
-    fn get_mtb_keys_from_guess_lua_iv(&self) -> Option<SharedWzMutableKey> {
+    fn get_mtb_keys_from_guess_lua_iv(&self) -> Option<SharedWzStringDecryptor> {
         let len = std::cmp::min(64, self.length);
         let test_data = self.reader.get_slice(self.offset..self.offset + len);
 

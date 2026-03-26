@@ -21,8 +21,11 @@ pub use node_cast::*;
 pub use node_name::*;
 pub use object::*;
 pub use reader::{Reader, WzReader, WzSliceReader};
-pub use util::string_decryptor::{SharedWzMutableKey, GLOBAL_STRING_DECRYPTOR};
+pub use util::string_decryptor::{SharedWzStringDecryptor, GLOBAL_STRING_DECRYPTOR};
 pub use wz_image::{WzImage, WzImageHeaderType};
 
 #[deprecated(note = "use util::version instead")]
 pub use util::version;
+
+#[deprecated(since = "0.18.0", note = "rename to SharedWzStringDecryptor")]
+pub type SharedWzMutableKey = SharedWzStringDecryptor;

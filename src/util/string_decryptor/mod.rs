@@ -9,7 +9,7 @@ use crate::util::version::PKGVersion;
 use crate::version::{get_iv_by_maple_version, get_key_by_maple_version, WzMapleVersion};
 use crate::{directory::WzDirectoryType, reader, Reader, WzSliceReader};
 
-pub type SharedWzMutableKey = Arc<RwLock<dyn Decryptor>>;
+pub type SharedWzStringDecryptor = Arc<RwLock<dyn Decryptor>>;
 pub use ecb_decryptor::EcbDecryptor;
 pub use pkg2_decryptor::Pkg2Decryptor;
 
@@ -35,7 +35,7 @@ pub enum DecrypterType {
 }
 
 pub(crate) fn try_get_first_wz_name_meta(buf: &[u8]) -> Result<WzStringMeta, reader::Error> {
-    let keys: SharedWzMutableKey =
+    let keys: SharedWzStringDecryptor =
         Arc::new(RwLock::new(ecb_decryptor::EcbDecryptor::from_iv([0; 4])));
     let reader = WzSliceReader::new_with_header(buf, &keys);
 
@@ -84,7 +84,7 @@ pub(crate) fn try_get_first_wz_name_meta(buf: &[u8]) -> Result<WzStringMeta, rea
 pub(crate) fn try_get_first_wz_name_pkg2_meta_from_wz_file(
     buf: &[u8],
 ) -> Result<WzStringMeta, reader::Error> {
-    let keys: SharedWzMutableKey =
+    let keys: SharedWzStringDecryptor =
         Arc::new(RwLock::new(ecb_decryptor::EcbDecryptor::from_iv([0; 4])));
     let reader = WzSliceReader::new_with_header(buf, &keys);
 
@@ -105,7 +105,7 @@ pub(crate) fn try_get_first_wz_name_pkg2_meta_from_wz_file(
 
 pub fn verify_decryptor_from_wz_file_with_meta(
     buf: &[u8],
-    decryptor: &SharedWzMutableKey,
+    decryptor: &SharedWzStringDecryptor,
     meta: &WzStringMeta,
 ) -> Result<(), reader::Error> {
     let reader = WzSliceReader::new_with_header(buf, decryptor);
@@ -124,13 +124,13 @@ pub fn verify_decryptor_from_wz_file_with_meta(
 
 pub fn verify_decryptor_from_wz_file(
     buf: &[u8],
-    decryptor: &SharedWzMutableKey,
+    decryptor: &SharedWzStringDecryptor,
 ) -> Result<(), reader::Error> {
     let meta = try_get_first_wz_name_meta(buf)?;
     verify_decryptor_from_wz_file_with_meta(buf, decryptor, &meta)
 }
 
-pub fn guess_decryptor_from_wz_file(buf: &[u8]) -> Option<SharedWzMutableKey> {
+pub fn guess_decryptor_from_wz_file(buf: &[u8]) -> Option<SharedWzStringDecryptor> {
     let guess_versions = [
         WzMapleVersion::BMS,
         WzMapleVersion::GMS,
@@ -143,7 +143,7 @@ pub fn guess_decryptor_from_wz_file(buf: &[u8]) -> Option<SharedWzMutableKey> {
 
     if meta.string_type != WzStringType::Empty {
         for version in guess_versions.iter() {
-            let keys: SharedWzMutableKey =
+            let keys: SharedWzStringDecryptor =
                 GLOBAL_STRING_DECRYPTOR.get_decryptor_by_version(*version);
             if verify_decryptor_from_wz_file_with_meta(buf, &keys, &meta).is_ok() {
                 return Some(keys);
@@ -159,7 +159,7 @@ pub fn guess_decryptor_from_wz_file(buf: &[u8]) -> Option<SharedWzMutableKey> {
 
     if pkg2_dir_meta.string_type != WzStringType::Empty {
         for version in guess_versions.iter() {
-            let keys: SharedWzMutableKey =
+            let keys: SharedWzStringDecryptor =
                 GLOBAL_STRING_DECRYPTOR.get_decryptor_by_version(*version);
             if verify_decryptor_from_wz_file_with_meta(buf, &keys, &pkg2_dir_meta).is_ok() {
                 return Some(keys);
@@ -179,30 +179,30 @@ pub struct StringDecryptor {
 }
 
 impl StringDecryptor {
-    pub fn get_decryptor(&self, decryptor_type: DecrypterType) -> SharedWzMutableKey {
+    pub fn get_decryptor(&self, decryptor_type: DecrypterType) -> SharedWzStringDecryptor {
         match decryptor_type {
-            DecrypterType::GMS => Arc::clone(&self.gms) as SharedWzMutableKey,
-            DecrypterType::KMS => Arc::clone(&self.kms) as SharedWzMutableKey,
-            DecrypterType::Custom => self.custom.get().unwrap().clone() as SharedWzMutableKey,
-            DecrypterType::KMST1198 => Arc::clone(&self.kmst1198) as SharedWzMutableKey,
-            _ => Arc::clone(&self.general) as SharedWzMutableKey,
+            DecrypterType::GMS => Arc::clone(&self.gms) as SharedWzStringDecryptor,
+            DecrypterType::KMS => Arc::clone(&self.kms) as SharedWzStringDecryptor,
+            DecrypterType::Custom => self.custom.get().unwrap().clone() as SharedWzStringDecryptor,
+            DecrypterType::KMST1198 => Arc::clone(&self.kmst1198) as SharedWzStringDecryptor,
+            _ => Arc::clone(&self.general) as SharedWzStringDecryptor,
         }
     }
-    pub fn get_decryptor_by_version(&self, version: WzMapleVersion) -> SharedWzMutableKey {
+    pub fn get_decryptor_by_version(&self, version: WzMapleVersion) -> SharedWzStringDecryptor {
         match version {
-            WzMapleVersion::GMS => Arc::clone(&self.gms) as SharedWzMutableKey,
-            WzMapleVersion::EMS => Arc::clone(&self.kms) as SharedWzMutableKey,
-            WzMapleVersion::KMST1198 => Arc::clone(&self.kmst1198) as SharedWzMutableKey,
-            _ => Arc::clone(&self.general) as SharedWzMutableKey,
+            WzMapleVersion::GMS => Arc::clone(&self.gms) as SharedWzStringDecryptor,
+            WzMapleVersion::EMS => Arc::clone(&self.kms) as SharedWzStringDecryptor,
+            WzMapleVersion::KMST1198 => Arc::clone(&self.kmst1198) as SharedWzStringDecryptor,
+            _ => Arc::clone(&self.general) as SharedWzStringDecryptor,
         }
     }
-    pub fn get_decryptor_by_iv(&self, iv: [u8; 4]) -> SharedWzMutableKey {
+    pub fn get_decryptor_by_iv(&self, iv: [u8; 4]) -> SharedWzStringDecryptor {
         match iv {
-            WZ_GMSIV => Arc::clone(&self.gms) as SharedWzMutableKey,
-            WZ_MSEAIV => Arc::clone(&self.kms) as SharedWzMutableKey,
-            [0, 0, 0, 0] => Arc::clone(&self.general) as SharedWzMutableKey,
+            WZ_GMSIV => Arc::clone(&self.gms) as SharedWzStringDecryptor,
+            WZ_MSEAIV => Arc::clone(&self.kms) as SharedWzStringDecryptor,
+            [0, 0, 0, 0] => Arc::clone(&self.general) as SharedWzStringDecryptor,
             _ => Arc::new(RwLock::new(ecb_decryptor::EcbDecryptor::from_iv(iv)))
-                as SharedWzMutableKey,
+                as SharedWzStringDecryptor,
         }
     }
 }

@@ -1,4 +1,4 @@
-use crate::{util::version::WzMapleVersion, SharedWzMutableKey, WzNode, WzNodeArc, WzNodeCast};
+use crate::{util::version::WzMapleVersion, SharedWzStringDecryptor, WzNode, WzNodeArc, WzNodeCast};
 use std::fs::DirEntry;
 use std::io;
 use std::path::Path;
@@ -23,7 +23,7 @@ pub fn resolve_root_wz_file_dir_full(
     version: Option<WzMapleVersion>,
     patch_version: Option<i32>,
     parent: Option<&WzNodeArc>,
-    default_keys: Option<&SharedWzMutableKey>,
+    default_keys: Option<&SharedWzStringDecryptor>,
 ) -> Result<WzNodeArc, io::Error> {
     let root_node: WzNodeArc =
         WzNode::from_wz_file_full(&dir, version, patch_version, parent, default_keys)

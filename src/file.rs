@@ -1,7 +1,7 @@
 use crate::{
     directory, reader, util, util::string_decryptor, util::version::PKGVersion, wz_image,
-    SharedWzMutableKey, WzDirectory, WzHeader, WzNodeArc, WzNodeArcVec, WzNodeCast, WzObjectType,
-    WzReader, WzSliceReader,
+    SharedWzStringDecryptor, WzDirectory, WzHeader, WzNodeArc, WzNodeArcVec, WzNodeCast,
+    WzObjectType, WzReader, WzSliceReader,
 };
 use memmap2::Mmap;
 use std::fs::File;
@@ -70,7 +70,7 @@ impl WzFile {
         path: P,
         wz_iv: Option<[u8; 4]>,
         patch_version: Option<i32>,
-        existing_key: Option<&SharedWzMutableKey>,
+        existing_key: Option<&SharedWzStringDecryptor>,
     ) -> Result<WzFile, Error>
     where
         P: AsRef<std::path::Path>,
@@ -83,7 +83,7 @@ impl WzFile {
         // use existing key or create from wz_iv
         let existing_keys = existing_key.cloned().or_else(|| {
             wz_iv.map(|iv| {
-                let keys: SharedWzMutableKey = Arc::new(RwLock::new(
+                let keys: SharedWzStringDecryptor = Arc::new(RwLock::new(
                     string_decryptor::ecb_decryptor::EcbDecryptor::from_iv(iv),
                 ));
                 keys
