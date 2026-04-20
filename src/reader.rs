@@ -64,8 +64,6 @@ pub struct WzSliceReader<'a> {
     pub pkg2_keys: SharedWzStringDecryptor,
 }
 
-static WZ_OFFSET: i32 = 0x581C3F6D;
-
 pub trait Reader {
     fn get_size(&self) -> usize;
     fn get_decrypt_slice(&self, range: std::ops::Range<usize>) -> Result<Vec<u8>>;
@@ -596,77 +594,6 @@ impl<'a> WzSliceReader<'a> {
     pub fn read_wz_long(&self) -> Result<i64> {
         self.read_wz_int64()
     }
-    #[inline]
-    pub fn read_wz_offset(
-        &self,
-        hash: usize,
-        encrypted_offset: u32,
-        offset: usize,
-    ) -> Result<usize> {
-        let header_size = self.header.fstart;
-
-        let offset = offset.wrapping_sub(header_size) ^ 0xFFFFFFFF;
-        let offset = offset.wrapping_mul(hash) & 0xFFFFFFFF;
-        let offset = offset.wrapping_sub(WZ_OFFSET as usize);
-        // it's pretty important need to cast to i32 first usize.rotate_left will give wrong result
-        let offset = (offset as i32).rotate_left((offset as u32) & 0x1F) as usize & 0xFFFFFFFF;
-
-        let offset = (offset ^ (encrypted_offset as usize)) & 0xFFFFFFFF;
-        let offset = offset.wrapping_add(header_size * 2) & 0xFFFFFFFF;
-
-        Ok(offset)
-    }
-    #[inline]
-    pub fn read_wz_offset_pkg2(
-        &self,
-        hash: u32,
-        pkg2_hash1: u32,
-        encrypted_offset: u32,
-        offset: usize,
-    ) -> Result<usize> {
-        let offset = offset as u32;
-        let header_size = self.header.fstart as u32;
-
-        let distance = ((hash ^ pkg2_hash1) & 0x1F) as u8;
-
-        let offset = offset.wrapping_sub(header_size);
-        let offset = !offset as u32;
-        let offset = offset.wrapping_mul(hash);
-        let offset = offset.wrapping_sub(WZ_OFFSET as u32);
-        let offset = offset ^ pkg2_hash1.wrapping_mul(0x01010101);
-        let offset = offset.rotate_left(distance as u32);
-
-        let offset = offset ^ encrypted_offset;
-        let offset = offset.wrapping_add(header_size);
-
-        Ok(offset as usize)
-    }
-
-    #[inline]
-    pub fn read_wz_offset_pkg2_v2(
-        &self,
-        hash: u32,
-        pkg2_hash1: u32,
-        encrypted_offset: u32,
-        offset: usize,
-    ) -> Result<usize> {
-        let offset = offset as u32;
-        let header_size = self.header.fstart as u32;
-
-        let distance = ((hash ^ pkg2_hash1) & 0x1F) as u8 as u32;
-
-        let offset = offset.wrapping_sub(header_size);
-        let offset = !offset as u32;
-        let offset = offset.wrapping_mul(hash ^ pkg2_hash1);
-        let offset = offset.wrapping_sub(WZ_OFFSET as u32);
-        let offset = offset ^ pkg2_hash1.wrapping_mul(0x01010101);
-        let offset = offset.rotate_left(distance as u32);
-
-        let offset = offset ^ !encrypted_offset;
-        let offset = offset.wrapping_add(header_size);
-
-        Ok(offset as usize)
-    }
 }
 
 impl<T: AsRef<[u8]>> Reader for WzBaseReader<T> {
@@ -902,25 +829,6 @@ pub fn read_wz_int64(buf: &[u8], offset: Option<usize>) -> Result<i64> {
 #[inline]
 pub fn read_wz_long(buf: &[u8], offset: Option<usize>) -> Result<i64> {
     read_wz_int64(buf, offset)
-}
-
-pub fn read_wz_offset(
-    buf: &[u8],
-    encrypted_offset: usize,
-    fstart: usize,
-    offset: usize,
-    hash: usize,
-) -> Result<usize> {
-    let offset = offset.wrapping_sub(fstart) ^ 0xFFFFFFFF;
-    let offset = offset.wrapping_mul(hash) & 0xFFFFFFFF;
-    let offset = offset.wrapping_sub(WZ_OFFSET as usize);
-    let offset = offset.rotate_left((offset as u32) & 0x1F) & 0xFFFFFFFF;
-
-    let encrypted_offset = buf.pread_with::<u32>(encrypted_offset, LE)?;
-    let offset = (offset ^ encrypted_offset as usize) & 0xFFFFFFFF;
-    let offset = offset.wrapping_add(fstart * 2) & 0xFFFFFFFF;
-
-    Ok(offset)
 }
 
 pub fn read_unicode_string(buf: &[u8], sl: i8) -> Result<String> {

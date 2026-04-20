@@ -7,6 +7,7 @@ pub mod string_decryptor;
 pub mod walk;
 pub mod wz_mutable_key;
 
+pub mod offset;
 pub mod version;
 
 pub use parse_property::*;

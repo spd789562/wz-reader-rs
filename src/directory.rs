@@ -1,6 +1,9 @@
 use crate::{
     reader,
-    util::{string_decryptor::DecrypterType, version::PKGVersion},
+    util::{
+        offset::{self, WzOffsetMeta},
+        version::PKGVersion,
+    },
     wz_image, Reader, WzHeader, WzImage, WzNode, WzNodeArc, WzNodeArcVec, WzNodeName, WzObjectType,
     WzReader, WzSliceReader,
 };
@@ -137,27 +140,20 @@ impl WzDirectory {
             all_verified = true;
             reader.seek(reader_pos);
             for entry in self.entries.iter_mut() {
+                let meta = WzOffsetMeta {
+                    hash: self.hash as u32,
+                    encrypted_offset: entry.encrypted_offset,
+                    offset: entry.calculation_offset,
+                    pkg2_hash1: pkg2_hash1,
+                };
+
                 if reader.header.ident == PKGVersion::V1 {
-                    entry.offset = reader.read_wz_offset(
-                        self.hash,
-                        entry.encrypted_offset,
-                        entry.calculation_offset,
-                    )?;
+                    entry.offset = offset::read_wz_offset(&reader.header, &meta)?;
                 } else if reader.header.ident == PKGVersion::V2 {
                     if i == 0 {
-                        entry.offset = reader.read_wz_offset_pkg2(
-                            self.hash as u32,
-                            pkg2_hash1,
-                            entry.encrypted_offset,
-                            entry.calculation_offset,
-                        )?;
+                        entry.offset = offset::read_wz_offset_pkg2(&reader.header, &meta)?;
                     } else {
-                        entry.offset = reader.read_wz_offset_pkg2_v2(
-                            self.hash as u32,
-                            pkg2_hash1,
-                            entry.encrypted_offset,
-                            entry.calculation_offset,
-                        )?;
+                        entry.offset = offset::read_wz_offset_pkg2_v2(&reader.header, &meta)?;
                     }
                 }
 
