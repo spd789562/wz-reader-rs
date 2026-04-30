@@ -1,5 +1,5 @@
 use crate::util::string_decryptor::{
-    ecb_decryptor::EcbDecryptor, pkg2_decryptor::Pkg2Decryptor, Decryptor,
+    ecb_decryptor::EcbDecryptor, pkg2_decryptor::Pkg2Decryptor, DecrypterType, Decryptor,
 };
 use crate::{reader, Reader, WzNodeArc, WzNodeCast, WzReader};
 use std::sync::{Arc, RwLock};
@@ -28,7 +28,7 @@ pub enum WzStringType {
 
 impl Default for WzStringType {
     fn default() -> Self {
-        Self::Ascii
+        Self::Empty
     }
 }
 
@@ -38,7 +38,7 @@ impl std::fmt::Display for WzStringType {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct WzStringMeta {
     /// string start offset
     pub offset: usize,
@@ -141,7 +141,7 @@ impl WzString {
     }
 
     pub fn from_str_pkg2_dir(str: &str) -> Self {
-        let mut keys = Pkg2Decryptor::new_with_key(0x1A2B3C4D);
+        let mut keys = Pkg2Decryptor::new_with_key(0x1A2B3C4D, DecrypterType::KMST1198);
 
         let len = str.chars().count() * 2;
 

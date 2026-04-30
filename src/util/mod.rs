@@ -8,6 +8,7 @@ pub mod walk;
 pub mod wz_mutable_key;
 
 pub mod offset;
+pub mod profile;
 pub mod version;
 
 pub use parse_property::*;

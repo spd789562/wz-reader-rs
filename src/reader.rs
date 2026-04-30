@@ -47,7 +47,7 @@ impl Default for WzBaseReader<Mmap> {
         WzBaseReader {
             map: memmap,
             keys: GLOBAL_STRING_DECRYPTOR.get_decryptor(DecrypterType::Unknown),
-            pkg2_keys: GLOBAL_STRING_DECRYPTOR.get_decryptor(DecrypterType::Unknown),
+            pkg2_keys: GLOBAL_STRING_DECRYPTOR.get_decryptor(DecrypterType::KMST1199),
         }
     }
 }
@@ -163,7 +163,7 @@ pub trait Reader {
             WzStringType::Pkg2Dir => {
                 let strvec = self.resolve_pkg2_dir_raw(offset, length)?;
 
-                Ok(String::from_utf16_lossy(&strvec))
+                String::from_utf16(&strvec).map_err(Error::from)
             }
         }
     }
@@ -174,13 +174,13 @@ impl<T: AsRef<[u8]>> WzBaseReader<T> {
         WzBaseReader {
             map,
             keys: GLOBAL_STRING_DECRYPTOR.get_decryptor(DecrypterType::Unknown),
-            pkg2_keys: GLOBAL_STRING_DECRYPTOR.get_decryptor(DecrypterType::Unknown),
+            pkg2_keys: GLOBAL_STRING_DECRYPTOR.get_decryptor(DecrypterType::KMST1199),
         }
     }
     pub fn with_iv(self, iv: [u8; 4]) -> Self {
         WzBaseReader {
             keys: GLOBAL_STRING_DECRYPTOR.get_decryptor_by_iv(iv),
-            pkg2_keys: GLOBAL_STRING_DECRYPTOR.get_decryptor(DecrypterType::Unknown),
+            pkg2_keys: GLOBAL_STRING_DECRYPTOR.get_decryptor(DecrypterType::KMST1199),
             ..self
         }
     }
@@ -261,7 +261,7 @@ impl WzBaseReader<Mmap> {
         WzReader {
             map: memmap.make_read_only().unwrap(),
             keys: GLOBAL_STRING_DECRYPTOR.get_decryptor(DecrypterType::Unknown),
-            pkg2_keys: GLOBAL_STRING_DECRYPTOR.get_decryptor(DecrypterType::Unknown),
+            pkg2_keys: GLOBAL_STRING_DECRYPTOR.get_decryptor(DecrypterType::KMST1199),
         }
     }
 }

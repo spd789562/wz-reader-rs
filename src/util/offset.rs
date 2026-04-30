@@ -4,7 +4,9 @@ type Result<T> = std::result::Result<T, Error>;
 
 static WZ_OFFSET: u32 = 0x581C3F6D;
 
+#[derive(Debug, Clone, Copy, Default)]
 pub enum WzOffsetVersion {
+    #[default]
     Pkg1,
     Pkg2V1,
     Pkg2V2,
@@ -74,7 +76,7 @@ pub fn read_wz_offset_pkg2(header: &WzHeader, meta: &WzOffsetMeta) -> Result<usi
 }
 
 /// calculate the offset of the specific data like wz image/directory in wz file,
-/// only work in pkg2 with version 1198-1199
+/// only work in pkg2 with version 1198
 #[inline]
 pub fn read_wz_offset_pkg2_v2(header: &WzHeader, meta: &WzOffsetMeta) -> Result<usize> {
     let offset = meta.offset as u32;
@@ -96,7 +98,7 @@ pub fn read_wz_offset_pkg2_v2(header: &WzHeader, meta: &WzOffsetMeta) -> Result<
 }
 
 /// calculate the offset of the specific data like wz image/directory in wz file,
-/// only work in pkg2 with version 1200
+/// only work in pkg2 with version 1199-1200
 #[inline]
 pub fn read_wz_offset_pkg2_v3(header: &WzHeader, meta: &WzOffsetMeta) -> Result<usize> {
     let offset = meta.offset as u32;
@@ -110,6 +112,7 @@ pub fn read_wz_offset_pkg2_v3(header: &WzHeader, meta: &WzOffsetMeta) -> Result<
     let offset = offset.wrapping_sub(header_size);
     let offset = !offset;
     let offset = offset.wrapping_mul(pre_hash.wrapping_add(mixed_hash ^ 0xA7E3C093));
+    let offset = offset.wrapping_sub(WZ_OFFSET as u32);
     let offset = offset ^ meta.pkg2_hash1.wrapping_mul(0x01010101);
     let offset = offset ^ mixed_hash.wrapping_mul(0x9E3779B9);
     let offset = offset.rotate_left(distance);

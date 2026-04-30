@@ -1,6 +1,8 @@
+use crate::util::string_decryptor::pkg2_decryptor::get_kmst1199_key;
+use crate::util::string_decryptor::DecrypterType;
 use crate::{
-    directory, reader, util, util::string_decryptor, util::version::PKGVersion, wz_image,
-    SharedWzStringDecryptor, WzDirectory, WzHeader, WzNodeArc, WzNodeArcVec, WzNodeCast,
+    directory, reader, util, util::profile, util::string_decryptor, util::version::PKGVersion,
+    wz_image, SharedWzStringDecryptor, WzDirectory, WzHeader, WzNodeArc, WzNodeArcVec, WzNodeCast,
     WzObjectType, WzReader, WzSliceReader,
 };
 use memmap2::Mmap;
@@ -47,6 +49,8 @@ pub struct WzFileMeta {
     pub wz_with_encrypt_version_header: bool,
     /// the hash use to calculate img offset
     pub hash: usize,
+    /// whether the string decryptor is verified
+    pub string_decryptor_verified: bool,
 }
 
 /// Root of the `WzNode`, represents the Wz file itself and contains `WzFileMeta`
@@ -100,6 +104,7 @@ impl WzFile {
                 }
             })
             .or_else(|| string_decryptor::guess_decryptor_from_wz_file(&map));
+        let string_decryptor_verified = verified_keys.is_some();
 
         let reader = if let Some(keys) = verified_keys {
             WzReader::new(map).with_existing_keys(keys.clone())
@@ -115,6 +120,7 @@ impl WzFile {
             wz_version_header: 0,
             wz_with_encrypt_version_header: true,
             hash: 0,
+            string_decryptor_verified,
         };
 
         Ok(WzFile {
@@ -130,13 +136,9 @@ impl WzFile {
         parent: &WzNodeArc,
         patch_version: Option<i32>,
     ) -> Result<WzNodeArcVec, Error> {
-        let reader = self.reader.clone();
-
-        let slice_reader = reader.create_slice_reader();
-
-        match slice_reader.header.ident {
-            PKGVersion::V1 => self.parse_pkg1(parent, patch_version, slice_reader),
-            PKGVersion::V2 => self.parse_pkg2(parent, slice_reader),
+        match self.reader.create_header().ident {
+            PKGVersion::V1 => self.parse_pkg1(parent, patch_version),
+            PKGVersion::V2 => self.parse_pkg2(parent),
             _ => Err(Error::UnknownPkgVersion),
         }
     }
@@ -145,13 +147,11 @@ impl WzFile {
         &mut self,
         parent: &WzNodeArc,
         patch_version: Option<i32>,
-        slice_reader: WzSliceReader,
     ) -> Result<WzNodeArcVec, Error> {
-        let option_encrypt_version = WzHeader::get_encrypted_version(
-            slice_reader.buf,
-            slice_reader.header.fstart,
-            slice_reader.header.fsize,
-        );
+        let option_encrypt_version = {
+            let header = self.reader.create_header();
+            WzHeader::get_encrypted_version(&self.reader.map, header.fstart, header.fsize)
+        };
 
         let mut wz_file_meta = WzFileMeta {
             path: "".to_string(),
@@ -161,6 +161,7 @@ impl WzFile {
             } else {
                 WZ_VERSION_HEADER_64BIT_START as i32
             },
+            string_decryptor_verified: self.wz_file_meta.string_decryptor_verified,
             wz_with_encrypt_version_header: option_encrypt_version.is_some(),
             hash: 0,
         };
@@ -213,35 +214,80 @@ impl WzFile {
         Ok(children)
     }
 
-    fn parse_pkg2(
-        &mut self,
-        parent: &WzNodeArc,
-        slice_reader: WzSliceReader,
-    ) -> Result<WzNodeArcVec, Error> {
-        let [hash1, hash2] =
-            WzHeader::read_pkg2_hashes(slice_reader.buf, slice_reader.header.fstart)?;
-
-        let version_gen = util::version::pkg2::VersionGen::new(hash1, hash2);
+    fn parse_pkg2(&mut self, parent: &WzNodeArc) -> Result<WzNodeArcVec, Error> {
+        let [hash1, hash2] = {
+            let header = self.reader.create_header();
+            WzHeader::read_pkg2_hashes(&self.reader.map, header.fstart)?
+        };
 
         let mut wz_file_meta = WzFileMeta {
             path: "".to_string(),
             patch_version: -1,
             wz_version_header: 0,
             wz_with_encrypt_version_header: false,
+            string_decryptor_verified: self.wz_file_meta.string_decryptor_verified,
             hash: 0,
         };
 
         let mut wz_dir = WzDirectory::new(self.offset, self.block_size, &self.reader, false);
 
-        for hash in version_gen {
+        wz_dir.prepare_entries()?;
+
+        // clone the cache so it don't take the lock too long
+        let cached_profiles = profile::PKG2_PROFILE_CACHE.read().unwrap().clone();
+
+        for cached_profile in cached_profiles.iter() {
+            if !cached_profile.verify_hash(hash1, hash2) {
+                continue;
+            }
+            let hash = cached_profile.hash;
+
             wz_file_meta.hash = hash as usize;
             wz_dir.hash = hash as usize;
+            wz_dir.profile = cached_profile.profile.clone();
+
+            if !wz_file_meta.string_decryptor_verified {
+                self.update_keys(hash1, hash2, hash);
+                if !wz_dir.verify_string_decryptor() {
+                    continue;
+                }
+            }
+
             if let Ok(children) =
                 self.try_decode_with_wz_version_number(parent, &wz_file_meta, &mut wz_dir)
             {
                 self.update_wz_file_meta(wz_file_meta);
                 self.is_parsed = true;
                 return Ok(children);
+            }
+        }
+
+        for profile in profile::get_all_pkg2_profiles() {
+            wz_dir.profile = profile.clone();
+            for hash in profile.version_gen.get_generator(hash1, hash2).get_iter() {
+                wz_file_meta.hash = hash as usize;
+                wz_dir.hash = hash as usize;
+
+                if !wz_file_meta.string_decryptor_verified {
+                    self.update_keys(hash1, hash2, hash);
+                    if !wz_dir.verify_string_decryptor() {
+                        continue;
+                    }
+                }
+
+                if let Ok(children) =
+                    self.try_decode_with_wz_version_number(parent, &wz_file_meta, &mut wz_dir)
+                {
+                    self.update_wz_file_meta(wz_file_meta);
+                    self.is_parsed = true;
+
+                    profile::PKG2_PROFILE_CACHE
+                        .write()
+                        .unwrap()
+                        .push(profile::Pkg2Profile::new(profile.clone(), hash));
+
+                    return Ok(children);
+                }
             }
         }
 
@@ -254,7 +300,7 @@ impl WzFile {
         meta: &WzFileMeta,
         wz_dir: &mut WzDirectory,
     ) -> Result<WzNodeArcVec, Error> {
-        if meta.hash == 0 {
+        if meta.hash == 0 || wz_dir.calculate_offset_and_verify().is_err() {
             return Err(Error::ErrorGameVerHash);
         }
 
@@ -293,5 +339,12 @@ impl WzFile {
             path: std::mem::take(&mut self.wz_file_meta.path),
             ..wz_file_meta
         };
+    }
+
+    fn update_keys(&self, hash1: u32, hash2: u32, target_hash: u32) {
+        self.reader.pkg2_keys.write().unwrap().set_iv(
+            get_kmst1199_key(hash1, target_hash),
+            DecrypterType::KMST1199,
+        );
     }
 }

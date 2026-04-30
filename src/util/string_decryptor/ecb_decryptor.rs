@@ -12,6 +12,7 @@ pub struct EcbDecryptor {
     pub iv: [u8; 4],
     keys: Vec<u8>,
     aes_key: [u8; 32],
+    enc_type: DecrypterType,
     /// iv == 0, without decrypt
     pub without_decrypt: bool,
 }
@@ -23,6 +24,7 @@ impl EcbDecryptor {
             keys: vec![],
             aes_key,
             without_decrypt: i32::from_le_bytes(iv) == 0,
+            enc_type: DecrypterType::BMS,
         }
     }
     pub fn new_lua() -> Self {
@@ -31,6 +33,7 @@ impl EcbDecryptor {
             keys: vec![],
             aes_key: get_trimmed_user_key(&MAPLESTORY_USERKEY_DEFAULT),
             without_decrypt: false,
+            enc_type: DecrypterType::BMS,
         }
     }
     pub fn from_iv(iv: [u8; 4]) -> Self {
@@ -39,6 +42,7 @@ impl EcbDecryptor {
             keys: vec![],
             aes_key: get_trimmed_user_key(&MAPLESTORY_USERKEY_DEFAULT),
             without_decrypt: i32::from_le_bytes(iv) == 0,
+            enc_type: DecrypterType::BMS,
         }
     }
     #[inline]
@@ -54,7 +58,12 @@ impl EcbDecryptor {
 impl Decryptor for EcbDecryptor {
     fn get_enc_type(&self) -> DecrypterType {
         // it's not really important here
-        DecrypterType::GMS
+        self.enc_type
+    }
+
+    fn set_iv(&mut self, iv: u32, enc_type: DecrypterType) {
+        self.enc_type = enc_type;
+        self.iv = iv.to_le_bytes();
     }
 
     fn get_iv_hash(&self) -> u64 {

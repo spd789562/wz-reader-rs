@@ -17,6 +17,7 @@ pub fn get_iv_by_maple_version(version: WzMapleVersion) -> [u8; 4] {
 pub fn get_key_by_maple_version(version: WzMapleVersion) -> u32 {
     match version {
         WzMapleVersion::KMST1198 => 0xDEADBEEF,
+        WzMapleVersion::KMST1199 => 0x6D4C3B2A,
         _ => 0,
     }
 }
@@ -45,6 +46,8 @@ pub enum WzMapleVersion {
     UNKNOWN,
 
     KMST1198,
+
+    KMST1199,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
