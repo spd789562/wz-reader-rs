@@ -8,6 +8,7 @@ use std::sync::{LazyLock, RwLock};
 pub enum WzProfileVersion {
     #[default]
     Pkg1,
+    Pkg2V1201,
     Pkg2V1200,
     Pkg2V1199,
     Pkg2V1198,
@@ -42,6 +43,12 @@ impl Default for WzProfile {
 
 pub fn get_all_pkg2_profiles() -> Vec<WzProfile> {
     vec![
+        WzProfile {
+            name: WzProfileVersion::Pkg2V1201,
+            decryptor_type: DecrypterType::KMST1199,
+            version_gen: Pkg2VersionGen::V4,
+            offset_version: WzOffsetVersion::Pkg2V3,
+        },
         WzProfile {
             name: WzProfileVersion::Pkg2V1200,
             decryptor_type: DecrypterType::KMST1199,

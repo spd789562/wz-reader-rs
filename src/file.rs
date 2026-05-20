@@ -2,8 +2,8 @@ use crate::util::string_decryptor::pkg2_decryptor::get_kmst1199_key;
 use crate::util::string_decryptor::DecrypterType;
 use crate::{
     directory, reader, util, util::profile, util::string_decryptor, util::version::PKGVersion,
-    wz_image, SharedWzStringDecryptor, WzDirectory, WzHeader, WzNodeArc, WzNodeArcVec, WzNodeCast,
-    WzObjectType, WzReader, WzSliceReader,
+    wz_image, SharedWzStringDecryptor, WzDirectory, WzNodeArc, WzNodeArcVec, WzNodeCast,
+    WzObjectType, WzReader,
 };
 use memmap2::Mmap;
 use std::fs::File;
@@ -112,7 +112,7 @@ impl WzFile {
             WzReader::new(map)
         };
 
-        let offset = WzHeader::read_data_start(&reader.map).map_err(|_| Error::InvalidWzFile)?;
+        let offset = reader.header.data_start;
 
         let wz_file_meta = WzFileMeta {
             path: path.as_ref().to_str().unwrap().to_string(),
@@ -148,10 +148,7 @@ impl WzFile {
         parent: &WzNodeArc,
         patch_version: Option<i32>,
     ) -> Result<WzNodeArcVec, Error> {
-        let option_encrypt_version = {
-            let header = self.reader.create_header();
-            WzHeader::get_encrypted_version(&self.reader.map, header.fstart, header.fsize)
-        };
+        let option_encrypt_version = self.reader.header.encrypt_version;
 
         let mut wz_file_meta = WzFileMeta {
             path: "".to_string(),
@@ -215,10 +212,8 @@ impl WzFile {
     }
 
     fn parse_pkg2(&mut self, parent: &WzNodeArc) -> Result<WzNodeArcVec, Error> {
-        let [hash1, hash2] = {
-            let header = self.reader.create_header();
-            WzHeader::read_pkg2_hashes(&self.reader.map, header.fstart)?
-        };
+        let hash1 = self.reader.header.hash1;
+        let hash2 = self.reader.header.hash2;
 
         let mut wz_file_meta = WzFileMeta {
             path: "".to_string(),
@@ -341,7 +336,7 @@ impl WzFile {
         };
     }
 
-    fn update_keys(&self, hash1: u32, hash2: u32, target_hash: u32) {
+    fn update_keys(&self, hash1: u32, _hash2: u32, target_hash: u32) {
         self.reader.pkg2_keys.write().unwrap().set_iv(
             get_kmst1199_key(hash1, target_hash),
             DecrypterType::KMST1199,

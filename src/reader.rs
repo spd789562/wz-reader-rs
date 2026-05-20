@@ -22,6 +22,8 @@ pub enum Error {
     ReadUtf16Error(#[from] std::string::FromUtf16Error),
     #[error("Wrong parsing method of WzStringType: {0}")]
     WrongParsingMethod(WzStringType),
+    #[error("Unable to read WzHeader from buffer")]
+    UnableToReadWzHeader,
 }
 
 type Result<T> = std::result::Result<T, Error>;
@@ -31,6 +33,7 @@ type Result<T> = std::result::Result<T, Error>;
 #[derive(Debug)]
 pub struct WzBaseReader<T: Sized + AsRef<[u8]>> {
     pub map: T,
+    pub header: WzHeader,
     pub keys: SharedWzStringDecryptor,
     pub pkg2_keys: SharedWzStringDecryptor,
 }
@@ -44,8 +47,13 @@ impl Default for WzBaseReader<Mmap> {
             .unwrap()
             .make_read_only()
             .unwrap();
+        let header = memmap
+            .as_ref()
+            .pread::<WzHeader>(0)
+            .unwrap_or(WzHeader::default());
         WzBaseReader {
             map: memmap,
+            header,
             keys: GLOBAL_STRING_DECRYPTOR.get_decryptor(DecrypterType::Unknown),
             pkg2_keys: GLOBAL_STRING_DECRYPTOR.get_decryptor(DecrypterType::KMST1199),
         }
@@ -59,7 +67,7 @@ pub struct WzSliceReader<'a> {
     /// current reading position
     pub pos: Cell<usize>,
     _save_pos: Cell<usize>,
-    pub header: WzHeader<'a>,
+    pub header: WzHeader,
     pub keys: SharedWzStringDecryptor,
     pub pkg2_keys: SharedWzStringDecryptor,
 }
@@ -171,8 +179,13 @@ pub trait Reader {
 
 impl<T: AsRef<[u8]>> WzBaseReader<T> {
     pub fn new(map: T) -> Self {
+        let header = map
+            .as_ref()
+            .pread::<WzHeader>(0)
+            .unwrap_or(WzHeader::default());
         WzBaseReader {
             map,
+            header,
             keys: GLOBAL_STRING_DECRYPTOR.get_decryptor(DecrypterType::Unknown),
             pkg2_keys: GLOBAL_STRING_DECRYPTOR.get_decryptor(DecrypterType::KMST1199),
         }
@@ -199,13 +212,8 @@ impl<T: AsRef<[u8]>> WzBaseReader<T> {
             ..self
         }
     }
-
     #[inline]
-    pub fn try_header(&self) -> Result<WzHeader<'_>> {
-        self.map.as_ref().pread::<WzHeader>(0)
-    }
-    #[inline]
-    pub fn create_header(&self) -> WzHeader<'_> {
+    pub fn create_header(&self) -> WzHeader {
         self.map
             .as_ref()
             .pread::<WzHeader>(0)
@@ -220,23 +228,15 @@ impl<T: AsRef<[u8]>> WzBaseReader<T> {
         &self.map.as_ref()[range]
     }
     #[inline]
-    pub fn get_wz_fstart(&self) -> Result<u32> {
-        WzHeader::get_wz_fstart(self.map.as_ref())
-    }
-    #[inline]
-    pub fn get_wz_fsize(&self) -> Result<u64> {
-        WzHeader::get_wz_fsize(self.map.as_ref())
-    }
-    #[inline]
     pub fn create_slice_reader_without_hash(&self) -> WzSliceReader<'_> {
         WzSliceReader::new(self.map.as_ref(), &self.keys)
-            .with_header(WzHeader::default())
+            .with_header(self.header.clone())
             .with_pkg2_keys(&self.pkg2_keys)
     }
     #[inline]
     pub fn create_slice_reader(&self) -> WzSliceReader<'_> {
         WzSliceReader::new(self.map.as_ref(), &self.keys)
-            .with_header(self.create_header())
+            .with_header(self.header.clone())
             .with_pkg2_keys(&self.pkg2_keys)
     }
     /// create a encrypt string from current `WzReader`
@@ -258,8 +258,13 @@ impl WzBaseReader<Mmap> {
         if !is_empty {
             memmap.copy_from_slice(buff);
         }
+        let header = memmap
+            .as_ref()
+            .pread::<WzHeader>(0)
+            .unwrap_or(WzHeader::default());
         WzReader {
             map: memmap.make_read_only().unwrap(),
+            header,
             keys: GLOBAL_STRING_DECRYPTOR.get_decryptor(DecrypterType::Unknown),
             pkg2_keys: GLOBAL_STRING_DECRYPTOR.get_decryptor(DecrypterType::KMST1199),
         }
@@ -288,7 +293,7 @@ impl<'a> WzSliceReader<'a> {
         WzSliceReader::new(buf, key).with_header(header)
     }
     #[inline]
-    pub fn with_header(self, header: WzHeader<'a>) -> Self {
+    pub fn with_header(self, header: WzHeader) -> Self {
         WzSliceReader { header, ..self }
     }
     #[inline]
@@ -1034,6 +1039,10 @@ mod test {
         setup_vec.extend_from_slice(&(20_i8).to_le_bytes());
         setup_vec.extend_from_slice(&generate_encrypted_unicode_string(20, WZ_MSEAIV)?);
 
+        let fsize = setup_vec.len() - mock_wz_header.len();
+
+        setup_vec[4..12].copy_from_slice(&fsize.to_le_bytes());
+
         Ok(setup_vec)
     }
 
@@ -1041,13 +1050,14 @@ mod test {
     fn test_wz_header() -> Result<()> {
         let reader = WzVecReader::new(setup()?);
 
-        let wz_header = reader.create_header();
-        assert_eq!(wz_header.ident, PKGVersion::V1);
-        assert_eq!(wz_header.fsize, 364);
-        assert_eq!(wz_header.fstart, 60);
+        let buffer_len = reader.map.len();
+
+        assert_eq!(reader.header.ident, PKGVersion::V1);
+        assert_eq!(reader.header.fsize, 855);
+        assert_eq!(reader.header.fstart, 60);
         assert_eq!(
-            wz_header.copyright,
-            "Package file v1.0 Copyright 2002 Wizet, ZMS"
+            reader.header.fsize as usize + reader.header.fstart,
+            buffer_len
         );
 
         Ok(())

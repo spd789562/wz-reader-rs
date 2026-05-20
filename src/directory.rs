@@ -1,13 +1,9 @@
 use crate::{
     property::WzStringMeta,
     reader,
-    util::{
-        offset::{self, WzOffsetMeta},
-        profile::WzProfile,
-        version::PKGVersion,
-    },
-    wz_image, Reader, WzHeader, WzImage, WzNode, WzNodeArc, WzNodeArcVec, WzNodeName, WzObjectType,
-    WzReader, WzSliceReader,
+    util::{offset::WzOffsetMeta, profile::WzProfile, version::PKGVersion},
+    wz_image, Reader, WzImage, WzNode, WzNodeArc, WzNodeArcVec, WzNodeName, WzObjectType, WzReader,
+    WzSliceReader,
 };
 use std::sync::Arc;
 
@@ -236,12 +232,6 @@ impl WzDirectory {
     pub fn calculate_offset_and_verify(&mut self) -> Result<(), Error> {
         let reader = self.reader.create_slice_reader();
 
-        let pkg2_hash1 = if reader.header.ident == PKGVersion::V2 {
-            WzHeader::read_pkg2_hashes(reader.buf, reader.header.fstart)?[0]
-        } else {
-            0
-        };
-
         let offset_calculator = self.profile.offset_version.get_calculator();
 
         for entry in self.entries.iter_mut() {
@@ -249,7 +239,6 @@ impl WzDirectory {
                 hash: self.hash as u32,
                 encrypted_offset: entry.encrypted_offset,
                 offset: entry.calculation_offset,
-                pkg2_hash1: pkg2_hash1,
             };
 
             entry.offset = offset_calculator(&reader.header, &meta)?;

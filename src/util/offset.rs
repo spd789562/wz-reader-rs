@@ -29,7 +29,6 @@ pub struct WzOffsetMeta {
     pub hash: u32,
     pub encrypted_offset: u32,
     pub offset: usize,
-    pub pkg2_hash1: u32,
 }
 
 pub type OffsetCalculator = fn(&WzHeader, &WzOffsetMeta) -> Result<usize>;
@@ -60,13 +59,13 @@ pub fn read_wz_offset_pkg2(header: &WzHeader, meta: &WzOffsetMeta) -> Result<usi
     let offset = meta.offset as u32;
     let header_size = header.fstart as u32;
 
-    let distance = ((meta.hash ^ meta.pkg2_hash1) & 0x1F) as u8;
+    let distance = ((meta.hash ^ header.hash1) & 0x1F) as u8;
 
     let offset = offset.wrapping_sub(header_size);
     let offset = !offset as u32;
     let offset = offset.wrapping_mul(meta.hash);
     let offset = offset.wrapping_sub(WZ_OFFSET);
-    let offset = offset ^ meta.pkg2_hash1.wrapping_mul(0x01010101);
+    let offset = offset ^ header.hash1.wrapping_mul(0x01010101);
     let offset = offset.rotate_left(distance as u32);
 
     let offset = offset ^ meta.encrypted_offset;
@@ -82,13 +81,13 @@ pub fn read_wz_offset_pkg2_v2(header: &WzHeader, meta: &WzOffsetMeta) -> Result<
     let offset = meta.offset as u32;
     let header_size = header.fstart as u32;
 
-    let distance = ((meta.hash ^ meta.pkg2_hash1) & 0x1F) as u8 as u32;
+    let distance = ((meta.hash ^ header.hash1) & 0x1F) as u8 as u32;
 
     let offset = offset.wrapping_sub(header_size);
     let offset = !offset as u32;
-    let offset = offset.wrapping_mul(meta.hash ^ meta.pkg2_hash1);
+    let offset = offset.wrapping_mul(meta.hash ^ header.hash1);
     let offset = offset.wrapping_sub(WZ_OFFSET as u32);
-    let offset = offset ^ meta.pkg2_hash1.wrapping_mul(0x01010101);
+    let offset = offset ^ header.hash1.wrapping_mul(0x01010101);
     let offset = offset.rotate_left(distance as u32);
 
     let offset = offset ^ !meta.encrypted_offset;
@@ -103,7 +102,7 @@ pub fn read_wz_offset_pkg2_v2(header: &WzHeader, meta: &WzOffsetMeta) -> Result<
 pub fn read_wz_offset_pkg2_v3(header: &WzHeader, meta: &WzOffsetMeta) -> Result<usize> {
     let offset = meta.offset as u32;
     let header_size = header.fstart as u32;
-    let pre_hash = meta.pkg2_hash1 ^ meta.hash;
+    let pre_hash = header.hash1 ^ meta.hash;
     let mixed_hash =
         crate::util::string_decryptor::pkg2_decryptor::mix_kmst1199(pre_hash ^ 0x6D4C3B2A)
             ^ 0x91E10DA5;
@@ -113,7 +112,7 @@ pub fn read_wz_offset_pkg2_v3(header: &WzHeader, meta: &WzOffsetMeta) -> Result<
     let offset = !offset;
     let offset = offset.wrapping_mul(pre_hash.wrapping_add(mixed_hash ^ 0xA7E3C093));
     let offset = offset.wrapping_sub(WZ_OFFSET as u32);
-    let offset = offset ^ meta.pkg2_hash1.wrapping_mul(0x01010101);
+    let offset = offset ^ header.hash1.wrapping_mul(0x01010101);
     let offset = offset ^ mixed_hash.wrapping_mul(0x9E3779B9);
     let offset = offset.rotate_left(distance);
     let offset = offset ^ !meta.encrypted_offset;
