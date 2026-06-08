@@ -43,7 +43,7 @@ impl WzHeader {
             })?
             .pread::<&str>(0)
             .map(|s| PKGVersion::from(s))
-            .map_err(Error::from)
+            .or(Ok(PKGVersion::Unknown))
     }
     #[inline]
     pub fn get_wz_fsize(buf: &[u8]) -> Result<u64> {
