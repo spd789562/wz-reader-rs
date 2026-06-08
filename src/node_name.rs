@@ -1,4 +1,7 @@
+#[cfg(not(feature = "indexmap"))]
 use hashbrown::Equivalent;
+#[cfg(feature = "indexmap")]
+use indexmap::Equivalent;
 use std::fmt::Display;
 use std::ops::Deref;
 use std::sync::Arc;

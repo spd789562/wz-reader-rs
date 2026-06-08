@@ -2,7 +2,7 @@ use crate::{
     directory, file, ms, property, util, util::node_util, wz_image, MsFile,
     SharedWzStringDecryptor, WzFile, WzImage, WzNodeCast, WzNodeName, WzObjectType,
 };
-use hashbrown::HashMap;
+use crate::WzMap;
 use std::path::Path;
 use std::sync::{Arc, RwLock, Weak};
 
@@ -40,7 +40,7 @@ pub struct WzNode {
     #[cfg_attr(feature = "serde", serde(skip))]
     pub parent: Weak<RwLock<WzNode>>,
     #[cfg_attr(feature = "serde", serde(with = "arc_node_serde"))]
-    pub children: HashMap<WzNodeName, Arc<RwLock<WzNode>>>,
+    pub children: WzMap<WzNodeName, Arc<RwLock<WzNode>>>,
 }
 
 pub type WzNodeArc = Arc<RwLock<WzNode>>;
@@ -62,7 +62,7 @@ impl WzNode {
             name: name.clone(),
             object_type: object_type.into(),
             parent: parent.map(Arc::downgrade).unwrap_or_default(),
-            children: HashMap::new(),
+            children: WzMap::new(),
         }
     }
 
@@ -71,7 +71,7 @@ impl WzNode {
             name: WzNodeName::default(),
             object_type: WzObjectType::Value(property::WzValue::Null),
             parent: Weak::new(),
-            children: HashMap::new(),
+            children: WzMap::new(),
         }
     }
 
@@ -524,7 +524,11 @@ impl WzNode {
     pub fn transfer_childs(&mut self, to: &WzNodeArc) {
         let mut write = to.write().unwrap();
         write.children.reserve(self.children.len());
-        for (name, child) in self.children.drain() {
+        #[cfg(not(feature = "indexmap"))]
+        let iter = self.children.drain();
+        #[cfg(feature = "indexmap")]
+        let iter = self.children.drain(..);
+        for (name, child) in iter {
             if let Some(old) = write.children.get(&name) {
                 child.write().unwrap().transfer_childs(old);
             } else {
@@ -592,14 +596,14 @@ impl WzNode {
 #[cfg(feature = "serde")]
 mod arc_node_serde {
     use crate::WzNodeName;
-    use hashbrown::HashMap;
+    use crate::WzMap;
     use serde::de::Deserializer;
     use serde::ser::{SerializeMap, Serializer};
     use serde::{Deserialize, Serialize};
     use std::sync::{Arc, RwLock};
 
     pub fn serialize<S, T>(
-        val: &HashMap<WzNodeName, Arc<RwLock<T>>>,
+        val: &WzMap<WzNodeName, Arc<RwLock<T>>>,
         s: S,
     ) -> Result<S::Ok, S::Error>
     where
@@ -613,12 +617,12 @@ mod arc_node_serde {
         map.end()
     }
 
-    pub fn deserialize<'de, D, T>(d: D) -> Result<HashMap<WzNodeName, Arc<RwLock<T>>>, D::Error>
+    pub fn deserialize<'de, D, T>(d: D) -> Result<WzMap<WzNodeName, Arc<RwLock<T>>>, D::Error>
     where
         D: Deserializer<'de>,
         T: Deserialize<'de>,
     {
-        let map = HashMap::<WzNodeName, T>::deserialize(d)?;
+        let map = WzMap::<WzNodeName, T>::deserialize(d)?;
         Ok(map
             .into_iter()
             .map(|(k, v)| (k, Arc::new(RwLock::new(v))))

@@ -29,3 +29,9 @@ pub use util::version;
 
 #[deprecated(since = "0.18.0", note = "rename to SharedWzStringDecryptor")]
 pub type SharedWzMutableKey = SharedWzStringDecryptor;
+
+/// Map type for node children — preserves insertion order with `indexmap` feature.
+#[cfg(not(feature = "indexmap"))]
+pub(crate) type WzMap<K, V> = hashbrown::HashMap<K, V>;
+#[cfg(feature = "indexmap")]
+pub(crate) type WzMap<K, V> = indexmap::IndexMap<K, V>;
