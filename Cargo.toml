@@ -38,7 +38,7 @@ tokio = { version = "1.0", features = ["full"] }
 default = ["rayon", "zlib-ng"]
 indexmap = ["dep:indexmap"]
 json = ["serde", "dep:serde_json"]
-serde = ["dep:serde", "hashbrown/serde", "indexmap/serde"]
+serde = ["dep:serde", "hashbrown/serde", "indexmap?/serde"]
 rayon = ["dep:rayon", "image/rayon"]
 zlib-ng = ["flate2/zlib-ng"]
 
