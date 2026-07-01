@@ -512,6 +512,18 @@ impl<'a> WzSliceReader<'a> {
         }
     }
     #[inline]
+    pub fn read_wz_string_pkg2_u64_dir_meta(&self) -> Result<WzStringMeta> {
+        let len = self.read_i16()?;
+        if len >= 0 {
+            Ok(WzStringMeta::empty())
+        } else {
+            let length = (-len) as usize * 2;
+            let meta = WzStringMeta::new_pkg2_dir(self.pos.get(), length as u32);
+            self.skip(length);
+            Ok(meta)
+        }
+    }
+    #[inline]
     pub fn read_wz_string(&self) -> Result<String> {
         let small_len = self.read_i8()?;
 

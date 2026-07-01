@@ -70,7 +70,7 @@ pub struct WzDirectory {
     #[cfg_attr(feature = "serde", serde(skip))]
     pub block_size: usize,
     #[cfg_attr(feature = "serde", serde(skip))]
-    pub hash: usize,
+    pub hash: u64,
     #[cfg_attr(feature = "serde", serde(skip))]
     pub is_parsed: bool,
     #[cfg_attr(feature = "serde", serde(skip))]
@@ -82,6 +82,11 @@ pub struct WzDirectory {
 }
 
 impl WzDirectory {
+    #[inline]
+    pub fn hash_u32(&self) -> u32 {
+        self.hash as u32
+    }
+
     pub fn new(offset: usize, block_size: usize, reader: &Arc<WzReader>, is_parsed: bool) -> Self {
         Self {
             reader: reader.clone(),
@@ -94,9 +99,15 @@ impl WzDirectory {
             entries: Vec::new(),
         }
     }
-    pub fn with_hash(mut self, hash: usize) -> Self {
+
+    pub fn with_hash(mut self, hash: u64) -> Self {
         self.hash = hash;
         self
+    }
+
+    pub fn reset_entry_parse(&mut self) {
+        self.verify_status = WzDirectoryVerifyStatus::Init;
+        self.entries.clear();
     }
 
     pub fn resolve_children(&mut self, parent: &WzNodeArc) -> Result<WzNodeArcVec, Error> {
@@ -113,13 +124,17 @@ impl WzDirectory {
         let nodes: WzNodeArcVec = self
             .entries
             .iter()
-            .map(|entry| entry.into_wz_node_tuple(parent, self.hash, Arc::clone(&self.reader)))
+            .map(|entry| {
+                entry.into_wz_node_tuple(parent, self.hash, &self.profile, Arc::clone(&self.reader))
+            })
             .collect();
 
         // if there has any directory, parse it since it's probably cheep
         for (_, node) in nodes.iter() {
             let mut write = node.write().unwrap();
             if let WzObjectType::Directory(dir) = &mut write.object_type {
+                dir.profile = self.profile.clone();
+                dir.hash = self.hash;
                 let children = dir.resolve_children(node)?;
 
                 for (name, child) in children {
@@ -176,7 +191,7 @@ impl WzDirectory {
             let entry = WzDirectoryEntry::read_pkg2_entry(
                 &reader,
                 encrypted_entry_count,
-                wz_dir_entries.len() == 0,
+                wz_dir_entries.is_empty(),
             )?;
 
             match entry.dir_type {
@@ -195,8 +210,47 @@ impl WzDirectory {
 
         let encrypted_offset_count = reader.read_wz_int()?;
 
-        if encrypted_offset_count != encrypted_entry_count || wz_dir_entries.len() == 0 {
+        if encrypted_offset_count != encrypted_entry_count || wz_dir_entries.is_empty() {
             return Err(Error::InvalidWzVersion);
+        }
+
+        for entry in wz_dir_entries.iter_mut() {
+            entry.calculation_offset = reader.pos.get();
+            entry.encrypted_offset = reader.read_u32()?;
+        }
+
+        Ok(wz_dir_entries)
+    }
+
+    fn resolve_entry_pkg2_v64(
+        &self,
+        reader: &WzSliceReader,
+    ) -> Result<Vec<WzDirectoryEntry>, Error> {
+        let entry_count_calculator = self.profile.offset_version.get_entry_count_calculator();
+
+        let encrypted_entry_count = reader.read_wz_int64()?;
+        let entry_count: usize =
+            entry_count_calculator(&reader.header, self.hash, encrypted_entry_count)?;
+
+        if !(0..=1_000_000).contains(&entry_count) {
+            return Err(Error::InvalidEntryCount);
+        }
+
+        let mut wz_dir_entries: Vec<WzDirectoryEntry> = Vec::with_capacity(entry_count as usize);
+
+        for i in 0..entry_count {
+            let entry =
+                WzDirectoryEntry::read_pkg2_entry(&reader, encrypted_entry_count as i32, i == 0)?;
+
+            match entry.dir_type {
+                WzDirectoryType::WzDirectory | WzDirectoryType::WzImage => {
+                    wz_dir_entries.push(entry);
+                }
+                WzDirectoryType::NewUnknownType(dir_byte) => {
+                    return Err(Error::UnknownWzDirectoryType(dir_byte, reader.pos.get()));
+                }
+                _ => return Err(Error::InvalidWzVersion),
+            }
         }
 
         for entry in wz_dir_entries.iter_mut() {
@@ -219,7 +273,11 @@ impl WzDirectory {
         if reader.header.ident == PKGVersion::V1 {
             self.entries = self.resolve_entry_pkg1(&reader)?;
         } else if reader.header.ident == PKGVersion::V2 {
-            self.entries = self.resolve_entry_pkg2(&reader)?;
+            if reader.header.is_pkg2_64() {
+                self.entries = self.resolve_entry_pkg2_v64(&reader)?;
+            } else {
+                self.entries = self.resolve_entry_pkg2(&reader)?;
+            }
         } else {
             return Err(Error::UnknownPkgVersion);
         }
@@ -236,7 +294,7 @@ impl WzDirectory {
 
         for entry in self.entries.iter_mut() {
             let meta = WzOffsetMeta {
-                hash: self.hash as u32,
+                hash: self.hash,
                 encrypted_offset: entry.encrypted_offset,
                 offset: entry.calculation_offset,
             };
@@ -316,9 +374,12 @@ impl WzDirectoryEntry {
 
         match entry.dir_type {
             WzDirectoryType::WzDirectory | WzDirectoryType::WzImage => {
-                // currently only the first name is using read_wz_string_pkg2_dir
                 if use_pkg2_dir_read && reader.pkg2_keys.read().unwrap().is_pkg2() {
-                    entry.name = reader.read_wz_string_pkg2_dir_meta()?;
+                    if reader.header.is_pkg2_64() {
+                        entry.name = reader.read_wz_string_pkg2_u64_dir_meta()?;
+                    } else {
+                        entry.name = reader.read_wz_string_pkg2_dir_meta()?;
+                    }
                 } else {
                     entry.name = reader.read_wz_string_meta()?;
                 }
@@ -360,9 +421,12 @@ impl WzDirectoryEntry {
         } else if self.dir_type == WzDirectoryType::WzDirectory {
             reader.seek(self.offset);
 
-            let entry_count = reader.read_wz_int()?;
+            let entry_count = if reader.header.is_pkg2_64() {
+                reader.read_wz_int64()?
+            } else {
+                reader.read_wz_int()? as i64
+            };
 
-            // entry count should not below 0
             if entry_count < 0 {
                 return Err(Error::InvalidWzVersion);
             }
@@ -383,7 +447,8 @@ impl WzDirectoryEntry {
     pub fn try_into_wz_node_tuple(
         &self,
         parent: &WzNodeArc,
-        hash: usize,
+        hash: u64,
+        profile: &WzProfile,
         reader: Arc<WzReader>,
     ) -> Result<(WzNodeName, WzNodeArc), Error> {
         let node: WzNode;
@@ -391,8 +456,9 @@ impl WzDirectoryEntry {
 
         match self.dir_type {
             WzDirectoryType::WzDirectory => {
-                let wz_dir =
+                let mut wz_dir =
                     WzDirectory::new(self.offset, self.size, &reader, false).with_hash(hash);
+                wz_dir.profile = profile.clone();
                 node = WzNode::new(&name, wz_dir, Some(parent));
             }
             WzDirectoryType::WzImage => {
@@ -410,9 +476,11 @@ impl WzDirectoryEntry {
     pub fn into_wz_node_tuple(
         &self,
         parent: &WzNodeArc,
-        hash: usize,
+        hash: u64,
+        profile: &WzProfile,
         reader: Arc<WzReader>,
     ) -> (WzNodeName, WzNodeArc) {
-        self.try_into_wz_node_tuple(parent, hash, reader).unwrap()
+        self.try_into_wz_node_tuple(parent, hash, profile, reader)
+            .unwrap()
     }
 }

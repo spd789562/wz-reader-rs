@@ -15,7 +15,7 @@ pub use pkg2_decryptor::Pkg2Decryptor;
 
 pub trait Decryptor: std::fmt::Debug + Send + Sync {
     fn get_iv_hash(&self) -> u64;
-    fn set_iv(&mut self, iv: u32, enc_type: DecrypterType);
+    fn set_iv(&mut self, iv: u64, enc_type: DecrypterType);
     fn is_enough(&self, size: usize) -> bool;
     fn is_pkg2(&self) -> bool;
     fn at(&mut self, index: usize) -> &u8;
@@ -32,6 +32,7 @@ pub enum DecrypterType {
     GMS,
     KMST1198,
     KMST1199,
+    KMST1202,
     Custom,
     #[default]
     Unknown,
@@ -39,7 +40,7 @@ pub enum DecrypterType {
 
 impl DecrypterType {
     pub fn need_init_key(&self) -> bool {
-        self == &DecrypterType::KMST1199
+        matches!(self, DecrypterType::KMST1199 | DecrypterType::KMST1202)
     }
 }
 
@@ -202,7 +203,7 @@ impl StringDecryptor {
             DecrypterType::Custom => self.custom.get().unwrap().clone() as SharedWzStringDecryptor,
             DecrypterType::KMST1198 => Arc::clone(&self.kmst1198) as SharedWzStringDecryptor,
             /* KMST1199 key is calculate dynamically so we always return a new one */
-            DecrypterType::KMST1199 => {
+            DecrypterType::KMST1199 | DecrypterType::KMST1202 => {
                 Arc::new(RwLock::new(Pkg2Decryptor::default())) as SharedWzStringDecryptor
             }
             _ => Arc::clone(&self.general) as SharedWzStringDecryptor,
@@ -239,7 +240,7 @@ pub static GLOBAL_STRING_DECRYPTOR: LazyLock<StringDecryptor> = LazyLock::new(||
     custom: OnceLock::new(),
     general: Arc::new(RwLock::new(EcbDecryptor::from_iv([0; 4]))),
     kmst1198: Arc::new(RwLock::new(Pkg2Decryptor::new_with_key(
-        get_key_by_maple_version(WzMapleVersion::KMST1198),
+        get_key_by_maple_version(WzMapleVersion::KMST1198) as u64,
         DecrypterType::KMST1198,
     ))),
 });

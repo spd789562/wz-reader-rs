@@ -61,9 +61,9 @@ impl Decryptor for EcbDecryptor {
         self.enc_type
     }
 
-    fn set_iv(&mut self, iv: u32, enc_type: DecrypterType) {
+    fn set_iv(&mut self, iv: u64, enc_type: DecrypterType) {
         self.enc_type = enc_type;
-        self.iv = iv.to_le_bytes();
+        self.iv = (iv as u32).to_le_bytes();
     }
 
     fn get_iv_hash(&self) -> u64 {

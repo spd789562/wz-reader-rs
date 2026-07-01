@@ -10,6 +10,8 @@ mod keys {
     pub const VERIFY_KEY_V4: u32 = 0x6D4C3B2A;
 
     pub const VERIFY_KEY_V5: u32 = 0x2A2C818B;
+
+    pub const VERIFY_KEY_V6: u64 = 0xABCDEF0123456789;
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -19,11 +21,18 @@ pub enum Pkg2VersionGen {
     V3,
     V4,
     V5,
+    V6, // 64-bit hash
     #[default]
     Unknown,
 }
 impl Pkg2VersionGen {
-    pub fn get_generator(&self, hash1: u32, hash2: u32) -> Box<dyn VersionGenerator> {
+    pub fn is_u64_hash(&self) -> bool {
+        matches!(self, Pkg2VersionGen::V6)
+    }
+
+    pub fn get_generator(&self, hash1: u64, hash2: u64) -> Box<dyn VersionGenerator<u32>> {
+        let hash1 = hash1 as u32;
+        let hash2 = hash2 as u32;
         match self {
             Pkg2VersionGen::V1 => Box::new(Pkg2VersionGenV1::new(hash1, hash2)),
             Pkg2VersionGen::V2 => Box::new(Pkg2VersionGenV2::new(hash1, hash2)),
@@ -33,18 +42,25 @@ impl Pkg2VersionGen {
             _ => unreachable!(),
         }
     }
+
+    pub fn get_generator_u64(&self, hash1: u64, hash2: u64) -> Box<dyn VersionGenerator<u64>> {
+        match self {
+            Pkg2VersionGen::V6 => Box::new(Pkg2VersionGenV6::new(hash1, hash2)),
+            _ => unreachable!(),
+        }
+    }
 }
 
-pub trait VersionGenerator {
-    fn get_iter(self: Box<Self>) -> Box<dyn Iterator<Item = u32>>;
-    fn get_verifier(&self) -> Box<dyn Fn(u32, u32, u32) -> bool>;
+pub trait VersionGenerator<T> {
+    fn get_iter(self: Box<Self>) -> Box<dyn Iterator<Item = T>>;
+    fn get_verifier(&self) -> Box<dyn Fn(T, T, T) -> bool>;
 }
 
 pub struct VersionGen {
     pub hash1: u32,
     pub hash2: u32,
     current_iter: Option<Box<dyn Iterator<Item = u32>>>,
-    generators: Vec<Box<dyn VersionGenerator>>,
+    generators: Vec<Box<dyn VersionGenerator<u32>>>,
 }
 
 pub struct Pkg2VersionGenV1 {
@@ -64,7 +80,7 @@ impl Pkg2VersionGenV1 {
         vec![self.hash1.rotate_left(7) ^ self.hash2]
     }
 }
-impl VersionGenerator for Pkg2VersionGenV1 {
+impl VersionGenerator<u32> for Pkg2VersionGenV1 {
     fn get_iter(self: Box<Self>) -> Box<dyn Iterator<Item = u32>> {
         Box::new(self.calc_hash().into_iter())
     }
@@ -113,7 +129,7 @@ impl Pkg2VersionGenV2 {
         results
     }
 }
-impl VersionGenerator for Pkg2VersionGenV2 {
+impl VersionGenerator<u32> for Pkg2VersionGenV2 {
     fn get_iter(self: Box<Self>) -> Box<dyn Iterator<Item = u32>> {
         Box::new(self.calc_hash().into_iter())
     }
@@ -164,7 +180,7 @@ impl Pkg2VersionGenV3 {
         results
     }
 }
-impl VersionGenerator for Pkg2VersionGenV3 {
+impl VersionGenerator<u32> for Pkg2VersionGenV3 {
     fn get_iter(self: Box<Self>) -> Box<dyn Iterator<Item = u32>> {
         Box::new(self.calc_hash().into_iter())
     }
@@ -200,7 +216,7 @@ impl Pkg2VersionGenV4 {
         brute_force_hash(self.hash1, self.hash2, &Self::verify_hash)
     }
 }
-impl VersionGenerator for Pkg2VersionGenV4 {
+impl VersionGenerator<u32> for Pkg2VersionGenV4 {
     fn get_iter(self: Box<Self>) -> Box<dyn Iterator<Item = u32>> {
         Box::new(self.calc_hash().into_iter())
     }
@@ -236,11 +252,40 @@ impl Pkg2VersionGenV5 {
         brute_force_hash(self.hash1, self.hash2, &Self::verify_hash)
     }
 }
-impl VersionGenerator for Pkg2VersionGenV5 {
+impl VersionGenerator<u32> for Pkg2VersionGenV5 {
     fn get_iter(self: Box<Self>) -> Box<dyn Iterator<Item = u32>> {
         Box::new(self.calc_hash().into_iter())
     }
     fn get_verifier(&self) -> Box<dyn Fn(u32, u32, u32) -> bool> {
+        Box::new(Self::verify_hash)
+    }
+}
+
+pub struct Pkg2VersionGenV6 {
+    hash1: u64,
+    hash2: u64,
+}
+
+impl Pkg2VersionGenV6 {
+    pub fn new(hash1: u64, hash2: u64) -> Self {
+        Self { hash1, hash2 }
+    }
+
+    #[inline]
+    pub fn verify_hash(hash1: u64, hash2: u64, target_hash: u64) -> bool {
+        target_hash == (hash1 ^ hash2 ^ keys::VERIFY_KEY_V6)
+    }
+
+    fn calc_hash(&self) -> Vec<u64> {
+        vec![self.hash1 ^ self.hash2 ^ keys::VERIFY_KEY_V6]
+    }
+}
+
+impl VersionGenerator<u64> for Pkg2VersionGenV6 {
+    fn get_iter(self: Box<Self>) -> Box<dyn Iterator<Item = u64>> {
+        Box::new(self.calc_hash().into_iter())
+    }
+    fn get_verifier(&self) -> Box<dyn Fn(u64, u64, u64) -> bool> {
         Box::new(Self::verify_hash)
     }
 }
@@ -464,6 +509,16 @@ mod tests {
     //     let results = version_gen.calc_hash();
     //     assert!(results.len() > 0);
     // }
+
+    #[test]
+    fn test_pkg2_version_gen_v6() {
+        let hash1 = 0x1111222233334444u64;
+        let hash2 = 0xABCDEF0123456789u64;
+        let version_gen = Pkg2VersionGenV6::new(hash1, hash2);
+        let results: Vec<u64> = version_gen.calc_hash();
+        assert_eq!(results.len(), 1);
+        assert!(Pkg2VersionGenV6::verify_hash(hash1, hash2, results[0]));
+    }
 
     #[test]
     fn test_pkg2_version_gen_iterator() {

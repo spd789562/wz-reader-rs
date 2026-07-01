@@ -1,6 +1,5 @@
-use crate::util::string_decryptor::DecrypterType;
-
 use super::Decryptor;
+use crate::util::string_decryptor::DecrypterType;
 
 #[derive(Debug)]
 pub struct Pkg2Decryptor {
@@ -20,17 +19,23 @@ impl Default for Pkg2Decryptor {
 }
 
 impl Pkg2Decryptor {
-    pub fn new_with_key(key: u32, enc_type: DecrypterType) -> Self {
+    pub fn new_with_key(key: u64, enc_type: DecrypterType) -> Self {
         let mut decryptor: Pkg2Decryptor = Self::default();
 
         decryptor.set_iv(key, enc_type);
 
         decryptor
     }
-    fn calculate_keys(&mut self, key: u32) {
-        self.iv = key;
+    fn calculate_keys(&mut self, key: u64) {
+        self.iv = key as u32;
 
         let k = key.to_le_bytes();
+
+        // for i in 0..4 {
+        //     let shifted_tuple = ((key >> 8 * i) as u16).to_le_bytes();
+        //     self.keys[i * 2] = shifted_tuple[0];
+        //     self.keys[i * 2 + 1] = shifted_tuple[1];
+        // }
 
         self.keys[0] = k[0];
         self.keys[1] = k[1];
@@ -42,7 +47,7 @@ impl Pkg2Decryptor {
         self.keys[5] = k[3];
 
         self.keys[6] = k[3];
-        self.keys[7] = 0;
+        self.keys[7] = k[4];
     }
 }
 
@@ -51,7 +56,7 @@ impl Decryptor for Pkg2Decryptor {
         true
     }
 
-    fn set_iv(&mut self, key: u32, enc_type: DecrypterType) {
+    fn set_iv(&mut self, key: u64, enc_type: DecrypterType) {
         self.enc_type = enc_type;
         self.calculate_keys(key);
     }
@@ -90,6 +95,10 @@ pub fn get_kmst1199_key(hash1: u32, hash_version: u32) -> u32 {
     mix_kmst1199(mix_kmst1199(base_hash) ^ 0x4F4CB34A)
 }
 
+pub fn get_kmst1202_key(hash1: u64, hash_version: u64) -> u64 {
+    hash1 ^ hash_version ^ 0x66B57FEE317FD3DF
+}
+
 #[inline(always)]
 pub(crate) fn mix_kmst1199(mut key: u32) -> u32 {
     key ^= key >> 16;
@@ -104,8 +113,9 @@ mod test {
     use super::*;
 
     #[test]
-    fn test_pkg2_decryptor() {
-        let decryptor = Pkg2Decryptor::new_with_key(0xDEADBEEF, DecrypterType::KMST1198);
+    fn test_pkg2_decryptor_u32() {
+        let key = 0xDEADBEEF_u32;
+        let decryptor = Pkg2Decryptor::new_with_key(key as u64, DecrypterType::KMST1198);
         let mut decrypted = b"Hello, world!".to_vec();
         decryptor.decrypt_slice(&mut decrypted);
         decryptor.decrypt_slice(&mut decrypted);
@@ -116,5 +126,15 @@ mod test {
         decryptor.decrypt_slice(&mut decrypted2);
         decryptor.decrypt_slice(&mut decrypted2);
         assert_eq!(decrypted2, "你好世界".bytes().collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn test_pkg2_decryptor_u64() {
+        let key = 0xDEADBEEFDEADBEEF;
+        let decryptor = Pkg2Decryptor::new_with_key(key, DecrypterType::KMST1198);
+        let mut decrypted = b"Hello, world!".to_vec();
+        decryptor.decrypt_slice(&mut decrypted);
+        decryptor.decrypt_slice(&mut decrypted);
+        assert_eq!(decrypted, b"Hello, world!");
     }
 }

@@ -1,5 +1,4 @@
-use crate::util::string_decryptor::pkg2_decryptor::get_kmst1199_key;
-use crate::util::string_decryptor::DecrypterType;
+use crate::util::string_decryptor::pkg2_decryptor::{get_kmst1199_key, get_kmst1202_key};
 use crate::{
     directory, reader, util, util::profile, util::string_decryptor, util::version::PKGVersion,
     wz_image, SharedWzStringDecryptor, WzDirectory, WzNodeArc, WzNodeArcVec, WzNodeCast,
@@ -34,6 +33,8 @@ pub enum Error {
     UnableToGuessVersion,
     #[error("Unknown pkg version, can't resolve children")]
     UnknownPkgVersion,
+    #[error("Failed to verify string decryptor")]
+    FailedToVerifyStringDecryptor,
 }
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -186,7 +187,7 @@ impl WzFile {
             for (ver_to_decode, hash) in version_gen {
                 wz_file_meta.hash = hash as usize;
                 wz_file_meta.wz_version_header = ver_to_decode;
-                wz_dir.hash = hash as usize;
+                wz_dir.hash = hash as u64;
                 if let Ok(children) =
                     self.try_decode_with_wz_version_number(parent, &wz_file_meta, &mut wz_dir)
                 {
@@ -201,7 +202,7 @@ impl WzFile {
         }
 
         wz_file_meta.hash = version_gen.check_and_get_version_hash() as usize;
-        wz_dir.hash = wz_file_meta.hash;
+        wz_dir.hash = wz_file_meta.hash as u64;
 
         let children =
             self.try_decode_with_wz_version_number(parent, &wz_file_meta, &mut wz_dir)?;
@@ -226,31 +227,37 @@ impl WzFile {
 
         let mut wz_dir = WzDirectory::new(self.offset, self.block_size, &self.reader, false);
 
-        wz_dir.prepare_entries()?;
+        if !self.reader.header.is_pkg2_64() {
+            wz_dir.prepare_entries()?;
+        }
 
         // clone the cache so it don't take the lock too long
         let cached_profiles = profile::PKG2_PROFILE_CACHE.read().unwrap().clone();
 
         for cached_profile in cached_profiles.iter() {
+            if cached_profile.profile.should_be_pkg2_64() != self.reader.header.is_pkg2_64() {
+                continue;
+            }
             if !cached_profile.verify_hash(hash1, hash2) {
                 continue;
             }
             let hash = cached_profile.hash;
 
+            if cached_profile.profile.should_be_pkg2_64() {
+                wz_dir.reset_entry_parse();
+            }
             wz_file_meta.hash = hash as usize;
-            wz_dir.hash = hash as usize;
+            wz_dir.hash = hash;
             wz_dir.profile = cached_profile.profile.clone();
 
-            if !wz_file_meta.string_decryptor_verified {
-                self.update_keys(hash1, hash2, hash);
-                if !wz_dir.verify_string_decryptor() {
-                    continue;
-                }
-            }
-
-            if let Ok(children) =
-                self.try_decode_with_wz_version_number(parent, &wz_file_meta, &mut wz_dir)
-            {
+            if let Ok(children) = self.try_pkg2_profile(
+                parent,
+                &mut wz_file_meta,
+                &mut wz_dir,
+                hash1,
+                hash,
+                &cached_profile.profile,
+            ) {
                 self.update_wz_file_meta(wz_file_meta);
                 self.is_parsed = true;
                 return Ok(children);
@@ -258,28 +265,34 @@ impl WzFile {
         }
 
         for profile in profile::get_all_pkg2_profiles() {
+            if profile.should_be_pkg2_64() != self.reader.header.is_pkg2_64() {
+                continue;
+            }
+
             wz_dir.profile = profile.clone();
-            for hash in profile.version_gen.get_generator(hash1, hash2).get_iter() {
-                wz_file_meta.hash = hash as usize;
-                wz_dir.hash = hash as usize;
 
-                if !wz_file_meta.string_decryptor_verified {
-                    self.update_keys(hash1, hash2, hash);
-                    if !wz_dir.verify_string_decryptor() {
-                        continue;
-                    }
+            for hash in profile.get_hash_iter(hash1, hash2) {
+                if profile.should_be_pkg2_64() {
+                    wz_dir.reset_entry_parse();
                 }
+                wz_file_meta.hash = hash as usize;
+                wz_dir.hash = hash;
 
-                if let Ok(children) =
-                    self.try_decode_with_wz_version_number(parent, &wz_file_meta, &mut wz_dir)
-                {
+                if let Ok(children) = self.try_pkg2_profile(
+                    parent,
+                    &mut wz_file_meta,
+                    &mut wz_dir,
+                    hash1,
+                    hash,
+                    &profile,
+                ) {
                     self.update_wz_file_meta(wz_file_meta);
                     self.is_parsed = true;
 
                     profile::PKG2_PROFILE_CACHE
                         .write()
                         .unwrap()
-                        .push(profile::Pkg2Profile::new(profile.clone(), hash));
+                        .push(profile::Pkg2Profile::new(profile.clone(), hash as u64));
 
                     return Ok(children);
                 }
@@ -289,13 +302,32 @@ impl WzFile {
         Err(Error::ErrorGameVerHash)
     }
 
+    fn try_pkg2_profile(
+        &self,
+        parent: &WzNodeArc,
+        wz_file_meta: &mut WzFileMeta,
+        wz_dir: &mut WzDirectory,
+        hash1: u64,
+        hash: u64,
+        profile: &profile::WzProfile,
+    ) -> Result<WzNodeArcVec, Error> {
+        if !wz_file_meta.string_decryptor_verified {
+            self.update_keys(profile, hash1, hash);
+            wz_dir.prepare_entries()?;
+            if !wz_dir.verify_string_decryptor() {
+                return Err(Error::FailedToVerifyStringDecryptor);
+            }
+        }
+        self.try_decode_with_wz_version_number(parent, wz_file_meta, wz_dir)
+    }
+
     fn try_decode_with_wz_version_number(
         &self,
         parent: &WzNodeArc,
         meta: &WzFileMeta,
         wz_dir: &mut WzDirectory,
     ) -> Result<WzNodeArcVec, Error> {
-        if meta.hash == 0 || wz_dir.calculate_offset_and_verify().is_err() {
+        if wz_dir.hash == 0 || wz_dir.calculate_offset_and_verify().is_err() {
             return Err(Error::ErrorGameVerHash);
         }
 
@@ -336,10 +368,16 @@ impl WzFile {
         };
     }
 
-    fn update_keys(&self, hash1: u32, _hash2: u32, target_hash: u32) {
-        self.reader.pkg2_keys.write().unwrap().set_iv(
-            get_kmst1199_key(hash1, target_hash),
-            DecrypterType::KMST1199,
-        );
+    fn update_keys(&self, profile: &profile::WzProfile, hash1: u64, target_hash: u64) {
+        let iv = if profile.should_be_pkg2_64() {
+            get_kmst1202_key(hash1, target_hash)
+        } else {
+            get_kmst1199_key(hash1 as u32, target_hash as u32) as u64
+        };
+        self.reader
+            .pkg2_keys
+            .write()
+            .unwrap()
+            .set_iv(iv, profile.decryptor_type);
     }
 }
