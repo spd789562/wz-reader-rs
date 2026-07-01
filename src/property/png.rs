@@ -233,37 +233,44 @@ impl WzPng {
     fn get_raw_data(&self, data: &[u8]) -> Result<Vec<u8>, WzPngParseError> {
         let capacity = self.get_buff_size()?;
 
-        if self.has_zlib_header() {
+        let inflate_result = if self.has_zlib_header() {
             inflate(true, data, capacity)
         } else {
-            let mut keys = self.reader.keys.write().unwrap();
+            Err(WzPngParseError::UnsupportedHeader(self.header))
+        };
 
-            let total_end = self.offset + self.block_size;
-
-            let mut offset = self.offset;
-            let mut end = 0;
-
-            let mut decrypted = Vec::with_capacity(self.block_size);
-
-            while offset < total_end {
-                let block_size = self.reader.read_i32_at(offset).unwrap() as usize;
-                offset += 4;
-
-                let data = self.reader.get_slice(offset..(offset + block_size));
-                offset += block_size;
-
-                decrypted.extend_from_slice(data);
-
-                keys.ensure_key_size(data.len()).unwrap();
-
-                keys.decrypt_slice(&mut decrypted[end..(end + block_size)]);
-
-                end += block_size;
-            }
-
-            /* the total chunk shoud start decryption at index 2 */
-            inflate(false, &decrypted[2..], capacity)
+        if let Ok(result) = inflate_result {
+            return Ok(result);
         }
+
+        // fallback to decryption and inflate
+        let mut keys = self.reader.keys.write().unwrap();
+
+        let total_end = self.offset + self.block_size;
+
+        let mut offset = self.offset;
+        let mut end = 0;
+
+        let mut decrypted = Vec::with_capacity(self.block_size);
+
+        while offset < total_end {
+            let block_size = self.reader.read_i32_at(offset).unwrap() as usize;
+            offset += 4;
+
+            let data = self.reader.get_slice(offset..(offset + block_size));
+            offset += block_size;
+
+            decrypted.extend_from_slice(data);
+
+            keys.ensure_key_size(data.len()).unwrap();
+
+            keys.decrypt_slice(&mut decrypted[end..(end + block_size)]);
+
+            end += block_size;
+        }
+
+        /* the total chunk shoud start decryption at index 2 */
+        inflate(false, &decrypted[2..], capacity)
     }
 }
 
