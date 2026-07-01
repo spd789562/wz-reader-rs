@@ -100,7 +100,7 @@ impl Pkg2VersionGenV2 {
     #[inline]
     pub fn verify_hash(hash1: u32, hash2: u32, target_hash: u32) -> bool {
         let rotate_base = hash1 ^ (target_hash.wrapping_add(keys::VERIFY_KEY));
-        let lt = rotate_base.rotate_left((target_hash & 0x1f) as u32);
+        let lt = rotate_base.rotate_left(target_hash & 0x1f);
         (lt ^ target_hash) == hash2
     }
     fn calc_hash(&self) -> Vec<u32> {

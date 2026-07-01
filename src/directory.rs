@@ -117,7 +117,7 @@ impl WzDirectory {
 
         self.prepare_entries()?;
 
-        if !self.calculate_offset_and_verify().is_ok() {
+        if self.calculate_offset_and_verify().is_err() {
             return Err(Error::InvalidWzVersion);
         }
 
@@ -159,7 +159,7 @@ impl WzDirectory {
         let mut entries: Vec<WzDirectoryEntry> = Vec::with_capacity(entry_count as usize);
 
         for _ in 0..entry_count {
-            let entry = WzDirectoryEntry::read_pkg1_entry(&reader)?;
+            let entry = WzDirectoryEntry::read_pkg1_entry(reader)?;
 
             match entry.dir_type {
                 WzDirectoryType::UnknownType => {
@@ -189,7 +189,7 @@ impl WzDirectory {
         // currently we don't know how to decrypt the entry_count, so we will just keep reading until get the encrypted_offset_count
         loop {
             let entry = WzDirectoryEntry::read_pkg2_entry(
-                &reader,
+                reader,
                 encrypted_entry_count,
                 wz_dir_entries.is_empty(),
             )?;
@@ -236,11 +236,11 @@ impl WzDirectory {
             return Err(Error::InvalidEntryCount);
         }
 
-        let mut wz_dir_entries: Vec<WzDirectoryEntry> = Vec::with_capacity(entry_count as usize);
+        let mut wz_dir_entries: Vec<WzDirectoryEntry> = Vec::with_capacity(entry_count);
 
         for i in 0..entry_count {
             let entry =
-                WzDirectoryEntry::read_pkg2_entry(&reader, encrypted_entry_count as i32, i == 0)?;
+                WzDirectoryEntry::read_pkg2_entry(reader, encrypted_entry_count as i32, i == 0)?;
 
             match entry.dir_type {
                 WzDirectoryType::WzDirectory | WzDirectoryType::WzImage => {
@@ -313,7 +313,7 @@ impl WzDirectory {
         if self.verify_status != WzDirectoryVerifyStatus::EntryCreated {
             return false;
         }
-        if self.entries.len() == 0 {
+        if self.entries.is_empty() {
             return true;
         }
         self.entries[0].resolve_name(&self.reader).is_ok()
@@ -333,8 +333,10 @@ struct WzDirectoryEntry {
 
 impl WzDirectoryEntry {
     pub fn read_pkg1_entry(reader: &WzSliceReader) -> Result<Self, Error> {
-        let mut entry = WzDirectoryEntry::default();
-        entry.dir_type = reader.read_u8()?.into();
+        let mut entry = WzDirectoryEntry {
+            dir_type: reader.read_u8()?.into(),
+            ..Default::default()
+        };
 
         match entry.dir_type {
             WzDirectoryType::UnknownType => {
@@ -369,8 +371,10 @@ impl WzDirectoryEntry {
         encrypted_entry_count: i32,
         use_pkg2_dir_read: bool,
     ) -> Result<Self, Error> {
-        let mut entry = WzDirectoryEntry::default();
-        entry.dir_type = reader.read_u8()?.into();
+        let mut entry = WzDirectoryEntry {
+            dir_type: reader.read_u8()?.into(),
+            ..Default::default()
+        };
 
         match entry.dir_type {
             WzDirectoryType::WzDirectory | WzDirectoryType::WzImage => {

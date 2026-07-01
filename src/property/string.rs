@@ -19,18 +19,15 @@ pub enum WzStringParseError {
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, PartialEq)]
+#[derive(Default)]
 pub enum WzStringType {
     Ascii,
     Unicode,
     Pkg2Dir,
+    #[default]
     Empty,
 }
 
-impl Default for WzStringType {
-    fn default() -> Self {
-        Self::Empty
-    }
-}
 
 impl std::fmt::Display for WzStringType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

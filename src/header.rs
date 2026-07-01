@@ -78,7 +78,7 @@ impl WzHeader {
                 msg: "invalid buffer to reading ident",
             })?
             .pread::<&str>(0)
-            .map(|s| PKGVersion::from(s))
+            .map(PKGVersion::from)
             .or(Ok(PKGVersion::Unknown))
     }
     #[inline]

@@ -218,7 +218,7 @@ impl WzPng {
             }
             WzPngFormat::DXT3SM => Ok((self.width * self.height * 4) as usize),
             WzPngFormat::DXT3 | WzPngFormat::DXT5 => {
-                Ok((((self.width + 3) / 4) * ((self.height + 3) / 4) * 16) as usize)
+                Ok((self.width.div_ceil(4) * self.height.div_ceil(4) * 16) as usize)
             }
             WzPngFormat::BC7 => Ok((self.width * (self.height & !3)) as usize),
             WzPngFormat::A8 => Ok((self.width * self.height) as usize),

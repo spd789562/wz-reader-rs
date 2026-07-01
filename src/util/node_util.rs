@@ -100,8 +100,6 @@ pub fn resolve_uol(node: &WzNodeArc, wz_image: Option<&mut WzNode>) {
                 if let Some(origin) = wz_image.children.get_mut(&node_name) {
                     let _ = std::mem::replace(origin, target_node);
                 }
-            } else {
-                return;
             }
         }
     }

@@ -125,7 +125,7 @@ impl WzFile {
         };
 
         Ok(WzFile {
-            offset: offset as usize,
+            offset,
             block_size,
             is_parsed: false,
             reader: Arc::new(reader),
@@ -292,7 +292,7 @@ impl WzFile {
                     profile::PKG2_PROFILE_CACHE
                         .write()
                         .unwrap()
-                        .push(profile::Pkg2Profile::new(profile.clone(), hash as u64));
+                        .push(profile::Pkg2Profile::new(profile.clone(), hash));
 
                     return Ok(children);
                 }

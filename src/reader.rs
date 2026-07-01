@@ -230,13 +230,13 @@ impl<T: AsRef<[u8]>> WzBaseReader<T> {
     #[inline]
     pub fn create_slice_reader_without_hash(&self) -> WzSliceReader<'_> {
         WzSliceReader::new(self.map.as_ref(), &self.keys)
-            .with_header(self.header.clone())
+            .with_header(self.header)
             .with_pkg2_keys(&self.pkg2_keys)
     }
     #[inline]
     pub fn create_slice_reader(&self) -> WzSliceReader<'_> {
         WzSliceReader::new(self.map.as_ref(), &self.keys)
-            .with_header(self.header.clone())
+            .with_header(self.header)
             .with_pkg2_keys(&self.pkg2_keys)
     }
     /// create a encrypt string from current `WzReader`
@@ -277,7 +277,7 @@ impl<'a> WzSliceReader<'a> {
         let keys = if keys.read().unwrap().is_pkg2() {
             Arc::clone(&GLOBAL_STRING_DECRYPTOR.general)
         } else {
-            Arc::clone(&keys)
+            Arc::clone(keys)
         };
         WzSliceReader {
             buf,

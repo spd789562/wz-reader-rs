@@ -82,7 +82,7 @@ pub fn read_wz_offset_pkg2(header: &WzHeader, meta: &WzOffsetMeta) -> Result<usi
     let distance = ((hash ^ hash1) & 0x1F) as u8;
 
     let offset = offset.wrapping_sub(header_size);
-    let offset = !offset as u32;
+    let offset = !offset;
     let offset = offset.wrapping_mul(hash);
     let offset = offset.wrapping_sub(WZ_OFFSET);
     let offset = offset ^ hash1.wrapping_mul(0x01010101);
@@ -106,11 +106,11 @@ pub fn read_wz_offset_pkg2_v2(header: &WzHeader, meta: &WzOffsetMeta) -> Result<
     let distance = ((hash ^ hash1) & 0x1F) as u8 as u32;
 
     let offset = offset.wrapping_sub(header_size);
-    let offset = !offset as u32;
+    let offset = !offset;
     let offset = offset.wrapping_mul(hash ^ hash1);
-    let offset = offset.wrapping_sub(WZ_OFFSET as u32);
+    let offset = offset.wrapping_sub(WZ_OFFSET);
     let offset = offset ^ hash1.wrapping_mul(0x01010101);
-    let offset = offset.rotate_left(distance as u32);
+    let offset = offset.rotate_left(distance);
 
     let offset = offset ^ !meta.encrypted_offset;
     let offset = offset.wrapping_add(header_size);
@@ -130,12 +130,12 @@ pub fn read_wz_offset_pkg2_v3(header: &WzHeader, meta: &WzOffsetMeta) -> Result<
     let mixed_hash =
         crate::util::string_decryptor::pkg2_decryptor::mix_kmst1199(pre_hash ^ 0x6D4C3B2A)
             ^ 0x91E10DA5;
-    let distance = ((pre_hash ^ mixed_hash) & 0x1F) as u32;
+    let distance = (pre_hash ^ mixed_hash) & 0x1F;
 
     let offset = offset.wrapping_sub(header_size);
     let offset = !offset;
     let offset = offset.wrapping_mul(pre_hash.wrapping_add(mixed_hash ^ 0xA7E3C093));
-    let offset = offset.wrapping_sub(WZ_OFFSET as u32);
+    let offset = offset.wrapping_sub(WZ_OFFSET);
     let offset = offset ^ hash1.wrapping_mul(0x01010101);
     let offset = offset ^ mixed_hash.wrapping_mul(0x9E3779B9);
     let offset = offset.rotate_left(distance);
@@ -157,7 +157,7 @@ pub fn read_wz_offset_pkg2_64_v1(header: &WzHeader, meta: &WzOffsetMeta) -> Resu
     let offset = offset.wrapping_sub(header_size);
     let offset = !offset;
     let offset = offset.wrapping_mul(pre_hash.wrapping_add(mixed_hash ^ 0xA7E3C093));
-    let offset = offset.wrapping_sub(WZ_OFFSET as u32);
+    let offset = offset.wrapping_sub(WZ_OFFSET);
     let offset = offset ^ header.hash1_u32().wrapping_mul(0x01010101);
     let offset = offset ^ mixed_hash.wrapping_mul(0x9E3779B9);
     let offset = offset.rotate_left(19);
@@ -174,8 +174,7 @@ pub fn decrypt_pkg2_entry_count_64_v1(
     encrypted_entry_count: i64,
 ) -> EntryCountResult<usize> {
     let dir_count =
-        (encrypted_entry_count as i64 ^ header.hash1 as i64 ^ hash as i64 ^ 0x550EC4DD02C468EC)
-            >> 16;
+        (encrypted_entry_count ^ header.hash1 as i64 ^ hash as i64 ^ 0x550EC4DD02C468EC) >> 16;
     if dir_count > i32::MAX as i64 {
         return Err(directory::Error::InvalidEntryCount);
     }

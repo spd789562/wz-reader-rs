@@ -23,7 +23,7 @@ impl VersionGen {
             let char_code = i.to_ascii_lowercase() as u32;
             version_hash = version_hash * 32 + char_code + 1;
         }
-        version_hash as u32
+        version_hash
     }
     #[inline]
     pub fn check_and_get_version_hash(&self) -> u32 {

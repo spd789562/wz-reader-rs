@@ -80,8 +80,8 @@ impl Decryptor for Pkg2Decryptor {
     }
 
     fn decrypt_slice(&self, data: &mut [u8]) {
-        for i in 0..data.len() {
-            data[i] ^= self.keys[i % 8];
+        for (i, item) in data.iter_mut().enumerate() {
+            *item ^= self.keys[i % 8];
         }
     }
 

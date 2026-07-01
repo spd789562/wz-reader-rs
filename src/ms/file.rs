@@ -140,14 +140,14 @@ impl MsFile {
             image.meta.start_pos = actual_start as i32;
         }
 
-        return Ok(ms_images
+        Ok(ms_images
             .drain(..)
             .map(|image| {
                 let name = WzNodeName::from(image.meta.entry_name.clone());
                 let node = WzNode::new(&name, image, Some(parent));
                 (name, node.into_lock())
             })
-            .collect());
+            .collect())
     }
 
     fn parse_v2(&mut self, parent: &WzNodeArc) -> Result<WzNodeArcVec, Error> {
@@ -222,13 +222,13 @@ impl MsFile {
             image.meta.start_pos = actual_start as i32;
         }
 
-        return Ok(ms_images
+        Ok(ms_images
             .drain(..)
             .map(|image| {
                 let name = WzNodeName::from(image.meta.entry_name.clone());
                 let node = WzNode::new(&name, image, Some(parent));
                 (name, node.into_lock())
             })
-            .collect());
+            .collect())
     }
 }

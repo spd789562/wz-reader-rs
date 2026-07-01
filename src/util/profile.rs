@@ -51,15 +51,13 @@ impl WzProfile {
             Box::new(
                 self.version_gen
                     .get_generator_u64(hash1, hash2)
-                    .get_iter()
-                    .into_iter(),
+                    .get_iter(),
             )
         } else {
             Box::new(
                 self.version_gen
                     .get_generator(hash1, hash2)
                     .get_iter()
-                    .into_iter()
                     .map(|x| x as u64),
             ) as Box<dyn Iterator<Item = u64>>
         }

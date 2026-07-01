@@ -57,6 +57,7 @@ pub enum WzSubProperty {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[cfg_attr(feature = "serde", serde(tag = "type", content = "data"))]
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub enum WzValue {
     #[cfg_attr(feature = "serde", serde(skip))]
     RawData(WzRawData),
@@ -75,14 +76,10 @@ pub enum WzValue {
     String(WzString),
     ParsedString(String),
     #[cfg_attr(feature = "serde", serde(other))]
+    #[default]
     Null,
 }
 
-impl Default for WzValue {
-    fn default() -> Self {
-        Self::Null
-    }
-}
 
 #[cfg(feature = "json")]
 impl From<WzValue> for Value {

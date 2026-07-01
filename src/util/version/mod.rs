@@ -60,7 +60,7 @@ pub enum PKGVersion {
 
 impl From<&str> for PKGVersion {
     fn from(value: &str) -> Self {
-        match value.as_ref() {
+        match value {
             "PKG1" => PKGVersion::V1,
             "PKG2" => PKGVersion::V2,
             _ => PKGVersion::Unknown,
@@ -134,9 +134,7 @@ pub fn verify_iv_from_wz_file(buf: &[u8], iv: &[u8; 4]) -> Result<(), reader::Er
 
     let dir_type = WzDirectoryType::from(reader.read_u8()?);
 
-    let _wz_name: String;
-
-    match dir_type {
+    let _wz_name = match dir_type {
         // the first entry should always not be offset thou
         WzDirectoryType::MetaAtOffset => {
             let str_offset = reader.read_i32()?;
@@ -144,23 +142,23 @@ pub fn verify_iv_from_wz_file(buf: &[u8], iv: &[u8; 4]) -> Result<(), reader::Er
             let offset = reader.header.data_start + str_offset as usize;
             // just check string can be valid string(instead of parse string lossy), so can prove the iv is valid
             let meta = reader.read_wz_string_meta_at(offset + 1)?;
-            _wz_name = reader.try_resolve_wz_string_meta(
+            reader.try_resolve_wz_string_meta(
                 &meta.string_type,
                 meta.offset,
                 meta.length as usize,
-            )?;
+            )?
         }
         WzDirectoryType::WzDirectory | WzDirectoryType::WzImage => {
             // just check string can be valid string(instead of parse string lossy), so can prove the iv is valid
             let meta = reader.read_wz_string_meta()?;
-            _wz_name = reader.try_resolve_wz_string_meta(
+            reader.try_resolve_wz_string_meta(
                 &meta.string_type,
                 meta.offset,
                 meta.length as usize,
-            )?;
+            )?
         }
         _ => return Err(reader::Error::DecryptError(reader.pos.get())),
-    }
+    };
 
     // maybe also check is all valid ascii
     // if !_wz_name.is_ascii() {
