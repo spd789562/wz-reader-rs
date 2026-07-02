@@ -239,8 +239,8 @@ impl WzPng {
             Err(WzPngParseError::UnsupportedHeader(self.header))
         };
 
-        if let Ok(result) = inflate_result {
-            return Ok(result);
+        if inflate_result.is_ok() {
+            return inflate_result;
         }
 
         // fallback to decryption and inflate
