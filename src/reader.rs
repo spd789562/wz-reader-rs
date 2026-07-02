@@ -24,6 +24,8 @@ pub enum Error {
     WrongParsingMethod(WzStringType),
     #[error("Unable to read WzHeader from buffer")]
     UnableToReadWzHeader,
+    #[error("Out of bounds, expected end to be less than {0}, but got {1}")]
+    OutOfBounds(usize, usize),
 }
 
 type Result<T> = std::result::Result<T, Error>;
@@ -228,6 +230,14 @@ impl<T: AsRef<[u8]>> WzBaseReader<T> {
         &self.map.as_ref()[range]
     }
     #[inline]
+    pub fn get_slice_or_error(&self, range: std::ops::Range<usize>) -> Result<&[u8]> {
+        let end = range.end;
+        self.map
+            .as_ref()
+            .get(range)
+            .ok_or(Error::OutOfBounds(end, self.map.as_ref().len()))
+    }
+    #[inline]
     pub fn create_slice_reader_without_hash(&self) -> WzSliceReader<'_> {
         WzSliceReader::new(self.map.as_ref(), &self.keys)
             .with_header(self.header)
@@ -306,6 +316,13 @@ impl<'a> WzSliceReader<'a> {
     #[inline]
     pub fn get_slice(&self, range: std::ops::Range<usize>) -> &[u8] {
         &self.buf[range]
+    }
+    #[inline]
+    pub fn get_slice_or_error(&self, range: std::ops::Range<usize>) -> Result<&[u8]> {
+        let end = range.end;
+        self.buf
+            .get(range)
+            .ok_or(Error::OutOfBounds(end, self.buf.len()))
     }
     #[inline]
     pub fn get_slice_from_current(&self, len: usize) -> &[u8] {
@@ -690,12 +707,14 @@ impl<T: AsRef<[u8]>> Reader for WzBaseReader<T> {
     #[inline]
     fn get_decrypt_slice(&self, range: std::ops::Range<usize>) -> Result<Vec<u8>> {
         let len = range.len();
-        get_decrypt_slice(&self.map.as_ref()[range], len, &self.keys)
+        let buffer = self.get_slice_or_error(range)?;
+        get_decrypt_slice(buffer, len, &self.keys)
     }
     #[inline]
     fn get_pkg2_decrypt_slice(&self, range: std::ops::Range<usize>) -> Result<Vec<u8>> {
         let len = range.len();
-        get_decrypt_slice(&self.map.as_ref()[range], len, &self.pkg2_keys)
+        let buffer = self.get_slice_or_error(range)?;
+        get_decrypt_slice(buffer, len, &self.pkg2_keys)
     }
 }
 
@@ -747,12 +766,14 @@ impl<'a> Reader for WzSliceReader<'a> {
     #[inline]
     fn get_decrypt_slice(&self, range: std::ops::Range<usize>) -> Result<Vec<u8>> {
         let len = range.len();
-        get_decrypt_slice(&self.buf[range], len, &self.keys)
+        let buffer = self.get_slice_or_error(range)?;
+        get_decrypt_slice(buffer, len, &self.keys)
     }
     #[inline]
     fn get_pkg2_decrypt_slice(&self, range: std::ops::Range<usize>) -> Result<Vec<u8>> {
         let len = range.len();
-        get_decrypt_slice(&self.buf[range], len, &self.pkg2_keys)
+        let buffer = self.get_slice_or_error(range)?;
+        get_decrypt_slice(buffer, len, &self.pkg2_keys)
     }
 }
 
