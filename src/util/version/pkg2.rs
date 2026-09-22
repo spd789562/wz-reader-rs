@@ -1,5 +1,5 @@
 use crate::util::string_decryptor::pkg2_decryptor::mix_kmst1199;
-use crate::util::version::pkg2_kmst1205;
+use crate::util::version::{pkg2_kmst1205, pkg2_kmst1206};
 
 #[cfg(feature = "rayon")]
 use rayon::prelude::*;
@@ -24,12 +24,16 @@ pub enum Pkg2VersionGen {
     V5,
     V6, // 64-bit hash
     V7, // KMST1205 64-bit hash
+    V8, // KMST1206 HMAC-derived 64-bit hash
     #[default]
     Unknown,
 }
 impl Pkg2VersionGen {
     pub fn is_u64_hash(&self) -> bool {
-        matches!(self, Pkg2VersionGen::V6 | Pkg2VersionGen::V7)
+        matches!(
+            self,
+            Pkg2VersionGen::V6 | Pkg2VersionGen::V7 | Pkg2VersionGen::V8
+        )
     }
 
     pub fn get_generator(&self, hash1: u64, hash2: u64) -> Box<dyn VersionGenerator<u32>> {
@@ -49,6 +53,7 @@ impl Pkg2VersionGen {
         match self {
             Pkg2VersionGen::V6 => Box::new(Pkg2VersionGenV6::new(hash1, hash2)),
             Pkg2VersionGen::V7 => Box::new(Pkg2VersionGenV7::new(hash1, hash2)),
+            Pkg2VersionGen::V8 => Box::new(Pkg2VersionGenV8::new(hash1, hash2)),
             _ => unreachable!(),
         }
     }
@@ -326,6 +331,43 @@ impl VersionGenerator<u64> for Pkg2VersionGenV7 {
     }
 }
 
+pub struct Pkg2VersionGenV8 {
+    hash1: u64,
+    hash2: u64,
+}
+
+impl Pkg2VersionGenV8 {
+    pub fn new(hash1: u64, hash2: u64) -> Self {
+        Self { hash1, hash2 }
+    }
+
+    #[inline]
+    pub fn verify_hash(hash1: u64, hash2: u64, target_hash: u64) -> bool {
+        target_hash
+            == pkg2_kmst1206::compute_pkg2_hash_version_1206(pkg2_kmst1206::KMST1206_VERSION_STRING)
+            && pkg2_kmst1205::compute_hash2(hash1, target_hash) == hash2
+    }
+
+    fn calc_hash(&self) -> Vec<u64> {
+        let hash_version =
+            pkg2_kmst1206::compute_pkg2_hash_version_1206(pkg2_kmst1206::KMST1206_VERSION_STRING);
+        Self::verify_hash(self.hash1, self.hash2, hash_version)
+            .then_some(hash_version)
+            .into_iter()
+            .collect()
+    }
+}
+
+impl VersionGenerator<u64> for Pkg2VersionGenV8 {
+    fn get_iter(self: Box<Self>) -> Box<dyn Iterator<Item = u64>> {
+        Box::new(self.calc_hash().into_iter())
+    }
+
+    fn get_verifier(&self) -> Box<dyn Fn(u64, u64, u64) -> bool> {
+        Box::new(Self::verify_hash)
+    }
+}
+
 #[derive(Debug)]
 pub struct HashGenInfo<'a, F: Fn(u32, u32, u32) -> bool> {
     hash1: u32,
@@ -574,6 +616,18 @@ mod tests {
         assert_eq!(
             pkg2_kmst1205::compute_pkg2_hash_version(pkg2_kmst1205::KMST1205_VERSION_STRINGS[0]),
             hash_version
+        );
+    }
+
+    #[test]
+    fn test_pkg2_version_gen_v8() {
+        let hash1 = 0x0123_4567_89AB_CDEF;
+        let hash_version =
+            pkg2_kmst1206::compute_pkg2_hash_version_1206(pkg2_kmst1206::KMST1206_VERSION_STRING);
+        let hash2 = pkg2_kmst1205::compute_hash2(hash1, hash_version);
+        assert_eq!(
+            Pkg2VersionGenV8::new(hash1, hash2).calc_hash(),
+            vec![hash_version]
         );
     }
 

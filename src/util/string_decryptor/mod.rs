@@ -41,6 +41,7 @@ pub enum DecrypterType {
     KMST1202,
     KMST1204,
     KMST1205,
+    KMST1206,
     Custom,
     #[default]
     Unknown,
@@ -54,6 +55,7 @@ impl DecrypterType {
                 | DecrypterType::KMST1202
                 | DecrypterType::KMST1204
                 | DecrypterType::KMST1205
+                | DecrypterType::KMST1206
         )
     }
 }
@@ -220,7 +222,8 @@ impl StringDecryptor {
             DecrypterType::KMST1199
             | DecrypterType::KMST1202
             | DecrypterType::KMST1204
-            | DecrypterType::KMST1205 => {
+            | DecrypterType::KMST1205
+            | DecrypterType::KMST1206 => {
                 Arc::new(RwLock::new(Pkg2Decryptor::default())) as SharedWzStringDecryptor
             }
             _ => Arc::clone(&self.general) as SharedWzStringDecryptor,

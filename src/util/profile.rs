@@ -1,7 +1,7 @@
 use crate::{
     header::WzHeader,
     util::{offset::WzOffsetVersion, string_decryptor::DecrypterType, version::PKGVersion},
-    version::pkg2::{Pkg2VersionGen, Pkg2VersionGenV6, Pkg2VersionGenV7},
+    version::pkg2::{Pkg2VersionGen, Pkg2VersionGenV6, Pkg2VersionGenV7, Pkg2VersionGenV8},
 };
 use std::sync::{LazyLock, RwLock};
 
@@ -9,6 +9,7 @@ use std::sync::{LazyLock, RwLock};
 pub enum WzProfileVersion {
     #[default]
     Pkg1,
+    Pkg2V1206,
     Pkg2V1205,
     Pkg2V1204,
     Pkg2V1202,
@@ -56,7 +57,10 @@ impl WzProfile {
     pub fn should_be_pkg2_64(&self) -> bool {
         matches!(
             self.name,
-            WzProfileVersion::Pkg2V1202 | WzProfileVersion::Pkg2V1204 | WzProfileVersion::Pkg2V1205
+            WzProfileVersion::Pkg2V1202
+                | WzProfileVersion::Pkg2V1204
+                | WzProfileVersion::Pkg2V1205
+                | WzProfileVersion::Pkg2V1206
         )
     }
 
@@ -64,7 +68,7 @@ impl WzProfile {
     pub fn encrypts_entry_data(&self) -> bool {
         matches!(
             self.name,
-            WzProfileVersion::Pkg2V1204 | WzProfileVersion::Pkg2V1205
+            WzProfileVersion::Pkg2V1204 | WzProfileVersion::Pkg2V1205 | WzProfileVersion::Pkg2V1206
         )
     }
 
@@ -72,12 +76,15 @@ impl WzProfile {
     pub fn all_names_use_pkg2_v2(&self) -> bool {
         matches!(
             self.name,
-            WzProfileVersion::Pkg2V1204 | WzProfileVersion::Pkg2V1205
+            WzProfileVersion::Pkg2V1204 | WzProfileVersion::Pkg2V1205 | WzProfileVersion::Pkg2V1206
         )
     }
 
     pub fn entry_name_position(&self) -> Pkg2EntryNamePosition {
-        if matches!(self.name, WzProfileVersion::Pkg2V1205) {
+        if matches!(
+            self.name,
+            WzProfileVersion::Pkg2V1205 | WzProfileVersion::Pkg2V1206
+        ) {
             Pkg2EntryNamePosition::AfterData
         } else {
             Pkg2EntryNamePosition::BeforeData
@@ -86,10 +93,14 @@ impl WzProfile {
 
     pub fn matches_header(&self, header: &WzHeader) -> bool {
         match self.name {
+            WzProfileVersion::Pkg2V1206 => header.is_pkg2_1206(),
             WzProfileVersion::Pkg2V1205 => header.is_pkg2_1205(),
             WzProfileVersion::Pkg2V1204 => header.is_pkg2_1204(),
             WzProfileVersion::Pkg2V1202 => {
-                header.is_pkg2_64() && !header.is_pkg2_1204() && !header.is_pkg2_1205()
+                header.is_pkg2_64()
+                    && !header.is_pkg2_1204()
+                    && !header.is_pkg2_1205()
+                    && !header.is_pkg2_1206()
             }
             _ => header.ident == PKGVersion::V2 && !header.is_pkg2_64(),
         }
@@ -111,6 +122,12 @@ impl WzProfile {
 
 pub fn get_all_pkg2_profiles() -> Vec<WzProfile> {
     vec![
+        WzProfile {
+            name: WzProfileVersion::Pkg2V1206,
+            decryptor_type: DecrypterType::KMST1206,
+            version_gen: Pkg2VersionGen::V8,
+            offset_version: WzOffsetVersion::Pkg2_64V2,
+        },
         WzProfile {
             name: WzProfileVersion::Pkg2V1205,
             decryptor_type: DecrypterType::KMST1205,
@@ -186,6 +203,7 @@ impl Pkg2Profile {
         match self.profile.version_gen {
             Pkg2VersionGen::V6 => Pkg2VersionGenV6::verify_hash(hash1, hash2, self.hash),
             Pkg2VersionGen::V7 => Pkg2VersionGenV7::verify_hash(hash1, hash2, self.hash),
+            Pkg2VersionGen::V8 => Pkg2VersionGenV8::verify_hash(hash1, hash2, self.hash),
             _ => self
                 .profile
                 .version_gen

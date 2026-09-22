@@ -71,6 +71,12 @@ impl WzHeader {
         self.is_pkg2_64() && self.fstart == U64_HEADER_LEN_V3
     }
 
+    /// KMST1206 uses a 353-byte random header with position-masked fields.
+    #[inline]
+    pub fn is_pkg2_1206(&self) -> bool {
+        self.is_pkg2_64() && self.fstart == U64_HEADER_LEN_V4
+    }
+
     /// KMST1204 uses a 200-byte random header; KMST1202 uses 150 bytes.
     #[inline]
     pub fn is_pkg2_1204(&self) -> bool {
@@ -125,6 +131,14 @@ impl WzHeader {
         header.ident = Self::get_ident(buf)?;
 
         if header.ident == PKGVersion::Unknown {
+            if let Ok(result) = WzHeader::read_pkg2_random_header_from_buf(
+                buf,
+                U64_HEADER_LEN_V4,
+                read_kmst1206_random_header,
+                WzHeaderFlag::PKG2_RANDOM_HEADER64,
+            ) {
+                return Ok(result);
+            }
             if let Ok(result) = WzHeader::read_pkg2_random_header_from_buf(
                 buf,
                 U64_HEADER_LEN_V3,
@@ -220,6 +234,7 @@ const U32_HEADER_LEN: usize = 60 + 8;
 const U64_HEADER_LEN: usize = 150;
 const U64_HEADER_LEN_V2: usize = 200;
 const U64_HEADER_LEN_V3: usize = 163;
+const U64_HEADER_LEN_V4: usize = 353;
 
 type ReadHeaderDataFn = fn(&[u8]) -> (u64, u64, u64);
 
@@ -265,4 +280,58 @@ fn read_kmst1205_random_header(buf: &[u8]) -> (u64, u64, u64) {
     ]);
     let fsize = u32::from_le_bytes([buf[0x08], buf[0x8F], buf[0x3F], buf[0x63]]) as u64;
     (hash1, hash2, fsize)
+}
+
+#[inline]
+fn read_kmst1206_random_header(buf: &[u8]) -> (u64, u64, u64) {
+    const HASH1_OFFSETS: [usize; 8] = [0x4F, 0x4C, 0x15E, 0xE6, 0x155, 0x34, 0x51, 0x13F];
+    const HASH2_OFFSETS: [usize; 8] = [0xFF, 0x111, 0x98, 0x23, 0x1C, 0x39, 0xB0, 0x13D];
+    const FSIZE_OFFSETS: [usize; 4] = [0x27, 0x32, 0x1E, 0x12F];
+
+    fn gather<const N: usize>(buf: &[u8], offsets: [usize; N]) -> [u8; N] {
+        std::array::from_fn(|i| buf[offsets[i]] ^ field_mask(offsets[i]))
+    }
+
+    (
+        u64::from_le_bytes(gather(buf, HASH1_OFFSETS)),
+        u64::from_le_bytes(gather(buf, HASH2_OFFSETS)),
+        u32::from_le_bytes(gather(buf, FSIZE_OFFSETS)) as u64,
+    )
+}
+
+#[inline(always)]
+fn field_mask(offset: usize) -> u8 {
+    (0x5A_i32.wrapping_sub(0x65_i32.wrapping_mul(offset as i32))) as u8
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reads_kmst1206_masked_random_header() {
+        const HASH1: u64 = 0x0123_4567_89AB_CDEF;
+        const HASH2: u64 = 0xFEDC_BA98_7654_3210;
+        const HASH1_OFFSETS: [usize; 8] = [0x4F, 0x4C, 0x15E, 0xE6, 0x155, 0x34, 0x51, 0x13F];
+        const HASH2_OFFSETS: [usize; 8] = [0xFF, 0x111, 0x98, 0x23, 0x1C, 0x39, 0xB0, 0x13D];
+        const FSIZE_OFFSETS: [usize; 4] = [0x27, 0x32, 0x1E, 0x12F];
+
+        let data_size = 17u32;
+        let mut buf = vec![0; U64_HEADER_LEN_V4 + data_size as usize];
+        let mut scatter = |bytes: &[u8], offsets: &[usize]| {
+            for (&byte, &offset) in bytes.iter().zip(offsets) {
+                buf[offset] = byte ^ field_mask(offset);
+            }
+        };
+        scatter(&HASH1.to_le_bytes(), &HASH1_OFFSETS);
+        scatter(&HASH2.to_le_bytes(), &HASH2_OFFSETS);
+        scatter(&data_size.to_le_bytes(), &FSIZE_OFFSETS);
+
+        let (header, consumed) = WzHeader::read_from_buf(&buf).unwrap();
+        assert_eq!(consumed, U64_HEADER_LEN_V4);
+        assert!(header.is_pkg2_1206());
+        assert_eq!(header.hash1, HASH1);
+        assert_eq!(header.hash2, HASH2);
+        assert_eq!(header.fsize, u64::from(data_size));
+    }
 }

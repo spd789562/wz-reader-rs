@@ -2,12 +2,41 @@ use super::Decryptor;
 use crate::util::string_decryptor::DecrypterType;
 use crate::util::version::pkg2_kmst1205;
 
+#[derive(Debug, Clone, Copy)]
+enum Pkg2Keys {
+    Standard([u8; 8]),
+    Len16([u8; 16]),
+}
+
+impl Default for Pkg2Keys {
+    fn default() -> Self {
+        Self::Standard([0; 8])
+    }
+}
+
+impl Pkg2Keys {
+    fn from_base_key(key: u64) -> Self {
+        Self::Standard(gen_pkg2_keys(key))
+    }
+
+    fn from_kmst1206(key: u64) -> Self {
+        Self::Len16(gen_pkg2_keys_len16(key))
+    }
+
+    fn as_slice(&self) -> &[u8] {
+        match self {
+            Self::Standard(keys) => keys,
+            Self::Len16(keys) => keys,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Pkg2Decryptor {
     iv: u64,
     enc_type: DecrypterType,
-    keys: [u8; 8],
-    /// KMST1204/1205: position-dependent key material
+    keys: Pkg2Keys,
+    /// KMST1204/1205/1206: position-dependent key material
     hash1: u64,
     hash_version: u64,
 }
@@ -17,7 +46,7 @@ impl Default for Pkg2Decryptor {
         Self {
             iv: 0,
             enc_type: DecrypterType::KMST1199,
-            keys: [0; 8],
+            keys: Pkg2Keys::default(),
             hash1: 0,
             hash_version: 0,
         }
@@ -34,20 +63,7 @@ impl Pkg2Decryptor {
     }
     fn calculate_keys(&mut self, key: u64) {
         self.iv = key;
-
-        let k = gen_pkg2_keys(key);
-
-        self.keys[0] = k[0];
-        self.keys[1] = k[1];
-
-        self.keys[2] = k[2];
-        self.keys[3] = k[3];
-
-        self.keys[4] = k[4];
-        self.keys[5] = k[5];
-
-        self.keys[6] = k[6];
-        self.keys[7] = k[7];
+        self.keys = Pkg2Keys::from_base_key(key);
     }
 }
 
@@ -58,7 +74,10 @@ impl Decryptor for Pkg2Decryptor {
 
     fn set_iv(&mut self, key: u64, enc_type: DecrypterType) {
         self.enc_type = enc_type;
-        if !matches!(enc_type, DecrypterType::KMST1204 | DecrypterType::KMST1205) {
+        if !matches!(
+            enc_type,
+            DecrypterType::KMST1204 | DecrypterType::KMST1205 | DecrypterType::KMST1206
+        ) {
             self.calculate_keys(key);
         }
     }
@@ -67,7 +86,10 @@ impl Decryptor for Pkg2Decryptor {
         self.enc_type = enc_type;
         self.hash1 = hash1;
         self.hash_version = hash_version;
-        if matches!(enc_type, DecrypterType::KMST1204 | DecrypterType::KMST1205) {
+        if matches!(
+            enc_type,
+            DecrypterType::KMST1204 | DecrypterType::KMST1205 | DecrypterType::KMST1206
+        ) {
             self.apply_file_position(0);
         } else if enc_type == DecrypterType::KMST1202 {
             self.calculate_keys(get_kmst1202_key(hash1, hash_version));
@@ -92,6 +114,14 @@ impl Decryptor for Pkg2Decryptor {
                     file_position,
                 ))
             }
+            DecrypterType::KMST1206 => {
+                self.iv = pkg2_kmst1205::compute_dir_entry_name_key(
+                    self.hash1,
+                    self.hash_version,
+                    file_position,
+                );
+                self.keys = Pkg2Keys::from_kmst1206(self.iv);
+            }
             _ => {}
         }
     }
@@ -107,34 +137,33 @@ impl Decryptor for Pkg2Decryptor {
     }
 
     fn at(&mut self, index: usize) -> &u8 {
-        &self.keys[index % 8]
+        let keys = self.keys.as_slice();
+        &keys[index % keys.len()]
     }
 
     fn try_at(&self, index: usize) -> Option<&u8> {
-        self.keys.get(index % 8)
+        let keys = self.keys.as_slice();
+        keys.get(index % keys.len())
     }
 
     fn decrypt_slice(&self, data: &mut [u8]) {
-        for (i, item) in data.iter_mut().enumerate() {
-            *item ^= self.keys[i % 8];
-        }
+        xor_with_keys(data, self.keys.as_slice());
     }
 
     fn decrypt_slice_with_offset(&self, data: &mut [u8], offset: u64) {
         let keys = match self.enc_type {
             DecrypterType::KMST1204 => {
-                gen_pkg2_keys(get_kmst1204_key(self.hash1, self.hash_version, offset))
+                Pkg2Keys::from_base_key(get_kmst1204_key(self.hash1, self.hash_version, offset))
             }
-            DecrypterType::KMST1205 => gen_pkg2_keys(pkg2_kmst1205::compute_dir_entry_name_key(
-                self.hash1,
-                self.hash_version,
-                offset,
-            )),
+            DecrypterType::KMST1205 => Pkg2Keys::from_base_key(
+                pkg2_kmst1205::compute_dir_entry_name_key(self.hash1, self.hash_version, offset),
+            ),
+            DecrypterType::KMST1206 => Pkg2Keys::from_kmst1206(
+                pkg2_kmst1205::compute_dir_entry_name_key(self.hash1, self.hash_version, offset),
+            ),
             _ => self.keys,
         };
-        for (i, item) in data.iter_mut().enumerate() {
-            *item ^= keys[i % 8];
-        }
+        xor_with_keys(data, keys.as_slice());
     }
 
     fn ensure_key_size(&mut self, _size: usize) -> Result<(), String> {
@@ -142,17 +171,36 @@ impl Decryptor for Pkg2Decryptor {
     }
 }
 
+#[inline]
+fn xor_with_keys(data: &mut [u8], keys: &[u8]) {
+    for (i, item) in data.iter_mut().enumerate() {
+        *item ^= keys[i % keys.len()];
+    }
+}
+
+#[inline]
 pub fn gen_pkg2_keys(key: u64) -> [u8; 8] {
     let k = key.to_le_bytes();
 
     [k[0], k[1], k[1], k[2], k[2], k[3], k[3], k[4]]
 }
 
+#[inline]
+pub fn gen_pkg2_keys_len16(key: u64) -> [u8; 16] {
+    let mut keys = [0; 16];
+    for i in 0..8 {
+        keys[i * 2..i * 2 + 2].copy_from_slice(&((key >> (8 * i)) as u16).to_le_bytes());
+    }
+    keys
+}
+
+#[inline]
 pub fn get_kmst1199_key(hash1: u32, hash_version: u32) -> u32 {
     let base_hash = hash1 ^ hash_version ^ 0x6D4C3B2A;
     mix_kmst1199(mix_kmst1199(base_hash) ^ 0x4F4CB34A)
 }
 
+#[inline]
 pub fn get_kmst1202_key(hash1: u64, hash_version: u64) -> u64 {
     hash1 ^ hash_version ^ 0x66B57FEE317FD3DF
 }
@@ -203,5 +251,13 @@ mod test {
         decryptor.decrypt_slice(&mut decrypted);
         decryptor.decrypt_slice(&mut decrypted);
         assert_eq!(decrypted, b"Hello, world!");
+    }
+
+    #[test]
+    fn test_pkg2_keys_len16() {
+        assert_eq!(
+            gen_pkg2_keys_len16(0x0807_0605_0403_0201),
+            [1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 0]
+        );
     }
 }
